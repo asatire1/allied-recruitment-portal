@@ -1,0 +1,238 @@
+/* ============================================================================
+   Login Page Styles
+   Allied Recruitment Portal
+   ============================================================================ */
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: linear-gradient(135deg, var(--color-gray-50) 0%, var(--color-gray-100) 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Container */
+.login-container {
+  width: 100%;
+  max-width: 420px;
+  background: white;
+  border-radius: var(--radius-xl);
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -2px rgba(0, 0, 0, 0.1),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+  padding: var(--space-8);
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 480px) {
+  .login-container {
+    padding: var(--space-6);
+    border-radius: var(--radius-lg);
+  }
+}
+
+/* Header */
+.login-header {
+  text-align: center;
+  margin-bottom: var(--space-6);
+}
+
+.login-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.logo-icon {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+}
+
+.logo-text {
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+  color: var(--color-gray-900);
+  letter-spacing: -0.025em;
+}
+
+.login-title {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-semibold);
+  color: var(--color-gray-900);
+  margin: 0 0 var(--space-2) 0;
+  letter-spacing: -0.025em;
+}
+
+.login-subtitle {
+  font-size: var(--text-sm);
+  color: var(--color-gray-500);
+  margin: 0;
+}
+
+/* Error alert */
+.login-error {
+  margin-bottom: var(--space-4);
+}
+
+/* Form */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.login-form .input-wrapper {
+  margin-bottom: 0;
+}
+
+/* Options row */
+.login-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.forgot-link {
+  font-size: var(--text-sm);
+  color: var(--color-primary-600);
+  text-decoration: none;
+  font-weight: var(--font-medium);
+  transition: color var(--transition-fast);
+}
+
+.forgot-link:hover {
+  color: var(--color-primary-700);
+  text-decoration: underline;
+}
+
+/* Submit button */
+.login-button {
+  margin-top: var(--space-2);
+}
+
+.login-button .button-spinner {
+  margin-right: var(--space-2);
+}
+
+/* Footer */
+.login-footer {
+  margin-top: var(--space-6);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-gray-200);
+  text-align: center;
+}
+
+.login-help {
+  font-size: var(--text-sm);
+  color: var(--color-gray-500);
+  margin: 0;
+}
+
+.login-help a {
+  color: var(--color-primary-600);
+  text-decoration: none;
+  font-weight: var(--font-medium);
+}
+
+.login-help a:hover {
+  text-decoration: underline;
+}
+
+/* Background decoration */
+.login-background {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.bg-shape {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.4;
+}
+
+.bg-shape-1 {
+  width: 600px;
+  height: 600px;
+  background: linear-gradient(135deg, var(--color-primary-200), var(--color-primary-300));
+  top: -200px;
+  right: -200px;
+}
+
+.bg-shape-2 {
+  width: 400px;
+  height: 400px;
+  background: linear-gradient(135deg, var(--color-secondary-200), var(--color-secondary-300));
+  bottom: -100px;
+  left: -100px;
+}
+
+.bg-shape-3 {
+  width: 300px;
+  height: 300px;
+  background: linear-gradient(135deg, var(--color-primary-100), var(--color-primary-200));
+  top: 50%;
+  left: 10%;
+  transform: translateY(-50%);
+}
+
+/* Focus styles for accessibility */
+.login-form input:focus {
+  outline: none;
+  border-color: var(--color-primary-500);
+  box-shadow: 0 0 0 3px var(--color-primary-100);
+}
+
+/* Loading state */
+.login-form[data-loading="true"] {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+/* Animation for error shake */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+  20%, 40%, 60%, 80% { transform: translateX(4px); }
+}
+
+.login-error {
+  animation: shake 0.5s ease-in-out;
+}
+
+/* Responsive adjustments */
+@media (max-width: 380px) {
+  .login-options {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+  
+  .forgot-link {
+    align-self: flex-end;
+  }
+  
+  .login-logo {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  
+  .logo-text {
+    font-size: var(--text-lg);
+  }
+}
+
+/* Dark mode support (future) */
+@media (prefers-color-scheme: dark) {
+  /* Reserved for dark mode styles */
+}

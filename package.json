@@ -1,0 +1,51 @@
+{
+  "name": "allied-recruitment-portal",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Allied Pharmacies Recruitment Management System",
+  "scripts": {
+    "dev": "pnpm --filter recruitment-portal dev",
+    "dev:branch": "pnpm --filter branch-portal dev",
+    "dev:booking": "pnpm --filter booking-page dev",
+    "build": "pnpm run build:packages && pnpm run build:apps",
+    "build:packages": "pnpm --filter @allied/shared-lib build && pnpm --filter @allied/shared-ui build",
+    "build:apps": "pnpm --filter recruitment-portal build",
+    "build:recruitment": "pnpm run build:packages && pnpm --filter recruitment-portal build",
+    "build:branch": "pnpm run build:packages && pnpm --filter branch-portal build",
+    "build:booking": "pnpm run build:packages && pnpm --filter booking-page build",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "clean": "pnpm -r clean && rm -rf node_modules",
+    "firebase:emulators": "firebase emulators:start",
+    "firebase:deploy:dev": "firebase deploy --only hosting:recruitment -P development",
+    "firebase:deploy:staging": "firebase deploy --only hosting:recruitment -P staging",
+    "firebase:deploy:prod": "firebase deploy --only hosting:recruitment -P production"
+  },
+  "keywords": [
+    "recruitment",
+    "pharmacy",
+    "allied"
+  ],
+  "author": "Allied Pharmacies",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@9.1.0",
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "eslint": "^9.15.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint-plugin-react-refresh": "^0.4.14",
+    "globals": "^15.12.0",
+    "prettier": "^3.4.1",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.15.0"
+  }
+}

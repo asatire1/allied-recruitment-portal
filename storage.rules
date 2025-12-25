@@ -1,0 +1,169 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // ============================================================
+    // HELPER FUNCTIONS
+    // ============================================================
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Get user role from Firestore (cached)
+    // Note: This requires enabling Firestore lookups in storage rules
+    // For production, consider using custom claims instead
+    function getUserRole() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role;
+    }
+    
+    // Check if user is a recruiter or admin
+    function isRecruiterOrAdmin() {
+      let role = getUserRole();
+      return role == 'super_admin' || role == 'recruiter';
+    }
+    
+    // Validate file size (max 10MB for CVs)
+    function isValidFileSize() {
+      return request.resource.size < 10 * 1024 * 1024;
+    }
+    
+    // Validate CV file types
+    function isValidCVType() {
+      return request.resource.contentType.matches('application/pdf')
+        || request.resource.contentType.matches('application/msword')
+        || request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    }
+    
+    // Validate image file types
+    function isValidImageType() {
+      return request.resource.contentType.matches('image/jpeg')
+        || request.resource.contentType.matches('image/png')
+        || request.resource.contentType.matches('image/gif')
+        || request.resource.contentType.matches('image/webp');
+    }
+    
+    // Validate image size (max 5MB)
+    function isValidImageSize() {
+      return request.resource.size < 5 * 1024 * 1024;
+    }
+    
+    // ============================================================
+    // CV FILES
+    // Path: cvs/{candidateId}/{filename}
+    // ============================================================
+    match /cvs/{candidateId}/{filename} {
+      // Only recruiters and admins can read CVs
+      allow read: if isAuthenticated() && isRecruiterOrAdmin();
+      
+      // Only recruiters and admins can upload CVs
+      allow create: if isAuthenticated() 
+        && isRecruiterOrAdmin()
+        && isValidFileSize()
+        && isValidCVType();
+      
+      // Allow updates (re-uploads) with same restrictions
+      allow update: if isAuthenticated() 
+        && isRecruiterOrAdmin()
+        && isValidFileSize()
+        && isValidCVType();
+      
+      // Only recruiters and admins can delete CVs
+      allow delete: if isAuthenticated() && isRecruiterOrAdmin();
+    }
+    
+    // ============================================================
+    // QUALIFICATION DOCUMENTS
+    // Path: qualifications/{candidateId}/{filename}
+    // ============================================================
+    match /qualifications/{candidateId}/{filename} {
+      // Only recruiters and admins can access qualification docs
+      allow read: if isAuthenticated() && isRecruiterOrAdmin();
+      
+      allow create, update: if isAuthenticated() 
+        && isRecruiterOrAdmin()
+        && isValidFileSize()
+        && (isValidCVType() || isValidImageType());
+      
+      allow delete: if isAuthenticated() && isRecruiterOrAdmin();
+    }
+    
+    // ============================================================
+    // USER AVATARS
+    // Path: avatars/{userId}/{filename}
+    // ============================================================
+    match /avatars/{userId}/{filename} {
+      // Anyone authenticated can read avatars
+      allow read: if isAuthenticated();
+      
+      // Users can only upload their own avatar
+      allow create, update: if isAuthenticated() 
+        && request.auth.uid == userId
+        && isValidImageSize()
+        && isValidImageType();
+      
+      // Users can delete their own avatar
+      allow delete: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // ============================================================
+    // BRANCH IMAGES
+    // Path: branches/{branchId}/{filename}
+    // ============================================================
+    match /branches/{branchId}/{filename} {
+      // Anyone authenticated can view branch images
+      allow read: if isAuthenticated();
+      
+      // Only super admins can upload branch images
+      allow create, update: if isAuthenticated() 
+        && getUserRole() == 'super_admin'
+        && isValidImageSize()
+        && isValidImageType();
+      
+      allow delete: if isAuthenticated() && getUserRole() == 'super_admin';
+    }
+    
+    // ============================================================
+    // TEMPORARY UPLOADS (for CV parsing)
+    // Path: temp/{userId}/{filename}
+    // Files in this folder are automatically cleaned up
+    // ============================================================
+    match /temp/{userId}/{filename} {
+      // Users can read their own temp files
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Recruiters can upload temp files for processing
+      allow create: if isAuthenticated() 
+        && isRecruiterOrAdmin()
+        && request.auth.uid == userId
+        && isValidFileSize();
+      
+      // Cloud Functions will move/delete these files
+      allow delete: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // ============================================================
+    // EXPORTS (generated reports)
+    // Path: exports/{userId}/{filename}
+    // ============================================================
+    match /exports/{userId}/{filename} {
+      // Users can only download their own exports
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Exports are created by Cloud Functions only
+      allow create, update: if false;
+      
+      // Users can delete their own exports
+      allow delete: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // ============================================================
+    // DENY ALL OTHER PATHS
+    // ============================================================
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

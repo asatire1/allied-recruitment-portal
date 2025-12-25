@@ -1,0 +1,16 @@
+{
+  "name": "@allied/branch-portal",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Lightweight portal for branch managers - PWA enabled",
+  "scripts": {
+    "dev": "echo 'Branch portal - Coming in Phase B1'",
+    "build": "echo 'Branch portal - Coming in Phase B1'",
+    "clean": "rm -rf dist node_modules"
+  },
+  "dependencies": {
+    "@allied/shared-lib": "workspace:*",
+    "@allied/shared-ui": "workspace:*"
+  }
+}

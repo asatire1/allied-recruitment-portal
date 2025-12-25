@@ -1,0 +1,507 @@
+/* ============================================================================
+   ALLIED RECRUITMENT PORTAL - DESIGN SYSTEM
+   Version: 1.0.0
+   
+   This is the main entry point for the Allied design system.
+   Import this file to get access to all design tokens, typography, 
+   utilities, and base component styles.
+   
+   Structure:
+   1. Variables (Design Tokens) - CSS custom properties
+   2. Typography - Font styles and text utilities
+   3. Utilities - Layout, spacing, and helper classes
+   4. Components - Base component styles (buttons, inputs, etc.)
+   
+   Usage:
+   @import '@allied/shared-ui/styles/design-system.css';
+   ============================================================================ */
+
+/* ==========================================================================
+   1. DESIGN TOKENS (Variables)
+   All CSS custom properties for colors, spacing, typography, etc.
+   ========================================================================== */
+@import './_variables.css';
+
+/* ==========================================================================
+   2. TYPOGRAPHY
+   Font face imports, heading styles, text utilities
+   ========================================================================== */
+@import './_typography.css';
+
+/* ==========================================================================
+   3. UTILITIES
+   Layout, spacing, flexbox, grid, and helper classes
+   ========================================================================== */
+@import './_utilities.css';
+
+/* ==========================================================================
+   4. ANIMATIONS
+   Keyframe animations and transition utilities
+   ========================================================================== */
+
+/* Fade In */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Fade Out */
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* Slide In from Top */
+@keyframes slideInFromTop {
+  from {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Slide In from Bottom */
+@keyframes slideInFromBottom {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Slide In from Left */
+@keyframes slideInFromLeft {
+  from {
+    transform: translateX(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Slide In from Right */
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Scale In */
+@keyframes scaleIn {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Spin */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Pulse */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Bounce */
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(-25%);
+    animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+  }
+  50% {
+    transform: translateY(0);
+    animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  }
+}
+
+/* Shimmer (for skeleton loading) */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Animation Classes */
+.animate-fade-in { animation: fadeIn var(--duration-200) var(--ease-out); }
+.animate-fade-out { animation: fadeOut var(--duration-200) var(--ease-in); }
+.animate-slide-in-top { animation: slideInFromTop var(--duration-200) var(--ease-out); }
+.animate-slide-in-bottom { animation: slideInFromBottom var(--duration-200) var(--ease-out); }
+.animate-slide-in-left { animation: slideInFromLeft var(--duration-200) var(--ease-out); }
+.animate-slide-in-right { animation: slideInFromRight var(--duration-200) var(--ease-out); }
+.animate-scale-in { animation: scaleIn var(--duration-200) var(--ease-out); }
+.animate-spin { animation: spin 1s linear infinite; }
+.animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+.animate-bounce { animation: bounce 1s infinite; }
+
+/* ==========================================================================
+   5. FOCUS STATES
+   Consistent focus styling for accessibility
+   ========================================================================== */
+
+/* Focus ring for interactive elements */
+.focus-ring {
+  outline: none;
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid var(--color-brand-primary-500);
+  outline-offset: 2px;
+}
+
+/* Focus ring for inputs */
+.focus-ring-inset:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+/* Remove default focus styles when not using keyboard */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ==========================================================================
+   6. PRINT STYLES
+   ========================================================================== */
+
+@media print {
+  .no-print { display: none !important; }
+  
+  body {
+    font-size: 12pt;
+    line-height: 1.4;
+    color: #000;
+    background: #fff;
+  }
+  
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+    color: #666;
+  }
+  
+  .page-break-before { page-break-before: always; }
+  .page-break-after { page-break-after: always; }
+  .avoid-break { page-break-inside: avoid; }
+}
+
+/* ==========================================================================
+   7. SCROLLBAR STYLES
+   Custom scrollbar for webkit browsers
+   ========================================================================== */
+
+/* Thin scrollbar */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-gray-300) transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: var(--color-gray-300);
+  border-radius: var(--radius-full);
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-gray-400);
+}
+
+/* Hide scrollbar */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* ==========================================================================
+   8. SKELETON LOADING
+   ========================================================================== */
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-gray-200) 25%,
+    var(--color-gray-100) 50%,
+    var(--color-gray-200) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-md);
+}
+
+.skeleton-text {
+  height: 1em;
+  margin-bottom: 0.5em;
+}
+
+.skeleton-text:last-child {
+  width: 80%;
+}
+
+.skeleton-circle {
+  border-radius: var(--radius-full);
+}
+
+.skeleton-avatar-sm {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+}
+
+.skeleton-avatar-md {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+}
+
+.skeleton-avatar-lg {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-full);
+}
+
+.skeleton-button {
+  height: 40px;
+  width: 100px;
+  border-radius: var(--radius-md);
+}
+
+/* ==========================================================================
+   9. COMMON PATTERNS
+   Frequently used layout patterns for the recruitment portal
+   ========================================================================== */
+
+/* Page container */
+.page-container {
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: var(--content-padding);
+}
+
+/* Card base */
+.card {
+  background-color: var(--card-background);
+  border: 1px solid var(--card-border-color);
+  border-radius: var(--card-border-radius);
+  padding: var(--card-padding);
+  box-shadow: var(--card-shadow);
+}
+
+/* Card with hover effect */
+.card-interactive {
+  transition: box-shadow var(--duration-200) var(--ease-out),
+              transform var(--duration-200) var(--ease-out);
+}
+
+.card-interactive:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+/* Divider */
+.divider {
+  border: none;
+  border-top: 1px solid var(--color-gray-200);
+  margin: var(--spacing-4) 0;
+}
+
+.divider-vertical {
+  border: none;
+  border-left: 1px solid var(--color-gray-200);
+  height: 100%;
+  margin: 0 var(--spacing-4);
+}
+
+/* Stack - Vertical spacing between children */
+.stack > * + * {
+  margin-top: var(--spacing-4);
+}
+
+.stack-sm > * + * {
+  margin-top: var(--spacing-2);
+}
+
+.stack-lg > * + * {
+  margin-top: var(--spacing-6);
+}
+
+.stack-xl > * + * {
+  margin-top: var(--spacing-8);
+}
+
+/* Cluster - Horizontal grouping with wrap */
+.cluster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-3);
+  align-items: center;
+}
+
+/* Center content */
+.center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Cover - Full viewport height with centered content */
+.cover {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.cover > * {
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+/* Sidebar layout */
+.with-sidebar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-6);
+}
+
+.with-sidebar > :first-child {
+  flex-basis: 250px;
+  flex-grow: 1;
+}
+
+.with-sidebar > :last-child {
+  flex-basis: 0;
+  flex-grow: 999;
+  min-width: 50%;
+}
+
+/* ==========================================================================
+   10. COMPONENT DEFAULTS
+   Default styles for common HTML elements and components
+   ========================================================================== */
+
+/* Tables */
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+/* Forms */
+fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+legend {
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--spacing-2);
+}
+
+/* Horizontal rule */
+hr {
+  border: none;
+  border-top: 1px solid var(--color-gray-200);
+  margin: var(--spacing-6) 0;
+}
+
+/* Details/Summary */
+details {
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-4);
+}
+
+details[open] {
+  padding-bottom: var(--spacing-4);
+}
+
+summary {
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+summary::after {
+  content: '+';
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-normal);
+  transition: transform var(--duration-200);
+}
+
+details[open] summary::after {
+  transform: rotate(45deg);
+}
+
+/* Progress */
+progress {
+  width: 100%;
+  height: 8px;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  appearance: none;
+}
+
+progress::-webkit-progress-bar {
+  background-color: var(--color-gray-200);
+  border-radius: var(--radius-full);
+}
+
+progress::-webkit-progress-value {
+  background-color: var(--color-brand-primary);
+  border-radius: var(--radius-full);
+}
+
+progress::-moz-progress-bar {
+  background-color: var(--color-brand-primary);
+  border-radius: var(--radius-full);
+}
+
+/* Dialog */
+dialog {
+  border: none;
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-6);
+  box-shadow: var(--shadow-xl);
+  max-width: 90vw;
+}
+
+dialog::backdrop {
+  background-color: rgb(0 0 0 / 0.5);
+}

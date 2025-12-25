@@ -1,0 +1,16 @@
+{
+  "name": "@allied/booking-page",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Public booking page for candidate self-service scheduling",
+  "scripts": {
+    "dev": "echo 'Booking page - Coming in Phase P1'",
+    "build": "echo 'Booking page - Coming in Phase P1'",
+    "clean": "rm -rf dist node_modules"
+  },
+  "dependencies": {
+    "@allied/shared-lib": "workspace:*",
+    "@allied/shared-ui": "workspace:*"
+  }
+}
