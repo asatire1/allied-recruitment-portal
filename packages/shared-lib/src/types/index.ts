@@ -65,7 +65,19 @@ export type BookingLinkStatus = 'active' | 'used' | 'expired' | 'revoked'
 export type FeedbackRecommendation = 'hire' | 'maybe' | 'do_not_hire'
 
 /** Duplicate status for candidates */
-export type DuplicateStatus = 'primary' | 'linked' | 'reviewed_not_duplicate'
+export type DuplicateStatus = 'primary' | 'linked' | 'reviewed_not_duplicate' | 'reviewed'
+
+/** Duplicate match severity level */
+export type DuplicateSeverity = 'high' | 'medium' | 'low'
+
+/** Duplicate scenario classification */
+export type DuplicateScenario =
+  | 'same_job_same_location'    // Same person, same job, same branch
+  | 'same_job_diff_location'    // Same person, same job, different branch
+  | 'different_job'             // Same person, different job
+  | 'previously_rejected'       // Same person, was rejected before
+  | 'previously_hired'          // Same person, currently employed
+  | 'general_duplicate'         // Generic duplicate case
 
 /** Qualification types */
 export type QualificationType = 'registration' | 'degree' | 'certificate' | 'license'
@@ -177,12 +189,15 @@ export interface Candidate {
   duplicateStatus?: DuplicateStatus
   duplicateReviewedAt?: Timestamp
   duplicateReviewedBy?: string
+  /** IDs of candidates this one has been marked as "not a duplicate" of */
+  notDuplicateOf?: string[]
   
   // Application Info
   jobId?: string
   jobTitle?: string
   branchId?: string
   branchName?: string
+  location?: string  // Legacy field, use branchName for new records
   source?: string
   status: CandidateStatus
   
@@ -200,6 +215,39 @@ export interface Candidate {
   yearsExperience?: number
   pharmacyExperience?: boolean
   rightToWork?: boolean
+  
+  // Full CV Parsed Data (from AI or regex parsing)
+  cvParsedData?: {
+    firstName?: string | null
+    lastName?: string | null
+    email?: string | null
+    phone?: string | null
+    address?: string | null
+    postcode?: string | null
+    summary?: string | null
+    experience?: any[]
+    education?: any[]
+    qualifications?: string[]
+    skills?: string[]
+    rightToWork?: boolean | null
+    hasDriversLicense?: boolean | null
+    totalYearsExperience?: number | null
+    pharmacyYearsExperience?: number | null
+    confidence?: {
+      firstName?: number
+      lastName?: number
+      email?: number
+      phone?: number
+      overall?: number
+    }
+    rawText?: string
+    usedAI?: boolean
+  }
+  cvParsedAt?: Timestamp
+  parsedQualifications?: string[]
+  experience?: any[]
+  education?: any[]
+  needsReview?: boolean
   
   // Qualifications
   qualifications?: CandidateQualification[]
@@ -738,3 +786,70 @@ export interface InterviewFilters {
   dateFrom?: Timestamp
   dateTo?: Timestamp
 }
+
+// ============================================================================
+// CV PARSING TYPES
+// ============================================================================
+
+/** Experience item from parsed CV */
+export interface ParsedExperience {
+  title: string
+  company: string
+  startDate: string | null
+  endDate: string | null
+  current: boolean
+  description: string | null
+}
+
+/** Education item from parsed CV */
+export interface ParsedEducation {
+  institution: string
+  qualification: string
+  field: string | null
+  year: string | null
+}
+
+/** Confidence scores for parsed fields */
+export interface ParseConfidence {
+  firstName: number
+  lastName: number
+  email: number
+  phone: number
+  overall: number
+}
+
+/** Parsed CV data structure */
+export interface ParsedCV {
+  firstName: string | null
+  lastName: string | null
+  email: string | null
+  phone: string | null
+  address: string | null
+  postcode: string | null
+  summary: string | null
+  experience: ParsedExperience[]
+  education: ParsedEducation[]
+  qualifications: string[]
+  skills: string[]
+  rightToWork: boolean | null
+  hasDriversLicense: boolean | null
+  confidence: ParseConfidence
+  rawText: string
+}
+
+/** Request to parseCV Cloud Function */
+export interface ParseCVRequest {
+  fileUrl: string
+  fileName: string
+  mimeType: string
+}
+
+/** Response from parseCV Cloud Function */
+export interface ParseCVResponse {
+  success: boolean
+  data?: ParsedCV
+  error?: string
+}
+
+/** CV parsing status */
+export type CVParseStatus = 'idle' | 'uploading' | 'parsing' | 'success' | 'error'

@@ -50,3 +50,10 @@ export type { StatusBadgeProps } from './components/StatusBadge'
 
 export { DataTable } from './components/DataTable'
 export type { DataTableProps, Column } from './components/DataTable'
+
+// Duplicate Detection Components
+export { DuplicateAlertBanner } from './components/DuplicateAlertBanner'
+export type { DuplicateCandidate, DuplicateMatchInfo } from './components/DuplicateAlertBanner'
+
+export { MergeRecordsModal } from './components/MergeRecordsModal'
+export type { MergeCandidate, CombinedFieldsData } from './components/MergeRecordsModal'

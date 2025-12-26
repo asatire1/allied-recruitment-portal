@@ -136,14 +136,10 @@ service cloud.firestore {
       
       // Create: only recruiters and admins
       allow create: if isRecruiterOrAdmin() 
-        && isValidCandidateData()
-        && isValidTimestamp('createdAt');
+        && isValidCandidateData();
       
       // Update: only recruiters and admins
-      allow update: if isRecruiterOrAdmin() 
-        && isValidCandidateData()
-        && isUnchanged('createdAt')
-        && isUnchanged('createdBy');
+      allow update: if isRecruiterOrAdmin();
       
       // Delete: only recruiters and admins (soft delete preferred)
       allow delete: if isRecruiterOrAdmin();
@@ -151,12 +147,15 @@ service cloud.firestore {
       // Validate candidate data
       function isValidCandidateData() {
         let data = request.resource.data;
-        return data.firstName is string && data.firstName.size() > 0
-          && data.lastName is string && data.lastName.size() > 0
-          && data.email is string && data.email.matches('.*@.*\\..*')
-          && data.phone is string && data.phone.size() >= 10
-          && data.status in ['new', 'screening', 'interview_scheduled', 'interview_complete', 
-                              'trial_scheduled', 'trial_complete', 'approved', 'rejected', 'withdrawn'];
+        // Core required fields
+        let hasFirstName = data.firstName is string && data.firstName.size() > 0;
+        let hasLastName = data.lastName is string && data.lastName.size() > 0;
+        let hasEmail = data.email is string;
+        let hasPhone = data.phone is string;
+        let hasStatus = data.status in ['new', 'screening', 'interview_scheduled', 'interview_complete', 
+                            'trial_scheduled', 'trial_complete', 'approved', 'rejected', 'withdrawn'];
+        
+        return hasFirstName && hasLastName && hasEmail && hasPhone && hasStatus;
       }
       
       // Activity log subcollection
@@ -367,6 +366,34 @@ service cloud.firestore {
       
       // Only admins and recruiters can update settings
       allow create, update: if isRecruiterOrAdmin();
+      allow delete: if isSuperAdmin();
+    }
+    
+    // ============================================================
+    // JOB TITLES COLLECTION
+    // ============================================================
+    match /jobTitles/{jobTitleId} {
+      // All authenticated users can read job titles
+      allow read: if isActiveUser();
+      
+      // Only recruiters and admins can create/update job titles
+      allow create, update: if isRecruiterOrAdmin();
+      
+      // Only super admins can delete job titles
+      allow delete: if isSuperAdmin();
+    }
+    
+    // ============================================================
+    // LOCATIONS COLLECTION
+    // ============================================================
+    match /locations/{locationId} {
+      // All authenticated users can read locations
+      allow read: if isActiveUser();
+      
+      // Only recruiters and admins can create/update locations
+      allow create, update: if isRecruiterOrAdmin();
+      
+      // Only super admins can delete locations
       allow delete: if isSuperAdmin();
     }
     

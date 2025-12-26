@@ -12,6 +12,12 @@ export default defineConfig({
   server: {
     port: 3000,
     open: true,
+    fs: {
+      allow: [
+        // Allow serving files from the project root and packages
+        path.resolve(__dirname, '../..'),
+      ],
+    },
   },
   build: {
     outDir: 'dist',

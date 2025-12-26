@@ -1,0 +1,1716 @@
+import { useEffect, useState } from 'react'
+import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { 
+  getFirebaseDb,
+  PLACEHOLDER_DEFINITIONS,
+  type PlaceholderDefinition
+} from '@allied/shared-lib'
+import { Card, Button, Input, Spinner, Modal, Select, Textarea } from '@allied/shared-ui'
+import { useAuth } from '../contexts/AuthContext'
+import './Settings.css'
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+interface JobTitle {
+  id: string
+  title: string
+  category: 'clinical' | 'dispensary' | 'retail' | 'management' | 'support'
+  isActive: boolean
+  createdAt: any
+  createdBy: string
+}
+
+interface Location {
+  id: string
+  name: string
+  address?: string
+  city?: string
+  postcode?: string
+  region?: string
+  isActive: boolean
+  createdAt: any
+  createdBy: string
+}
+
+interface SettingsTab {
+  id: string
+  label: string
+  icon: string
+}
+
+// WhatsApp Template types
+type TemplateCategory = 'interview' | 'trial' | 'offer' | 'rejection' | 'reminder' | 'general'
+
+interface WhatsAppTemplate {
+  id: string
+  name: string
+  category: TemplateCategory
+  content: string
+  placeholders: string[]
+  active: boolean
+  createdAt: any
+  updatedAt: any
+  createdBy?: string
+}
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+const SETTINGS_TABS: SettingsTab[] = [
+  { id: 'job-titles', label: 'Job Titles', icon: '💼' },
+  { id: 'whatsapp-templates', label: 'WhatsApp Templates', icon: '💬' },
+  { id: 'general', label: 'General', icon: '⚙️' },
+]
+
+const TEMPLATE_CATEGORIES = [
+  { value: 'interview', label: 'Interview', color: '#3b82f6' },
+  { value: 'trial', label: 'Trial', color: '#8b5cf6' },
+  { value: 'offer', label: 'Offer', color: '#10b981' },
+  { value: 'rejection', label: 'Rejection', color: '#ef4444' },
+  { value: 'reminder', label: 'Reminder', color: '#f59e0b' },
+  { value: 'general', label: 'General', color: '#6b7280' },
+]
+
+// Available placeholders for WhatsApp templates
+// Use shared placeholder definitions
+const AVAILABLE_PLACEHOLDERS = PLACEHOLDER_DEFINITIONS.map(p => ({
+  key: p.key,
+  label: p.label,
+  description: p.description
+}))
+
+// Default templates for seeding
+const DEFAULT_TEMPLATES: Omit<WhatsAppTemplate, 'id' | 'createdAt' | 'updatedAt' | 'createdBy'>[] = [
+  {
+    name: 'Interview Invitation',
+    category: 'interview',
+    content: `Hi {{firstName}},
+
+Thank you for applying for the {{jobTitle}} position at Allied Pharmacies.
+
+We'd like to invite you for an interview. Please book your preferred slot using this link:
+{{interviewBookingLink}}
+
+We look forward to meeting you!
+
+Best regards,
+Allied Pharmacies Recruitment`,
+    placeholders: ['firstName', 'jobTitle', 'interviewBookingLink'],
+    active: true,
+  },
+  {
+    name: 'Interview Reminder',
+    category: 'reminder',
+    content: `Hi {{firstName}},
+
+This is a friendly reminder about your interview tomorrow for the {{jobTitle}} position.
+
+📅 Date: {{interviewDate}}
+⏰ Time: {{interviewTime}}
+📍 Location: {{branchAddress}}
+
+Please arrive 10 minutes early. If you need to reschedule, please let us know as soon as possible.
+
+See you soon!`,
+    placeholders: ['firstName', 'jobTitle', 'interviewDate', 'interviewTime', 'branchAddress'],
+    active: true,
+  },
+  {
+    name: 'Trial Shift Invitation',
+    category: 'trial',
+    content: `Hi {{firstName}},
+
+Congratulations! Following your successful interview, we'd like to invite you for a trial shift at {{branchName}}.
+
+Please book your trial slot here:
+{{interviewBookingLink}}
+
+What to bring:
+• Proof of right to work
+• Smart business attire
+• Any relevant certificates
+
+Looking forward to seeing you!
+
+Best regards,
+Allied Pharmacies`,
+    placeholders: ['firstName', 'branchName', 'interviewBookingLink'],
+    active: true,
+  },
+  {
+    name: 'Trial Shift Reminder',
+    category: 'reminder',
+    content: `Hi {{firstName}},
+
+Just a reminder about your trial shift tomorrow at {{branchName}}.
+
+📅 Date: {{interviewDate}}
+⏰ Time: {{interviewTime}}
+📍 Location: {{branchAddress}}
+
+Please arrive 10 minutes early and report to the branch manager.
+
+Good luck!`,
+    placeholders: ['firstName', 'branchName', 'interviewDate', 'interviewTime', 'branchAddress'],
+    active: true,
+  },
+  {
+    name: 'Job Offer',
+    category: 'offer',
+    content: `Hi {{firstName}},
+
+Fantastic news! 🎉
+
+We're delighted to offer you the {{jobTitle}} position at {{branchName}}.
+
+Our recruitment team will be in touch shortly with the formal offer letter and next steps.
+
+Congratulations and welcome to the Allied Pharmacies team!
+
+Best regards,
+Allied Pharmacies Recruitment`,
+    placeholders: ['firstName', 'jobTitle', 'branchName'],
+    active: true,
+  },
+  {
+    name: 'Application Unsuccessful',
+    category: 'rejection',
+    content: `Hi {{firstName}},
+
+Thank you for your interest in the {{jobTitle}} position and for taking the time to meet with us.
+
+After careful consideration, we've decided to move forward with other candidates whose experience more closely matches our current requirements.
+
+We'll keep your details on file and may be in touch if a suitable opportunity arises.
+
+We wish you all the best in your job search.
+
+Kind regards,
+Allied Pharmacies Recruitment`,
+    placeholders: ['firstName', 'jobTitle'],
+    active: true,
+  },
+  {
+    name: 'Follow Up - Application Status',
+    category: 'general',
+    content: `Hi {{firstName}},
+
+Thank you for your patience regarding your application for the {{jobTitle}} position.
+
+We're currently reviewing all applications and will be in touch within the next few days with an update.
+
+If you have any questions in the meantime, please don't hesitate to reach out.
+
+Best regards,
+Allied Pharmacies Recruitment`,
+    placeholders: ['firstName', 'jobTitle'],
+    active: true,
+  },
+  {
+    name: 'Request for Documents',
+    category: 'general',
+    content: `Hi {{firstName}},
+
+We're progressing with your application for the {{jobTitle}} position and need a few documents from you:
+
+• Proof of right to work in the UK
+• Photo ID
+• Any relevant professional certificates
+
+Please send these at your earliest convenience.
+
+Thank you!
+Allied Pharmacies Recruitment`,
+    placeholders: ['firstName', 'jobTitle'],
+    active: true,
+  },
+]
+
+const JOB_CATEGORIES = [
+  { value: 'clinical', label: 'Clinical', color: '#8b5cf6' },
+  { value: 'dispensary', label: 'Dispensary', color: '#06b6d4' },
+  { value: 'retail', label: 'Retail', color: '#f59e0b' },
+  { value: 'management', label: 'Management', color: '#3b82f6' },
+  { value: 'support', label: 'Support', color: '#6b7280' },
+]
+
+const DEFAULT_JOB_TITLES = [
+  { title: 'Pharmacist', category: 'clinical' },
+  { title: 'Pharmacy Technician', category: 'clinical' },
+  { title: 'Dispenser', category: 'dispensary' },
+  { title: 'Dispensary Assistant', category: 'dispensary' },
+  { title: 'Counter Assistant', category: 'retail' },
+  { title: 'Healthcare Assistant', category: 'retail' },
+  { title: 'Branch Manager', category: 'management' },
+  { title: 'Area Manager', category: 'management' },
+  { title: 'Delivery Driver', category: 'support' },
+  { title: 'Store Assistant', category: 'support' },
+]
+
+const UK_REGIONS = [
+  'London',
+  'South East',
+  'South West',
+  'East of England',
+  'West Midlands',
+  'East Midlands',
+  'Yorkshire',
+  'North West',
+  'North East',
+  'Wales',
+  'Scotland',
+  'Northern Ireland',
+]
+
+// ============================================================================
+// COMPONENT
+// ============================================================================
+
+export function Settings() {
+  const { user } = useAuth()
+  const [activeTab, setActiveTab] = useState('job-titles')
+  
+  // Job Titles state
+  const [jobTitles, setJobTitles] = useState<JobTitle[]>([])
+  const [loadingJobTitles, setLoadingJobTitles] = useState(true)
+  const [savingJobTitle, setSavingJobTitle] = useState(false)
+  const [showJobTitleModal, setShowJobTitleModal] = useState(false)
+  const [editingJobTitle, setEditingJobTitle] = useState<JobTitle | null>(null)
+  const [jobTitleForm, setJobTitleForm] = useState({ title: '', category: 'clinical' as JobTitle['category'] })
+  const [jobTitleFormError, setJobTitleFormError] = useState('')
+  const [showDeleteJobTitleModal, setShowDeleteJobTitleModal] = useState(false)
+  const [deletingJobTitle, setDeletingJobTitle] = useState<JobTitle | null>(null)
+  const [deletingJobTitleLoading, setDeletingJobTitleLoading] = useState(false)
+
+  // Locations state
+  const [locations, setLocations] = useState<Location[]>([])
+  const [loadingLocations, setLoadingLocations] = useState(true)
+  const [savingLocation, setSavingLocation] = useState(false)
+  const [showLocationModal, setShowLocationModal] = useState(false)
+  const [editingLocation, setEditingLocation] = useState<Location | null>(null)
+  const [locationForm, setLocationForm] = useState({ name: '', address: '', city: '', postcode: '', region: '' })
+  const [locationFormError, setLocationFormError] = useState('')
+  const [showDeleteLocationModal, setShowDeleteLocationModal] = useState(false)
+  const [deletingLocation, setDeletingLocation] = useState<Location | null>(null)
+  const [deletingLocationLoading, setDeletingLocationLoading] = useState(false)
+  const [locationSearch, setLocationSearch] = useState('')
+
+  // WhatsApp Templates state
+  const [templates, setTemplates] = useState<WhatsAppTemplate[]>([])
+  const [loadingTemplates, setLoadingTemplates] = useState(true)
+  const [savingTemplate, setSavingTemplate] = useState(false)
+  const [showTemplateModal, setShowTemplateModal] = useState(false)
+  const [editingTemplate, setEditingTemplate] = useState<WhatsAppTemplate | null>(null)
+  const [templateForm, setTemplateForm] = useState({ 
+    name: '', 
+    category: 'general' as TemplateCategory, 
+    content: '' 
+  })
+  const [templateFormError, setTemplateFormError] = useState('')
+  const [showDeleteTemplateModal, setShowDeleteTemplateModal] = useState(false)
+  const [deletingTemplate, setDeletingTemplate] = useState<WhatsAppTemplate | null>(null)
+  const [deletingTemplateLoading, setDeletingTemplateLoading] = useState(false)
+  const [templateCategoryFilter, setTemplateCategoryFilter] = useState<TemplateCategory | 'all'>('all')
+  const [showPlaceholderHelp, setShowPlaceholderHelp] = useState(false)
+  const [templateSearch, setTemplateSearch] = useState('')
+  const [previewingTemplate, setPreviewingTemplate] = useState<WhatsAppTemplate | null>(null)
+
+  const db = getFirebaseDb()
+
+  // ============================================================================
+  // FETCH DATA
+  // ============================================================================
+
+  // Fetch job titles
+  useEffect(() => {
+    async function fetchJobTitles() {
+      try {
+        setLoadingJobTitles(true)
+        const jobTitlesRef = collection(db, 'jobTitles')
+        const snapshot = await getDocs(jobTitlesRef)
+        
+        if (snapshot.empty) {
+          console.log('No job titles found, initializing defaults...')
+          await initializeDefaultJobTitles()
+        } else {
+          const data = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          })) as JobTitle[]
+          data.sort((a, b) => {
+            if (a.category !== b.category) return a.category.localeCompare(b.category)
+            return a.title.localeCompare(b.title)
+          })
+          setJobTitles(data)
+        }
+      } catch (err) {
+        console.error('Error fetching job titles:', err)
+      } finally {
+        setLoadingJobTitles(false)
+      }
+    }
+
+    fetchJobTitles()
+  }, [db])
+
+  // Fetch locations
+  useEffect(() => {
+    async function fetchLocations() {
+      try {
+        setLoadingLocations(true)
+        const locationsRef = collection(db, 'locations')
+        const snapshot = await getDocs(locationsRef)
+        
+        const data = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Location[]
+        
+        data.sort((a, b) => a.name.localeCompare(b.name))
+        setLocations(data)
+      } catch (err) {
+        console.error('Error fetching locations:', err)
+      } finally {
+        setLoadingLocations(false)
+      }
+    }
+
+    fetchLocations()
+  }, [db])
+
+  // Fetch WhatsApp templates
+  useEffect(() => {
+    async function fetchTemplates() {
+      try {
+        setLoadingTemplates(true)
+        const templatesRef = collection(db, 'whatsappTemplates')
+        const snapshot = await getDocs(templatesRef)
+        
+        if (snapshot.empty) {
+          console.log('No templates found, initializing defaults...')
+          await initializeDefaultTemplates()
+        } else {
+          const data = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          })) as WhatsAppTemplate[]
+          
+          data.sort((a, b) => {
+            if (a.category !== b.category) return a.category.localeCompare(b.category)
+            return a.name.localeCompare(b.name)
+          })
+          setTemplates(data)
+        }
+      } catch (err) {
+        console.error('Error fetching templates:', err)
+      } finally {
+        setLoadingTemplates(false)
+      }
+    }
+
+    fetchTemplates()
+  }, [db])
+
+  // Initialize default job titles
+  const initializeDefaultJobTitles = async () => {
+    try {
+      const jobTitlesRef = collection(db, 'jobTitles')
+      const newTitles: JobTitle[] = []
+
+      for (const defaultTitle of DEFAULT_JOB_TITLES) {
+        const docRef = await addDoc(jobTitlesRef, {
+          title: defaultTitle.title,
+          category: defaultTitle.category,
+          isActive: true,
+          createdAt: serverTimestamp(),
+          createdBy: user?.id || 'system',
+        })
+        newTitles.push({
+          id: docRef.id,
+          title: defaultTitle.title,
+          category: defaultTitle.category as JobTitle['category'],
+          isActive: true,
+          createdAt: new Date(),
+          createdBy: user?.id || 'system',
+        })
+      }
+
+      setJobTitles(newTitles)
+    } catch (err) {
+      console.error('Error initializing defaults:', err)
+    }
+  }
+
+  // Initialize default WhatsApp templates
+  const initializeDefaultTemplates = async () => {
+    try {
+      const templatesRef = collection(db, 'whatsappTemplates')
+      const newTemplates: WhatsAppTemplate[] = []
+
+      for (const defaultTemplate of DEFAULT_TEMPLATES) {
+        const docRef = await addDoc(templatesRef, {
+          ...defaultTemplate,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          createdBy: user?.id || 'system',
+        })
+        newTemplates.push({
+          id: docRef.id,
+          ...defaultTemplate,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          createdBy: user?.id || 'system',
+        })
+      }
+
+      newTemplates.sort((a, b) => {
+        if (a.category !== b.category) return a.category.localeCompare(b.category)
+        return a.name.localeCompare(b.name)
+      })
+      setTemplates(newTemplates)
+    } catch (err) {
+      console.error('Error initializing default templates:', err)
+    }
+  }
+
+  // Extract placeholders from template content
+  const extractPlaceholders = (content: string): string[] => {
+    const matches = content.match(/\{\{(\w+)\}\}/g) || []
+    return [...new Set(matches.map(m => m.replace(/\{\{|\}\}/g, '')))]
+  }
+
+  // ============================================================================
+  // JOB TITLES HANDLERS
+  // ============================================================================
+
+  const handleAddJobTitle = () => {
+    setEditingJobTitle(null)
+    setJobTitleForm({ title: '', category: 'clinical' })
+    setJobTitleFormError('')
+    setShowJobTitleModal(true)
+  }
+
+  const handleEditJobTitle = (jobTitle: JobTitle) => {
+    setEditingJobTitle(jobTitle)
+    setJobTitleForm({ title: jobTitle.title, category: jobTitle.category })
+    setJobTitleFormError('')
+    setShowJobTitleModal(true)
+  }
+
+  const handleSaveJobTitle = async () => {
+    if (!jobTitleForm.title.trim()) {
+      setJobTitleFormError('Job title is required')
+      return
+    }
+
+    // Check for duplicates
+    const duplicate = jobTitles.find(
+      jt => jt.title.toLowerCase() === jobTitleForm.title.trim().toLowerCase() && 
+           jt.id !== editingJobTitle?.id
+    )
+    if (duplicate) {
+      setJobTitleFormError('A job title with this name already exists')
+      return
+    }
+
+    try {
+      setSavingJobTitle(true)
+      const jobTitlesRef = collection(db, 'jobTitles')
+
+      if (editingJobTitle) {
+        await updateDoc(doc(db, 'jobTitles', editingJobTitle.id), {
+          title: jobTitleForm.title.trim(),
+          category: jobTitleForm.category,
+          updatedAt: serverTimestamp(),
+        })
+        setJobTitles(prev => prev.map(jt => 
+          jt.id === editingJobTitle.id 
+            ? { ...jt, title: jobTitleForm.title.trim(), category: jobTitleForm.category }
+            : jt
+        ))
+      } else {
+        const docRef = await addDoc(jobTitlesRef, {
+          title: jobTitleForm.title.trim(),
+          category: jobTitleForm.category,
+          isActive: true,
+          createdAt: serverTimestamp(),
+          createdBy: user?.id || 'system',
+        })
+        setJobTitles(prev => [...prev, {
+          id: docRef.id,
+          title: jobTitleForm.title.trim(),
+          category: jobTitleForm.category,
+          isActive: true,
+          createdAt: new Date(),
+          createdBy: user?.id || 'system',
+        }].sort((a, b) => a.title.localeCompare(b.title)))
+      }
+
+      setShowJobTitleModal(false)
+    } catch (err) {
+      console.error('Error saving job title:', err)
+      setJobTitleFormError('Failed to save. Please try again.')
+    } finally {
+      setSavingJobTitle(false)
+    }
+  }
+
+  const handleToggleJobTitleActive = async (jobTitle: JobTitle) => {
+    try {
+      await updateDoc(doc(db, 'jobTitles', jobTitle.id), {
+        isActive: !jobTitle.isActive,
+        updatedAt: serverTimestamp(),
+      })
+      setJobTitles(prev => prev.map(jt => 
+        jt.id === jobTitle.id ? { ...jt, isActive: !jt.isActive } : jt
+      ))
+    } catch (err) {
+      console.error('Error toggling job title:', err)
+    }
+  }
+
+  const handleConfirmDeleteJobTitle = (jobTitle: JobTitle) => {
+    setDeletingJobTitle(jobTitle)
+    setShowDeleteJobTitleModal(true)
+  }
+
+  const handleDeleteJobTitle = async () => {
+    if (!deletingJobTitle) return
+
+    try {
+      setDeletingJobTitleLoading(true)
+      await deleteDoc(doc(db, 'jobTitles', deletingJobTitle.id))
+      setJobTitles(prev => prev.filter(jt => jt.id !== deletingJobTitle.id))
+      setShowDeleteJobTitleModal(false)
+      setDeletingJobTitle(null)
+    } catch (err) {
+      console.error('Error deleting job title:', err)
+    } finally {
+      setDeletingJobTitleLoading(false)
+    }
+  }
+
+  // ============================================================================
+  // LOCATIONS HANDLERS
+  // ============================================================================
+
+  const handleAddLocation = () => {
+    setEditingLocation(null)
+    setLocationForm({ name: '', address: '', city: '', postcode: '', region: '' })
+    setLocationFormError('')
+    setShowLocationModal(true)
+  }
+
+  const handleEditLocation = (location: Location) => {
+    setEditingLocation(location)
+    setLocationForm({ 
+      name: location.name, 
+      address: location.address || '', 
+      city: location.city || '', 
+      postcode: location.postcode || '',
+      region: location.region || ''
+    })
+    setLocationFormError('')
+    setShowLocationModal(true)
+  }
+
+  const handleSaveLocation = async () => {
+    if (!locationForm.name.trim()) {
+      setLocationFormError('Location name is required')
+      return
+    }
+
+    // Check for duplicates
+    const duplicate = locations.find(
+      loc => loc.name.toLowerCase() === locationForm.name.trim().toLowerCase() && 
+             loc.id !== editingLocation?.id
+    )
+    if (duplicate) {
+      setLocationFormError('A location with this name already exists')
+      return
+    }
+
+    try {
+      setSavingLocation(true)
+      const locationsRef = collection(db, 'locations')
+
+      if (editingLocation) {
+        await updateDoc(doc(db, 'locations', editingLocation.id), {
+          name: locationForm.name.trim(),
+          address: locationForm.address.trim(),
+          city: locationForm.city.trim(),
+          postcode: locationForm.postcode.trim().toUpperCase(),
+          region: locationForm.region,
+          updatedAt: serverTimestamp(),
+        })
+        setLocations(prev => prev.map(loc => 
+          loc.id === editingLocation.id 
+            ? { 
+                ...loc, 
+                name: locationForm.name.trim(),
+                address: locationForm.address.trim(),
+                city: locationForm.city.trim(),
+                postcode: locationForm.postcode.trim().toUpperCase(),
+                region: locationForm.region
+              }
+            : loc
+        ))
+      } else {
+        const docRef = await addDoc(locationsRef, {
+          name: locationForm.name.trim(),
+          address: locationForm.address.trim(),
+          city: locationForm.city.trim(),
+          postcode: locationForm.postcode.trim().toUpperCase(),
+          region: locationForm.region,
+          isActive: true,
+          createdAt: serverTimestamp(),
+          createdBy: user?.id || 'system',
+        })
+        setLocations(prev => [...prev, {
+          id: docRef.id,
+          name: locationForm.name.trim(),
+          address: locationForm.address.trim(),
+          city: locationForm.city.trim(),
+          postcode: locationForm.postcode.trim().toUpperCase(),
+          region: locationForm.region,
+          isActive: true,
+          createdAt: new Date(),
+          createdBy: user?.id || 'system',
+        }].sort((a, b) => a.name.localeCompare(b.name)))
+      }
+
+      setShowLocationModal(false)
+    } catch (err) {
+      console.error('Error saving location:', err)
+      setLocationFormError('Failed to save. Please try again.')
+    } finally {
+      setSavingLocation(false)
+    }
+  }
+
+  const handleToggleLocationActive = async (location: Location) => {
+    try {
+      await updateDoc(doc(db, 'locations', location.id), {
+        isActive: !location.isActive,
+        updatedAt: serverTimestamp(),
+      })
+      setLocations(prev => prev.map(loc => 
+        loc.id === location.id ? { ...loc, isActive: !loc.isActive } : loc
+      ))
+    } catch (err) {
+      console.error('Error toggling location:', err)
+    }
+  }
+
+  const handleConfirmDeleteLocation = (location: Location) => {
+    setDeletingLocation(location)
+    setShowDeleteLocationModal(true)
+  }
+
+  const handleDeleteLocation = async () => {
+    if (!deletingLocation) return
+
+    try {
+      setDeletingLocationLoading(true)
+      await deleteDoc(doc(db, 'locations', deletingLocation.id))
+      setLocations(prev => prev.filter(loc => loc.id !== deletingLocation.id))
+      setShowDeleteLocationModal(false)
+      setDeletingLocation(null)
+    } catch (err) {
+      console.error('Error deleting location:', err)
+    } finally {
+      setDeletingLocationLoading(false)
+    }
+  }
+
+  // ============================================================================
+  // WHATSAPP TEMPLATES HANDLERS
+  // ============================================================================
+
+  const handleAddTemplate = () => {
+    setEditingTemplate(null)
+    setTemplateForm({ name: '', category: 'general', content: '' })
+    setTemplateFormError('')
+    setShowTemplateModal(true)
+  }
+
+  const handleEditTemplate = (template: WhatsAppTemplate) => {
+    setEditingTemplate(template)
+    setTemplateForm({ 
+      name: template.name, 
+      category: template.category, 
+      content: template.content 
+    })
+    setTemplateFormError('')
+    setShowTemplateModal(true)
+  }
+
+  const handleSaveTemplate = async () => {
+    if (!templateForm.name.trim()) {
+      setTemplateFormError('Template name is required')
+      return
+    }
+    if (!templateForm.content.trim()) {
+      setTemplateFormError('Template content is required')
+      return
+    }
+
+    // Check for duplicates
+    const duplicate = templates.find(
+      t => t.name.toLowerCase() === templateForm.name.trim().toLowerCase() && 
+           t.id !== editingTemplate?.id
+    )
+    if (duplicate) {
+      setTemplateFormError('A template with this name already exists')
+      return
+    }
+
+    try {
+      setSavingTemplate(true)
+      const templatesRef = collection(db, 'whatsappTemplates')
+      const placeholders = extractPlaceholders(templateForm.content)
+
+      if (editingTemplate) {
+        await updateDoc(doc(db, 'whatsappTemplates', editingTemplate.id), {
+          name: templateForm.name.trim(),
+          category: templateForm.category,
+          content: templateForm.content.trim(),
+          placeholders,
+          updatedAt: serverTimestamp(),
+        })
+        setTemplates(prev => prev.map(t => 
+          t.id === editingTemplate.id 
+            ? { 
+                ...t, 
+                name: templateForm.name.trim(),
+                category: templateForm.category,
+                content: templateForm.content.trim(),
+                placeholders,
+                updatedAt: new Date(),
+              }
+            : t
+        ).sort((a, b) => {
+          if (a.category !== b.category) return a.category.localeCompare(b.category)
+          return a.name.localeCompare(b.name)
+        }))
+      } else {
+        const docRef = await addDoc(templatesRef, {
+          name: templateForm.name.trim(),
+          category: templateForm.category,
+          content: templateForm.content.trim(),
+          placeholders,
+          active: true,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          createdBy: user?.id || 'system',
+        })
+        setTemplates(prev => [...prev, {
+          id: docRef.id,
+          name: templateForm.name.trim(),
+          category: templateForm.category,
+          content: templateForm.content.trim(),
+          placeholders,
+          active: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          createdBy: user?.id || 'system',
+        }].sort((a, b) => {
+          if (a.category !== b.category) return a.category.localeCompare(b.category)
+          return a.name.localeCompare(b.name)
+        }))
+      }
+
+      setShowTemplateModal(false)
+    } catch (err) {
+      console.error('Error saving template:', err)
+      setTemplateFormError('Failed to save. Please try again.')
+    } finally {
+      setSavingTemplate(false)
+    }
+  }
+
+  const handleToggleTemplateActive = async (template: WhatsAppTemplate) => {
+    try {
+      await updateDoc(doc(db, 'whatsappTemplates', template.id), {
+        active: !template.active,
+        updatedAt: serverTimestamp(),
+      })
+      setTemplates(prev => prev.map(t => 
+        t.id === template.id ? { ...t, active: !t.active } : t
+      ))
+    } catch (err) {
+      console.error('Error toggling template:', err)
+    }
+  }
+
+  const handleConfirmDeleteTemplate = (template: WhatsAppTemplate) => {
+    setDeletingTemplate(template)
+    setShowDeleteTemplateModal(true)
+  }
+
+  const handleDeleteTemplate = async () => {
+    if (!deletingTemplate) return
+
+    try {
+      setDeletingTemplateLoading(true)
+      await deleteDoc(doc(db, 'whatsappTemplates', deletingTemplate.id))
+      setTemplates(prev => prev.filter(t => t.id !== deletingTemplate.id))
+      setShowDeleteTemplateModal(false)
+      setDeletingTemplate(null)
+    } catch (err) {
+      console.error('Error deleting template:', err)
+    } finally {
+      setDeletingTemplateLoading(false)
+    }
+  }
+
+  const handleInsertPlaceholder = (placeholder: string) => {
+    setTemplateForm(prev => ({
+      ...prev,
+      content: prev.content + placeholder
+    }))
+  }
+
+  const handleDuplicateTemplate = (template: WhatsAppTemplate) => {
+    setEditingTemplate(null)
+    setTemplateForm({
+      name: `${template.name} (Copy)`,
+      category: template.category,
+      content: template.content
+    })
+    setTemplateFormError('')
+    setShowTemplateModal(true)
+  }
+
+  const handlePreviewTemplate = (template: WhatsAppTemplate) => {
+    setPreviewingTemplate(template)
+  }
+
+  // Highlight placeholders in template content for preview
+  const highlightPlaceholders = (content: string): React.ReactNode => {
+    const parts = content.split(/(\{\{[^}]+\}\})/g)
+    return parts.map((part, index) => {
+      if (part.match(/^\{\{[^}]+\}\}$/)) {
+        return (
+          <span key={index} className="placeholder-highlight">
+            {part}
+          </span>
+        )
+      }
+      return part
+    })
+  }
+
+  // ============================================================================
+  // COMPUTED VALUES
+  // ============================================================================
+
+  // Group job titles by category
+  const groupedJobTitles = jobTitles.reduce((acc, jt) => {
+    if (!acc[jt.category]) acc[jt.category] = []
+    acc[jt.category].push(jt)
+    return acc
+  }, {} as Record<string, JobTitle[]>)
+
+  // Filter locations by search
+  const filteredLocations = locations.filter(loc => {
+    if (!locationSearch) return true
+    const search = locationSearch.toLowerCase()
+    return loc.name.toLowerCase().includes(search) ||
+           loc.city?.toLowerCase().includes(search) ||
+           loc.postcode?.toLowerCase().includes(search) ||
+           loc.region?.toLowerCase().includes(search)
+  })
+
+  // Filter templates by category and search
+  const filteredTemplates = templates.filter(t => {
+    const matchesCategory = templateCategoryFilter === 'all' || t.category === templateCategoryFilter
+    const matchesSearch = !templateSearch || 
+      t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
+      t.content.toLowerCase().includes(templateSearch.toLowerCase())
+    return matchesCategory && matchesSearch
+  })
+
+  // Group templates by category for display
+  const groupedTemplates = filteredTemplates.reduce((acc, t) => {
+    if (!acc[t.category]) acc[t.category] = []
+    acc[t.category].push(t)
+    return acc
+  }, {} as Record<string, WhatsAppTemplate[]>)
+
+  // ============================================================================
+  // RENDER TABS
+  // ============================================================================
+
+  const renderJobTitlesTab = () => (
+    <div className="settings-section">
+      <div className="settings-section-header">
+        <div>
+          <h2>Job Titles</h2>
+          <p>Manage the job titles available for candidate applications</p>
+        </div>
+        <Button variant="primary" onClick={handleAddJobTitle}>
+          + Add Job Title
+        </Button>
+      </div>
+
+      {loadingJobTitles ? (
+        <div className="settings-loading">
+          <Spinner size="lg" />
+        </div>
+      ) : (
+        <div className="job-titles-grid">
+          {JOB_CATEGORIES.map(category => {
+            const titles = groupedJobTitles[category.value] || []
+            return (
+              <Card key={category.value} className="job-category-card">
+                <div className="category-header">
+                  <span 
+                    className="category-dot" 
+                    style={{ backgroundColor: category.color }}
+                  />
+                  <h3>{category.label}</h3>
+                  <span className="category-count">{titles.length}</span>
+                </div>
+                
+                <div className="job-titles-list">
+                  {titles.length === 0 ? (
+                    <p className="no-titles">No job titles in this category</p>
+                  ) : (
+                    titles.map(jt => (
+                      <div 
+                        key={jt.id} 
+                        className={`job-title-item ${!jt.isActive ? 'inactive' : ''}`}
+                      >
+                        <span className="job-title-name">{jt.title}</span>
+                        <div className="job-title-actions">
+                          <button
+                            className={`toggle-btn ${jt.isActive ? 'active' : ''}`}
+                            onClick={() => handleToggleJobTitleActive(jt)}
+                            title={jt.isActive ? 'Deactivate' : 'Activate'}
+                          >
+                            {jt.isActive ? '✓' : '○'}
+                          </button>
+                          <button
+                            className="edit-btn"
+                            onClick={() => handleEditJobTitle(jt)}
+                            title="Edit"
+                          >
+                            ✎
+                          </button>
+                          <button
+                            className="delete-btn"
+                            onClick={() => handleConfirmDeleteJobTitle(jt)}
+                            title="Delete"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+
+  const renderLocationsTab = () => (
+    <div className="settings-section">
+      <div className="settings-section-header">
+        <div>
+          <h2>Locations</h2>
+          <p>Manage pharmacy branch locations for candidate assignments</p>
+        </div>
+        <Button variant="primary" onClick={handleAddLocation}>
+          + Add Location
+        </Button>
+      </div>
+
+      {loadingLocations ? (
+        <div className="settings-loading">
+          <Spinner size="lg" />
+        </div>
+      ) : (
+        <>
+          {/* Search */}
+          {locations.length > 5 && (
+            <div className="locations-search">
+              <Input
+                placeholder="Search locations..."
+                value={locationSearch}
+                onChange={(e) => setLocationSearch(e.target.value)}
+              />
+            </div>
+          )}
+
+          {/* Locations list */}
+          <div className="locations-list">
+            {filteredLocations.length === 0 ? (
+              <Card className="empty-locations">
+                <p>{locations.length === 0 ? 'No locations added yet. Add your first location.' : 'No locations match your search.'}</p>
+              </Card>
+            ) : (
+              filteredLocations.map(location => (
+                <Card key={location.id} className={`location-card ${!location.isActive ? 'inactive' : ''}`}>
+                  <div className="location-info">
+                    <div className="location-name">
+                      <span className="location-icon">📍</span>
+                      {location.name}
+                      {!location.isActive && <span className="inactive-badge">Inactive</span>}
+                    </div>
+                    {(location.address || location.city || location.postcode) && (
+                      <div className="location-address">
+                        {[location.address, location.city, location.postcode].filter(Boolean).join(', ')}
+                      </div>
+                    )}
+                    {location.region && (
+                      <div className="location-region">{location.region}</div>
+                    )}
+                  </div>
+                  <div className="location-actions">
+                    <button
+                      className={`toggle-btn ${location.isActive ? 'active' : ''}`}
+                      onClick={() => handleToggleLocationActive(location)}
+                      title={location.isActive ? 'Deactivate' : 'Activate'}
+                    >
+                      {location.isActive ? '✓' : '○'}
+                    </button>
+                    <button
+                      className="edit-btn"
+                      onClick={() => handleEditLocation(location)}
+                      title="Edit"
+                    >
+                      ✎
+                    </button>
+                    <button
+                      className="delete-btn"
+                      onClick={() => handleConfirmDeleteLocation(location)}
+                      title="Delete"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </Card>
+              ))
+            )}
+          </div>
+
+          {/* Summary */}
+          {locations.length > 0 && (
+            <div className="locations-summary">
+              {locations.length} location{locations.length !== 1 ? 's' : ''} • {locations.filter(l => l.isActive).length} active
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+
+  const renderWhatsAppTemplatesTab = () => (
+    <div className="settings-section">
+      <div className="settings-section-header">
+        <div>
+          <h2>WhatsApp Templates</h2>
+          <p>Manage message templates for candidate communication</p>
+        </div>
+        <Button variant="primary" onClick={handleAddTemplate}>
+          + New Template
+        </Button>
+      </div>
+
+      {loadingTemplates ? (
+        <div className="settings-loading">
+          <Spinner size="lg" />
+        </div>
+      ) : (
+        <>
+          {/* Search and filter bar */}
+          <div className="template-toolbar">
+            <div className="template-search">
+              <Input
+                placeholder="Search templates..."
+                value={templateSearch}
+                onChange={(e) => setTemplateSearch(e.target.value)}
+              />
+            </div>
+            <div className="template-category-tabs">
+              <button
+                className={`category-filter-btn ${templateCategoryFilter === 'all' ? 'active' : ''}`}
+                onClick={() => setTemplateCategoryFilter('all')}
+              >
+                All ({templates.length})
+              </button>
+              {TEMPLATE_CATEGORIES.map(cat => {
+                const count = templates.filter(t => t.category === cat.value).length
+                if (count === 0) return null
+                return (
+                  <button
+                    key={cat.value}
+                    className={`category-filter-btn ${templateCategoryFilter === cat.value ? 'active' : ''}`}
+                    onClick={() => setTemplateCategoryFilter(cat.value as TemplateCategory)}
+                    style={{ '--cat-color': cat.color } as React.CSSProperties}
+                  >
+                    {cat.label} ({count})
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Templates list */}
+          <div className="templates-list">
+            {filteredTemplates.length === 0 ? (
+              <Card className="empty-templates">
+                <p>
+                  {templates.length === 0 
+                    ? 'No templates yet. Create your first template.'
+                    : templateSearch
+                    ? 'No templates match your search.'
+                    : 'No templates in this category.'
+                  }
+                </p>
+              </Card>
+            ) : (
+              filteredTemplates.map(template => {
+                const category = TEMPLATE_CATEGORIES.find(c => c.value === template.category)
+                return (
+                  <Card key={template.id} className={`template-card ${!template.active ? 'inactive' : ''}`}>
+                    <div className="template-header">
+                      <div className="template-title-row">
+                        <span 
+                          className="template-category-badge"
+                          style={{ backgroundColor: `${category?.color}20`, color: category?.color }}
+                        >
+                          {category?.label}
+                        </span>
+                        <h3 className="template-name">{template.name}</h3>
+                        {!template.active && <span className="inactive-badge">Inactive</span>}
+                      </div>
+                      <div className="template-actions">
+                        <button
+                          className="preview-btn"
+                          onClick={() => handlePreviewTemplate(template)}
+                          title="Preview"
+                        >
+                          👁
+                        </button>
+                        <button
+                          className="duplicate-btn"
+                          onClick={() => handleDuplicateTemplate(template)}
+                          title="Duplicate"
+                        >
+                          ⧉
+                        </button>
+                        <button
+                          className={`toggle-btn ${template.active ? 'active' : ''}`}
+                          onClick={() => handleToggleTemplateActive(template)}
+                          title={template.active ? 'Deactivate' : 'Activate'}
+                        >
+                          {template.active ? '✓' : '○'}
+                        </button>
+                        <button
+                          className="edit-btn"
+                          onClick={() => handleEditTemplate(template)}
+                          title="Edit"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          className="delete-btn"
+                          onClick={() => handleConfirmDeleteTemplate(template)}
+                          title="Delete"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </div>
+                    <div 
+                      className="template-content-preview"
+                      onClick={() => handlePreviewTemplate(template)}
+                    >
+                      {template.content.length > 200 
+                        ? template.content.substring(0, 200) + '...' 
+                        : template.content
+                      }
+                    </div>
+                    {template.placeholders.length > 0 && (
+                      <div className="template-placeholders">
+                        {template.placeholders.map(p => (
+                          <span key={p} className="placeholder-tag">{`{{${p}}}`}</span>
+                        ))}
+                      </div>
+                    )}
+                  </Card>
+                )
+              })
+            )}
+          </div>
+
+          {/* Summary */}
+          {templates.length > 0 && (
+            <div className="templates-summary">
+              {filteredTemplates.length === templates.length 
+                ? `${templates.length} template${templates.length !== 1 ? 's' : ''}`
+                : `Showing ${filteredTemplates.length} of ${templates.length} templates`
+              } • {templates.filter(t => t.active).length} active
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+
+  const renderGeneralTab = () => (
+    <div className="settings-section">
+      <div className="settings-section-header">
+        <div>
+          <h2>General Settings</h2>
+          <p>Configure general application settings</p>
+        </div>
+      </div>
+      <Card className="coming-soon-card">
+        <p>General settings will be available in a future update.</p>
+      </Card>
+    </div>
+  )
+
+  // ============================================================================
+  // MAIN RENDER
+  // ============================================================================
+
+  return (
+    <div className="settings-page">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Settings</h1>
+          <p className="page-description">Configure job titles, WhatsApp templates and system preferences</p>
+        </div>
+      </div>
+
+      <div className="settings-layout">
+        {/* Sidebar tabs */}
+        <div className="settings-sidebar">
+          {SETTINGS_TABS.map(tab => (
+            <button
+              key={tab.id}
+              className={`settings-tab ${activeTab === tab.id ? 'active' : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              <span className="tab-icon">{tab.icon}</span>
+              <span className="tab-label">{tab.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div className="settings-content">
+          {activeTab === 'job-titles' && renderJobTitlesTab()}
+          {activeTab === 'whatsapp-templates' && renderWhatsAppTemplatesTab()}
+          {activeTab === 'locations' && renderLocationsTab()}
+          {activeTab === 'general' && renderGeneralTab()}
+        </div>
+      </div>
+
+      {/* Add/Edit Job Title Modal */}
+      <Modal
+        isOpen={showJobTitleModal}
+        onClose={() => setShowJobTitleModal(false)}
+        title={editingJobTitle ? 'Edit Job Title' : 'Add Job Title'}
+        size="sm"
+      >
+        <div className="job-title-form">
+          <div className="form-group">
+            <label>Job Title *</label>
+            <Input
+              value={jobTitleForm.title}
+              onChange={(e) => {
+                setJobTitleForm(prev => ({ ...prev, title: e.target.value }))
+                setJobTitleFormError('')
+              }}
+              placeholder="e.g., Pharmacist, Dispenser"
+              autoFocus
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Category *</label>
+            <div className="category-options">
+              {JOB_CATEGORIES.map(cat => (
+                <button
+                  key={cat.value}
+                  type="button"
+                  className={`category-option ${jobTitleForm.category === cat.value ? 'selected' : ''}`}
+                  onClick={() => setJobTitleForm(prev => ({ ...prev, category: cat.value as JobTitle['category'] }))}
+                  style={{ 
+                    '--cat-color': cat.color,
+                    borderColor: jobTitleForm.category === cat.value ? cat.color : undefined,
+                    backgroundColor: jobTitleForm.category === cat.value ? `${cat.color}15` : undefined,
+                  } as React.CSSProperties}
+                >
+                  <span className="cat-dot" style={{ backgroundColor: cat.color }} />
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {jobTitleFormError && (
+            <p className="form-error">{jobTitleFormError}</p>
+          )}
+
+          <div className="modal-actions">
+            <Button variant="secondary" onClick={() => setShowJobTitleModal(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleSaveJobTitle} disabled={savingJobTitle}>
+              {savingJobTitle ? 'Saving...' : editingJobTitle ? 'Update' : 'Add'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete Job Title Modal */}
+      <Modal
+        isOpen={showDeleteJobTitleModal}
+        onClose={() => setShowDeleteJobTitleModal(false)}
+        title="Delete Job Title"
+        size="sm"
+      >
+        <div className="delete-confirmation">
+          <p>Are you sure you want to delete <strong>"{deletingJobTitle?.title}"</strong>?</p>
+          <p className="delete-warning">
+            This action cannot be undone. Existing candidates with this job title will not be affected.
+          </p>
+          <div className="modal-actions">
+            <Button variant="secondary" onClick={() => setShowDeleteJobTitleModal(false)}>
+              Cancel
+            </Button>
+            <Button 
+              variant="danger" 
+              onClick={handleDeleteJobTitle} 
+              disabled={deletingJobTitleLoading}
+            >
+              {deletingJobTitleLoading ? 'Deleting...' : 'Delete'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Add/Edit Location Modal */}
+      <Modal
+        isOpen={showLocationModal}
+        onClose={() => setShowLocationModal(false)}
+        title={editingLocation ? 'Edit Location' : 'Add Location'}
+        size="md"
+      >
+        <div className="location-form">
+          <div className="form-group">
+            <label>Location Name *</label>
+            <Input
+              value={locationForm.name}
+              onChange={(e) => {
+                setLocationForm(prev => ({ ...prev, name: e.target.value }))
+                setLocationFormError('')
+              }}
+              placeholder="e.g., Allied Pharmacy Croydon"
+              autoFocus
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Address</label>
+            <Input
+              value={locationForm.address}
+              onChange={(e) => setLocationForm(prev => ({ ...prev, address: e.target.value }))}
+              placeholder="e.g., 123 High Street"
+            />
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label>City</label>
+              <Input
+                value={locationForm.city}
+                onChange={(e) => setLocationForm(prev => ({ ...prev, city: e.target.value }))}
+                placeholder="e.g., Croydon"
+              />
+            </div>
+            <div className="form-group">
+              <label>Postcode</label>
+              <Input
+                value={locationForm.postcode}
+                onChange={(e) => setLocationForm(prev => ({ ...prev, postcode: e.target.value }))}
+                placeholder="e.g., CR0 1AB"
+              />
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label>Region</label>
+            <Select
+              value={locationForm.region}
+              onChange={(e) => setLocationForm(prev => ({ ...prev, region: e.target.value }))}
+              options={[
+                { value: '', label: 'Select region...' },
+                ...UK_REGIONS.map(r => ({ value: r, label: r }))
+              ]}
+            />
+          </div>
+
+          {locationFormError && (
+            <p className="form-error">{locationFormError}</p>
+          )}
+
+          <div className="modal-actions">
+            <Button variant="secondary" onClick={() => setShowLocationModal(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleSaveLocation} disabled={savingLocation}>
+              {savingLocation ? 'Saving...' : editingLocation ? 'Update' : 'Add'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete Location Modal */}
+      <Modal
+        isOpen={showDeleteLocationModal}
+        onClose={() => setShowDeleteLocationModal(false)}
+        title="Delete Location"
+        size="sm"
+      >
+        <div className="delete-confirmation">
+          <p>Are you sure you want to delete <strong>"{deletingLocation?.name}"</strong>?</p>
+          <p className="delete-warning">
+            This action cannot be undone. Existing candidates assigned to this location will not be affected.
+          </p>
+          <div className="modal-actions">
+            <Button variant="secondary" onClick={() => setShowDeleteLocationModal(false)}>
+              Cancel
+            </Button>
+            <Button 
+              variant="danger" 
+              onClick={handleDeleteLocation} 
+              disabled={deletingLocationLoading}
+            >
+              {deletingLocationLoading ? 'Deleting...' : 'Delete'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Add/Edit Template Modal */}
+      <Modal
+        isOpen={showTemplateModal}
+        onClose={() => setShowTemplateModal(false)}
+        title={editingTemplate ? 'Edit Template' : 'New Template'}
+        size="lg"
+      >
+        <div className="template-form">
+          <div className="form-row">
+            <div className="form-group" style={{ flex: 2 }}>
+              <label>Template Name *</label>
+              <Input
+                value={templateForm.name}
+                onChange={(e) => {
+                  setTemplateForm(prev => ({ ...prev, name: e.target.value }))
+                  setTemplateFormError('')
+                }}
+                placeholder="e.g., Interview Invitation"
+                autoFocus
+              />
+            </div>
+            <div className="form-group" style={{ flex: 1 }}>
+              <label>Category *</label>
+              <Select
+                value={templateForm.category}
+                onChange={(e) => setTemplateForm(prev => ({ 
+                  ...prev, 
+                  category: e.target.value as TemplateCategory 
+                }))}
+                options={TEMPLATE_CATEGORIES.map(c => ({ value: c.value, label: c.label }))}
+              />
+            </div>
+          </div>
+
+          <div className="form-group">
+            <div className="template-content-header">
+              <label>Message Content *</label>
+              <button 
+                type="button" 
+                className="placeholder-help-btn"
+                onClick={() => setShowPlaceholderHelp(!showPlaceholderHelp)}
+              >
+                {showPlaceholderHelp ? 'Hide placeholders' : 'Show placeholders'}
+              </button>
+            </div>
+            
+            {showPlaceholderHelp && (
+              <div className="placeholder-help-panel">
+                <p className="placeholder-help-intro">Click a placeholder to insert it into your message:</p>
+                <div className="placeholder-buttons">
+                  {AVAILABLE_PLACEHOLDERS.map(p => (
+                    <button
+                      key={p.key}
+                      type="button"
+                      className="placeholder-insert-btn"
+                      onClick={() => handleInsertPlaceholder(p.key)}
+                      title={p.description}
+                    >
+                      {p.key}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <Textarea
+              value={templateForm.content}
+              onChange={(e) => {
+                setTemplateForm(prev => ({ ...prev, content: e.target.value }))
+                setTemplateFormError('')
+              }}
+              placeholder="Write your message here. Use {{placeholders}} for dynamic content..."
+              rows={10}
+            />
+            
+            {templateForm.content && (
+              <div className="detected-placeholders">
+                <span className="detected-label">Detected placeholders:</span>
+                {extractPlaceholders(templateForm.content).length > 0 ? (
+                  extractPlaceholders(templateForm.content).map(p => (
+                    <span key={p} className="placeholder-tag">{`{{${p}}}`}</span>
+                  ))
+                ) : (
+                  <span className="no-placeholders">None</span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {templateFormError && (
+            <p className="form-error">{templateFormError}</p>
+          )}
+
+          <div className="modal-actions">
+            <Button variant="secondary" onClick={() => setShowTemplateModal(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleSaveTemplate} disabled={savingTemplate}>
+              {savingTemplate ? 'Saving...' : editingTemplate ? 'Update Template' : 'Create Template'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete Template Modal */}
+      <Modal
+        isOpen={showDeleteTemplateModal}
+        onClose={() => setShowDeleteTemplateModal(false)}
+        title="Delete Template"
+        size="sm"
+      >
+        <div className="delete-confirmation">
+          <p>Are you sure you want to delete <strong>"{deletingTemplate?.name}"</strong>?</p>
+          <p className="delete-warning">
+            This action cannot be undone. This template will no longer be available for sending messages.
+          </p>
+          <div className="modal-actions">
+            <Button variant="secondary" onClick={() => setShowDeleteTemplateModal(false)}>
+              Cancel
+            </Button>
+            <Button 
+              variant="danger" 
+              onClick={handleDeleteTemplate} 
+              disabled={deletingTemplateLoading}
+            >
+              {deletingTemplateLoading ? 'Deleting...' : 'Delete'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Template Preview Modal */}
+      <Modal
+        isOpen={!!previewingTemplate}
+        onClose={() => setPreviewingTemplate(null)}
+        title="Template Preview"
+        size="md"
+      >
+        {previewingTemplate && (
+          <div className="template-preview-modal">
+            <div className="preview-header">
+              <span 
+                className="template-category-badge"
+                style={{ 
+                  backgroundColor: `${TEMPLATE_CATEGORIES.find(c => c.value === previewingTemplate.category)?.color}20`, 
+                  color: TEMPLATE_CATEGORIES.find(c => c.value === previewingTemplate.category)?.color 
+                }}
+              >
+                {TEMPLATE_CATEGORIES.find(c => c.value === previewingTemplate.category)?.label}
+              </span>
+              <h3>{previewingTemplate.name}</h3>
+              {!previewingTemplate.active && <span className="inactive-badge">Inactive</span>}
+            </div>
+            
+            <div className="preview-content">
+              <div className="preview-message">
+                {highlightPlaceholders(previewingTemplate.content)}
+              </div>
+            </div>
+
+            {previewingTemplate.placeholders.length > 0 && (
+              <div className="preview-placeholders">
+                <span className="preview-placeholders-label">Placeholders used:</span>
+                <div className="preview-placeholders-list">
+                  {previewingTemplate.placeholders.map(p => {
+                    const placeholder = AVAILABLE_PLACEHOLDERS.find(ap => ap.key === `{{${p}}}`)
+                    return (
+                      <div key={p} className="preview-placeholder-item">
+                        <span className="placeholder-tag">{`{{${p}}}`}</span>
+                        <span className="placeholder-description">{placeholder?.description || 'Custom placeholder'}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="modal-actions">
+              <Button variant="secondary" onClick={() => setPreviewingTemplate(null)}>
+                Close
+              </Button>
+              <Button 
+                variant="secondary" 
+                onClick={() => {
+                  handleDuplicateTemplate(previewingTemplate)
+                  setPreviewingTemplate(null)
+                }}
+              >
+                Duplicate
+              </Button>
+              <Button 
+                variant="primary" 
+                onClick={() => {
+                  handleEditTemplate(previewingTemplate)
+                  setPreviewingTemplate(null)
+                }}
+              >
+                Edit Template
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  )
+}
+
+export default Settings

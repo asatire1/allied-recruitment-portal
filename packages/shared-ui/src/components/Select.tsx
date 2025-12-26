@@ -1,4 +1,4 @@
-import React, { forwardRef } from 'react'
+import React, { forwardRef, useId } from 'react'
 
 export interface SelectOption {
   value: string
@@ -16,7 +16,8 @@ export interface SelectProps extends Omit<React.SelectHTMLAttributes<HTMLSelectE
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
   ({ label, error, hint, options, placeholder, className = '', id, ...props }, ref) => {
-    const selectId = id || `select-${Math.random().toString(36).slice(2, 9)}`
+    const generatedId = useId()
+    const selectId = id || generatedId
     
     return (
       <div className="form-field">

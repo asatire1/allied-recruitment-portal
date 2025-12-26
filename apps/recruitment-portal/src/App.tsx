@@ -7,7 +7,7 @@ import {
   AdminRoute,
   AppLayout 
 } from './components'
-import { Login, ForgotPassword, Unauthorized, NotFound, Dashboard, Candidates, CandidateDetail } from './pages'
+import { Login, ForgotPassword, Unauthorized, NotFound, Dashboard, Candidates, CandidateDetail, Settings } from './pages'
 import { Spinner } from '@allied/shared-ui'
 import { initializeFirebase } from '@allied/shared-lib'
 import './pages/Login.css'
@@ -104,22 +104,6 @@ function Reports() {
       </div>
       <p style={{ color: 'var(--color-gray-500)' }}>
         Reports will be built in Phase R8.
-      </p>
-    </div>
-  )
-}
-
-function Settings() {
-  return (
-    <div className="page">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Settings</h1>
-          <p className="page-description">Configure system preferences</p>
-        </div>
-      </div>
-      <p style={{ color: 'var(--color-gray-500)' }}>
-        Settings will be built in Phase R6.
       </p>
     </div>
   )

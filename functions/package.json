@@ -1,0 +1,31 @@
+{
+  "name": "allied-recruitment-functions",
+  "version": "1.0.0",
+  "description": "Firebase Cloud Functions for Allied Recruitment Portal",
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.1.0",
+    "mammoth": "^1.8.0",
+    "pdf-parse": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.10",
+    "@types/pdf-parse": "^1.1.4",
+    "typescript": "^5.7.2"
+  },
+  "private": true
+}

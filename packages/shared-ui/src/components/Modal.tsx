@@ -27,8 +27,13 @@ export function Modal({
 }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null)
   const previousActiveElement = useRef<HTMLElement | null>(null)
+  const hasInitialFocus = useRef(false)
   const escapeCount = useRef(0)
-  const escapeTimer = useRef<NodeJS.Timeout | null>(null)
+  const escapeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  
+  // Store onClose in a ref to avoid re-running effects
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
   // Handle escape key - require double-tap if input is focused
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -52,14 +57,14 @@ export function Modal({
         
         if (escapeCount.current >= 2) {
           escapeCount.current = 0
-          onClose()
+          onCloseRef.current()
         }
         // Don't prevent default - let first escape dismiss autofill
       } else {
-        onClose()
+        onCloseRef.current()
       }
     }
-  }, [closeOnEscape, onClose])
+  }, [closeOnEscape])
 
   // Handle overlay click
   const handleOverlayClick = useCallback((e: React.MouseEvent) => {
@@ -68,20 +73,25 @@ export function Modal({
     }
   }, [closeOnOverlayClick, onClose])
 
-  // Focus management and body scroll lock
+  // Focus management and body scroll lock - only run when isOpen changes
   useEffect(() => {
     if (isOpen) {
-      // Store current active element
-      previousActiveElement.current = document.activeElement as HTMLElement
-      
-      // Focus the modal
-      modalRef.current?.focus()
+      // Store current active element (only on first open)
+      if (!hasInitialFocus.current) {
+        previousActiveElement.current = document.activeElement as HTMLElement
+        // Focus the modal only on initial open
+        modalRef.current?.focus()
+        hasInitialFocus.current = true
+      }
       
       // Lock body scroll
       document.body.style.overflow = 'hidden'
       
       // Add event listener for escape key
       document.addEventListener('keydown', handleKeyDown)
+    } else {
+      // Reset for next open
+      hasInitialFocus.current = false
     }
 
     return () => {
@@ -96,8 +106,8 @@ export function Modal({
         clearTimeout(escapeTimer.current)
       }
       
-      // Restore focus
-      if (previousActiveElement.current) {
+      // Restore focus when closing
+      if (!isOpen && previousActiveElement.current) {
         previousActiveElement.current.focus()
       }
     }

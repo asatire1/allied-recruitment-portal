@@ -1,0 +1,743 @@
+/* ============================================================================
+   iOS-STYLE THEME - Allied Recruitment Portal
+   Version 2.0 - Allied Pharmacies Branding
+   
+   Modern, Apple-inspired design with Allied Pharmacies colors:
+   - Primary: Dark Teal (#0d4f5c)
+   - Secondary: Pharmacy Green (#2e7d32)
+   ============================================================================ */
+
+/* ============================================================================
+   ROOT VARIABLES - Allied Pharmacies + iOS tokens
+   ============================================================================ */
+:root {
+  /* iOS-like colors with Allied branding */
+  --ios-bg: #f2f2f7;
+  --ios-card-bg: #ffffff;
+  --ios-border: rgba(0, 0, 0, 0.08);
+  --ios-border-focus: rgba(13, 79, 92, 0.4);
+  
+  /* Primary - Allied Dark Teal */
+  --ios-primary: #0d4f5c;
+  --ios-primary-hover: #0a3f4a;
+  --ios-primary-light: rgba(13, 79, 92, 0.1);
+  
+  /* Secondary - Pharmacy Green */
+  --ios-green: #2e7d32;
+  --ios-green-light: rgba(46, 125, 50, 0.1);
+  
+  /* Keep Apple blue for links */
+  --ios-blue: #007AFF;
+  --ios-blue-hover: #0056b3;
+  --ios-blue-light: rgba(0, 122, 255, 0.1);
+  
+  /* Text colors */
+  --ios-text-primary: #1c1c1e;
+  --ios-text-secondary: #636366;
+  --ios-text-tertiary: #8e8e93;
+  
+  /* Shadows - soft, layered */
+  --ios-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --ios-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --ios-shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.08);
+  --ios-shadow-xl: 0 24px 80px rgba(0, 0, 0, 0.14), 0 8px 24px rgba(0, 0, 0, 0.1);
+  
+  /* Radius - rounded like iOS */
+  --ios-radius-sm: 8px;
+  --ios-radius-md: 12px;
+  --ios-radius-lg: 16px;
+  --ios-radius-xl: 20px;
+  --ios-radius-2xl: 24px;
+  
+  /* Typography */
+  --ios-font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  
+  /* Transitions - smooth like iOS */
+  --ios-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ios-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ios-duration-fast: 150ms;
+  --ios-duration-normal: 250ms;
+  --ios-duration-slow: 350ms;
+}
+
+/* ============================================================================
+   BASE RESETS - iOS feel
+   ============================================================================ */
+* {
+  font-family: var(--ios-font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: var(--ios-bg);
+  color: var(--ios-text-primary);
+}
+
+/* ============================================================================
+   FORM INPUTS - iOS style
+   ============================================================================ */
+.input,
+.select,
+.textarea {
+  font-family: var(--ios-font);
+  font-size: 17px;
+  line-height: 1.4;
+  padding: 14px 16px;
+  border: 1px solid var(--ios-border);
+  border-radius: var(--ios-radius-md);
+  background: var(--ios-card-bg);
+  color: var(--ios-text-primary);
+  transition: all var(--ios-duration-fast) var(--ios-ease);
+  box-shadow: var(--ios-shadow-sm);
+  outline: none;
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--ios-text-tertiary);
+}
+
+.input:hover,
+.select:hover,
+.textarea:hover {
+  border-color: rgba(0, 0, 0, 0.15);
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  border-color: var(--ios-blue);
+  box-shadow: 
+    var(--ios-shadow-sm),
+    0 0 0 4px var(--ios-blue-light);
+}
+
+/* Fix autofill - override browser yellow/blue background */
+.input:-webkit-autofill,
+.input:-webkit-autofill:hover,
+.input:-webkit-autofill:focus,
+.input:-webkit-autofill:active {
+  -webkit-box-shadow: 
+    0 0 0 30px white inset,
+    var(--ios-shadow-sm) !important;
+  -webkit-text-fill-color: var(--ios-text-primary) !important;
+  transition: background-color 5000s ease-in-out 0s;
+  font-family: var(--ios-font) !important;
+  font-size: 17px !important;
+}
+
+/* Disable autofill icon overlay */
+input::-webkit-contacts-auto-fill-button,
+input::-webkit-credentials-auto-fill-button {
+  visibility: hidden;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+}
+
+/* Error states */
+.input-error,
+.input.input-error,
+.select-error,
+.textarea-error {
+  border-color: #FF3B30;
+}
+
+.input-error:focus,
+.input.input-error:focus {
+  border-color: #FF3B30;
+  box-shadow: 
+    var(--ios-shadow-sm),
+    0 0 0 4px rgba(255, 59, 48, 0.15);
+}
+
+/* Labels */
+.form-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ios-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.form-error {
+  font-size: 13px;
+  color: #FF3B30;
+  margin-top: 6px;
+}
+
+.form-hint {
+  font-size: 13px;
+  color: var(--ios-text-secondary);
+  margin-top: 6px;
+}
+
+/* ============================================================================
+   BUTTONS - iOS style
+   ============================================================================ */
+.btn {
+  font-family: var(--ios-font);
+  font-size: 17px;
+  font-weight: 600;
+  padding: 14px 24px;
+  border-radius: var(--ios-radius-md);
+  border: none;
+  cursor: pointer;
+  transition: all var(--ios-duration-fast) var(--ios-ease);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 4px var(--ios-blue-light);
+}
+
+.btn-primary,
+button[class*="bg-primary"],
+button[data-variant="primary"] {
+  background: linear-gradient(180deg, #0d4f5c 0%, #0a3f4a 100%);
+  color: white;
+  box-shadow: 
+    var(--ios-shadow-md),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.btn-primary:hover,
+button[class*="bg-primary"]:hover,
+button[data-variant="primary"]:hover {
+  background: linear-gradient(180deg, #0a3f4a 0%, #072f37 100%);
+  box-shadow: 
+    var(--ios-shadow-lg),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.btn-primary:active,
+button[data-variant="primary"]:active {
+  background: linear-gradient(180deg, #072f37 0%, #041f25 100%);
+}
+
+.btn-secondary {
+  background: var(--ios-card-bg);
+  color: var(--ios-blue);
+  border: 1px solid var(--ios-border);
+  box-shadow: var(--ios-shadow-sm);
+}
+
+.btn-secondary:hover {
+  background: #f9f9f9;
+  box-shadow: var(--ios-shadow-md);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Button sizes */
+.btn-sm {
+  font-size: 15px;
+  padding: 10px 16px;
+  border-radius: var(--ios-radius-sm);
+}
+
+.btn-lg {
+  font-size: 18px;
+  padding: 16px 32px;
+  border-radius: var(--ios-radius-lg);
+}
+
+/* Full width button */
+.w-full,
+[class*="fullWidth"] {
+  width: 100%;
+}
+
+/* ============================================================================
+   CARDS - iOS style
+   ============================================================================ */
+.card {
+  background: var(--ios-card-bg);
+  border-radius: var(--ios-radius-xl);
+  box-shadow: var(--ios-shadow-md);
+  border: 1px solid var(--ios-border);
+  overflow: hidden;
+}
+
+.card:hover {
+  box-shadow: var(--ios-shadow-lg);
+}
+
+.card-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--ios-border);
+  background: linear-gradient(180deg, #fafafa 0%, #f5f5f7 100%);
+}
+
+.card-body {
+  padding: 24px;
+}
+
+/* ============================================================================
+   CHECKBOX - iOS Toggle style
+   ============================================================================ */
+.checkbox-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--ios-border);
+  border-radius: 6px;
+  background: var(--ios-card-bg);
+  cursor: pointer;
+  transition: all var(--ios-duration-fast) var(--ios-ease);
+  position: relative;
+}
+
+.checkbox:hover {
+  border-color: var(--ios-blue);
+}
+
+.checkbox:checked {
+  background: var(--ios-blue);
+  border-color: var(--ios-blue);
+}
+
+.checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 2px;
+  width: 6px;
+  height: 12px;
+  border: solid white;
+  border-width: 0 2.5px 2.5px 0;
+  transform: rotate(45deg);
+}
+
+.checkbox:focus {
+  outline: none;
+  box-shadow: 0 0 0 4px var(--ios-blue-light);
+}
+
+.checkbox-label {
+  font-size: 17px;
+  color: var(--ios-text-primary);
+  cursor: pointer;
+}
+
+/* ============================================================================
+   ALERTS - iOS style
+   ============================================================================ */
+.alert {
+  border-radius: var(--ios-radius-md);
+  padding: 16px 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: none;
+  box-shadow: var(--ios-shadow-sm);
+}
+
+.alert-error {
+  background: linear-gradient(135deg, #fff5f5 0%, #fff0f0 100%);
+  border-left: 4px solid #FF3B30;
+  color: #c41e10;
+}
+
+.alert-success {
+  background: linear-gradient(135deg, #f0fff4 0%, #e8fff0 100%);
+  border-left: 4px solid #34C759;
+  color: #1a7f2d;
+}
+
+.alert-warning {
+  background: linear-gradient(135deg, #fffbf0 0%, #fff8e6 100%);
+  border-left: 4px solid #FF9500;
+  color: #b36800;
+}
+
+.alert-info {
+  background: linear-gradient(135deg, #f0f8ff 0%, #e6f2ff 100%);
+  border-left: 4px solid #007AFF;
+  color: #0055b3;
+}
+
+/* ============================================================================
+   TABLES - iOS style
+   ============================================================================ */
+.data-table-wrapper {
+  background: var(--ios-card-bg);
+  border-radius: var(--ios-radius-xl);
+  box-shadow: var(--ios-shadow-md);
+  border: 1px solid var(--ios-border);
+  overflow: hidden;
+}
+
+.data-table {
+  font-size: 15px;
+}
+
+.data-table thead {
+  background: linear-gradient(180deg, #fafafa 0%, #f5f5f7 100%);
+}
+
+.data-table th {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ios-text-secondary);
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--ios-border);
+}
+
+.data-table td {
+  padding: 16px 20px;
+  color: var(--ios-text-primary);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.data-table tbody tr {
+  transition: background var(--ios-duration-fast) var(--ios-ease);
+}
+
+.data-table tbody tr:hover {
+  background: rgba(0, 122, 255, 0.04);
+}
+
+.data-table tbody tr.clickable:active {
+  background: rgba(0, 122, 255, 0.08);
+}
+
+/* ============================================================================
+   BADGES - iOS style
+   ============================================================================ */
+.badge,
+.status-badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 100px;
+  letter-spacing: 0.3px;
+}
+
+.badge-success,
+.status-badge[class*="success"] {
+  background: linear-gradient(135deg, #e8fff0 0%, #d4f7e2 100%);
+  color: #1a7f2d;
+}
+
+.badge-warning,
+.status-badge[class*="warning"] {
+  background: linear-gradient(135deg, #fff8e6 0%, #ffefcc 100%);
+  color: #b36800;
+}
+
+.badge-error,
+.status-badge[class*="error"] {
+  background: linear-gradient(135deg, #fff0f0 0%, #ffe6e6 100%);
+  color: #c41e10;
+}
+
+.badge-info,
+.status-badge[class*="info"] {
+  background: linear-gradient(135deg, #e6f2ff 0%, #cce5ff 100%);
+  color: #0055b3;
+}
+
+.badge-default,
+.status-badge[class*="default"] {
+  background: linear-gradient(135deg, #f5f5f7 0%, #ebebed 100%);
+  color: var(--ios-text-secondary);
+}
+
+/* ============================================================================
+   MODAL - iOS style
+   ============================================================================ */
+.modal-backdrop {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.modal-content {
+  background: var(--ios-card-bg);
+  border-radius: var(--ios-radius-2xl);
+  box-shadow: var(--ios-shadow-xl);
+  max-width: 480px;
+  width: 90%;
+  animation: modalIn var(--ios-duration-normal) var(--ios-ease-spring);
+}
+
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.modal-header {
+  padding: 24px 24px 0;
+  text-align: center;
+}
+
+.modal-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ios-text-primary);
+  margin: 0;
+}
+
+.modal-body {
+  padding: 16px 24px 24px;
+  color: var(--ios-text-secondary);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.modal-footer {
+  padding: 0 24px 24px;
+  display: flex;
+  gap: 12px;
+}
+
+/* ============================================================================
+   SPINNER - iOS style
+   ============================================================================ */
+.spinner-svg {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================================================
+   LINKS
+   ============================================================================ */
+a {
+  color: var(--ios-blue);
+  text-decoration: none;
+  transition: opacity var(--ios-duration-fast) var(--ios-ease);
+}
+
+a:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+/* ============================================================================
+   LOGIN PAGE SPECIFIC
+   ============================================================================ */
+.login-page {
+  background: linear-gradient(180deg, #f5f5f7 0%, #e8e8ed 100%);
+  min-height: 100vh;
+}
+
+.login-container {
+  background: var(--ios-card-bg);
+  border-radius: var(--ios-radius-2xl);
+  box-shadow: var(--ios-shadow-xl);
+  padding: 48px 40px;
+  border: 1px solid var(--ios-border);
+  animation: fadeInUp var(--ios-duration-slow) var(--ios-ease);
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.login-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--ios-text-primary);
+  letter-spacing: -0.5px;
+}
+
+.login-subtitle {
+  font-size: 15px;
+  color: var(--ios-text-secondary);
+}
+
+.login-form {
+  gap: 20px;
+}
+
+.login-button {
+  margin-top: 8px;
+  height: 52px;
+  font-size: 17px;
+}
+
+.login-footer {
+  border-color: var(--ios-border);
+}
+
+.forgot-link {
+  font-size: 15px;
+  color: var(--ios-blue);
+  font-weight: 500;
+}
+
+/* Hide background shapes - cleaner look */
+.login-background {
+  display: none;
+}
+
+/* ============================================================================
+   SIDEBAR - iOS style
+   ============================================================================ */
+.sidebar {
+  background: var(--ios-card-bg);
+  border-right: 1px solid var(--ios-border);
+  box-shadow: var(--ios-shadow-sm);
+}
+
+.sidebar-nav-link {
+  border-radius: var(--ios-radius-md);
+  padding: 12px 16px;
+  margin: 4px 12px;
+  color: var(--ios-text-secondary);
+  font-weight: 500;
+  transition: all var(--ios-duration-fast) var(--ios-ease);
+}
+
+.sidebar-nav-link:hover {
+  background: rgba(0, 122, 255, 0.08);
+  color: var(--ios-blue);
+}
+
+.sidebar-nav-link.active,
+.sidebar-nav-link[class*="active"] {
+  background: var(--ios-blue-light);
+  color: var(--ios-blue);
+}
+
+/* ============================================================================
+   HEADER - iOS style
+   ============================================================================ */
+.header {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--ios-border);
+  box-shadow: var(--ios-shadow-sm);
+}
+
+/* ============================================================================
+   DASHBOARD CARDS
+   ============================================================================ */
+.stat-card,
+.dashboard-card {
+  background: var(--ios-card-bg);
+  border-radius: var(--ios-radius-xl);
+  box-shadow: var(--ios-shadow-md);
+  border: 1px solid var(--ios-border);
+  padding: 24px;
+  transition: all var(--ios-duration-normal) var(--ios-ease);
+}
+
+.stat-card:hover,
+.dashboard-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--ios-shadow-lg);
+}
+
+/* ============================================================================
+   SCROLLBAR - iOS style
+   ============================================================================ */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 100px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* ============================================================================
+   SELECTION
+   ============================================================================ */
+::selection {
+  background: var(--ios-blue-light);
+  color: var(--ios-text-primary);
+}
+
+/* ============================================================================
+   FOCUS RING - iOS style
+   ============================================================================ */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px var(--ios-blue-light);
+}
+
+/* ============================================================================
+   ANIMATIONS
+   ============================================================================ */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInRight {
+  from { 
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.animate-fadeIn {
+  animation: fadeIn var(--ios-duration-normal) var(--ios-ease);
+}
+
+.animate-slideIn {
+  animation: slideInRight var(--ios-duration-normal) var(--ios-ease);
+}

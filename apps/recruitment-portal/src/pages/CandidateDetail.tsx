@@ -2,11 +2,52 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { doc, getDoc, updateDoc, deleteDoc, addDoc, collection, query, where, orderBy, getDocs, serverTimestamp } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
-import { getFirebaseDb, getFirebaseStorage, COLLECTIONS, getCvPath } from '@allied/shared-lib'
+import { httpsCallable } from 'firebase/functions'
+import { 
+  getFirebaseDb, 
+  getFirebaseStorage, 
+  getFirebaseFunctions, 
+  COLLECTIONS, 
+  getCvPath, 
+  normalizePhone,
+  PLACEHOLDER_DEFINITIONS,
+  replaceTemplatePlaceholders,
+  prepareCandidateData,
+  prepareInterviewData,
+  combinePlaceholderData,
+  generateWhatsAppURL,
+  formatPhoneForWhatsApp,
+  type PlaceholderData
+} from '@allied/shared-lib'
 import type { Candidate, CandidateStatus, ActivityAction, ActivityLog } from '@allied/shared-lib'
 import { Card, Badge, Button, Spinner, Modal, Select, Input, Textarea } from '@allied/shared-ui'
 import { useAuth } from '../contexts/AuthContext'
 import './CandidateDetail.css'
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+// WhatsApp Template Types
+type TemplateCategory = 'interview' | 'trial' | 'offer' | 'rejection' | 'reminder' | 'general'
+
+interface WhatsAppTemplate {
+  id: string
+  name: string
+  category: TemplateCategory
+  content: string
+  placeholders: string[]
+  active: boolean
+}
+
+const TEMPLATE_CATEGORIES = [
+  { value: 'interview', label: 'Interview', color: '#3b82f6' },
+  { value: 'trial', label: 'Trial', color: '#f59e0b' },
+  { value: 'offer', label: 'Offer', color: '#10b981' },
+  { value: 'rejection', label: 'Rejection', color: '#ef4444' },
+  { value: 'reminder', label: 'Reminder', color: '#8b5cf6' },
+  { value: 'general', label: 'General', color: '#6b7280' },
+]
 
 // ============================================================================
 // CONSTANTS
@@ -110,15 +151,6 @@ const getInitials = (firstName: string, lastName: string): string => {
   return `${firstName?.charAt(0) || ''}${lastName?.charAt(0) || ''}`.toUpperCase()
 }
 
-// Normalize UK phone number
-const normalizePhone = (phone: string): string => {
-  let digits = phone.replace(/\D/g, '')
-  if (digits.startsWith('44') && digits.length > 10) {
-    digits = '0' + digits.slice(2)
-  }
-  return digits
-}
-
 // Validate UK phone number
 const validateUKPhone = (phone: string): boolean => {
   const normalized = normalizePhone(phone)
@@ -206,9 +238,34 @@ export function CandidateDetail() {
   const [uploadProgress, setUploadProgress] = useState<string>('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // CV parsing
+  const [parsing, setParsing] = useState(false)
+  const [parseStatus, setParseStatus] = useState<'idle' | 'success' | 'error' | 'partial'>('idle')
+  const [parsedData, setParsedData] = useState<any>(null)
+  const [showParsedModal, setShowParsedModal] = useState(false)
+  const [parseError, setParseError] = useState<string | null>(null)
+  const [parseRetryCount, setParseRetryCount] = useState(0)
+  const MAX_PARSE_RETRIES = 3
+
   // Activity timeline
   const [activities, setActivities] = useState<ActivityLog[]>([])
   const [loadingActivities, setLoadingActivities] = useState(false)
+
+  // Linked candidates / Application history
+  const [linkedCandidates, setLinkedCandidates] = useState<Candidate[]>([])
+  const [loadingLinkedCandidates, setLoadingLinkedCandidates] = useState(false)
+
+  // WhatsApp Modal state
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false)
+  const [whatsappTemplates, setWhatsappTemplates] = useState<WhatsAppTemplate[]>([])
+  const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [selectedTemplate, setSelectedTemplate] = useState<WhatsAppTemplate | null>(null)
+  const [templateCategoryFilter, setTemplateCategoryFilter] = useState<TemplateCategory | 'all'>('all')
+  const [messageContent, setMessageContent] = useState('')
+  const [isEditingMessage, setIsEditingMessage] = useState(false)
+  const [messageCopied, setMessageCopied] = useState(false)
+  const [generatedBookingLink, setGeneratedBookingLink] = useState<string | null>(null)
+  const [generatingBookingLink, setGeneratingBookingLink] = useState(false)
 
   const db = getFirebaseDb()
   const storage = getFirebaseStorage()
@@ -222,16 +279,22 @@ export function CandidateDetail() {
     newValue?: Record<string, unknown>
   ) => {
     try {
-      const activityData = {
+      const activityData: Record<string, any> = {
         entityType: 'candidate',
         entityId,
         action,
         description,
-        previousValue,
-        newValue,
         userId: user?.id || '',
         userName: user?.displayName || user?.email || 'Unknown',
         createdAt: serverTimestamp(),
+      }
+      
+      // Only include previousValue and newValue if they're defined
+      if (previousValue !== undefined) {
+        activityData.previousValue = previousValue
+      }
+      if (newValue !== undefined) {
+        activityData.newValue = newValue
       }
       
       const docRef = await addDoc(collection(db, COLLECTIONS.ACTIVITY_LOG), activityData)
@@ -340,6 +403,58 @@ export function CandidateDetail() {
 
     fetchActivities()
   }, [db, id])
+
+  // Fetch linked candidates for application history
+  useEffect(() => {
+    async function fetchLinkedCandidates() {
+      if (!candidate) return
+      
+      // Get all linked candidate IDs
+      const linkedIds = candidate.linkedCandidateIds || []
+      const primaryId = candidate.primaryRecordId
+      
+      // Combine all IDs (excluding current candidate)
+      const allLinkedIds = [...new Set([...linkedIds, ...(primaryId ? [primaryId] : [])])]
+        .filter(linkedId => linkedId !== candidate.id)
+      
+      if (allLinkedIds.length === 0) {
+        setLinkedCandidates([])
+        return
+      }
+
+      try {
+        setLoadingLinkedCandidates(true)
+        
+        // Fetch each linked candidate
+        const fetchPromises = allLinkedIds.map(async (linkedId) => {
+          const linkedRef = doc(db, COLLECTIONS.CANDIDATES, linkedId)
+          const linkedSnap = await getDoc(linkedRef)
+          if (linkedSnap.exists()) {
+            return { id: linkedSnap.id, ...linkedSnap.data() } as Candidate
+          }
+          return null
+        })
+        
+        const results = await Promise.all(fetchPromises)
+        const validCandidates = results.filter((c): c is Candidate => c !== null)
+        
+        // Sort by creation date (newest first)
+        validCandidates.sort((a, b) => {
+          const aDate = a.createdAt?.toDate?.()?.getTime() || 0
+          const bDate = b.createdAt?.toDate?.()?.getTime() || 0
+          return bDate - aDate
+        })
+        
+        setLinkedCandidates(validCandidates)
+      } catch (err) {
+        console.error('Error fetching linked candidates:', err)
+      } finally {
+        setLoadingLinkedCandidates(false)
+      }
+    }
+
+    fetchLinkedCandidates()
+  }, [db, candidate?.id, candidate?.linkedCandidateIds, candidate?.primaryRecordId])
 
   // Update status
   const handleStatusChange = async () => {
@@ -542,13 +657,244 @@ export function CandidateDetail() {
     }
   }
 
-  // Open WhatsApp
-  const openWhatsApp = () => {
-    if (!candidate?.phone) return
-    const phone = candidate.phone.replace(/\D/g, '')
-    // Convert UK format to international
-    const intlPhone = phone.startsWith('0') ? '44' + phone.slice(1) : phone
-    window.open(`https://wa.me/${intlPhone}`, '_blank')
+  // Open WhatsApp Modal
+  const openWhatsAppModal = async () => {
+    setShowWhatsAppModal(true)
+    setSelectedTemplate(null)
+    setMessageContent('')
+    setIsEditingMessage(false)
+    setTemplateCategoryFilter('all')
+    setMessageCopied(false)
+    setGeneratedBookingLink(null)
+    setGeneratingBookingLink(false)
+    
+    // Load templates if not already loaded
+    if (whatsappTemplates.length === 0) {
+      await loadWhatsAppTemplates()
+    }
+  }
+
+  // Load WhatsApp templates from Firestore
+  const loadWhatsAppTemplates = async () => {
+    setLoadingTemplates(true)
+    try {
+      const templatesRef = collection(db, 'whatsappTemplates')
+      const q = query(templatesRef, where('active', '==', true), orderBy('name'))
+      const snapshot = await getDocs(q)
+      
+      const loadedTemplates: WhatsAppTemplate[] = []
+      snapshot.forEach(doc => {
+        loadedTemplates.push({
+          id: doc.id,
+          ...doc.data()
+        } as WhatsAppTemplate)
+      })
+      
+      setWhatsappTemplates(loadedTemplates)
+    } catch (error) {
+      console.error('Error loading WhatsApp templates:', error)
+    } finally {
+      setLoadingTemplates(false)
+    }
+  }
+
+  // Get placeholder data for the current candidate
+  const getPlaceholderData = (): PlaceholderData => {
+    if (!candidate) return {}
+    
+    const candidateData = prepareCandidateData({
+      firstName: candidate.firstName,
+      lastName: candidate.lastName,
+      name: `${candidate.firstName} ${candidate.lastName}`,
+      email: candidate.email,
+      phone: candidate.phone,
+      jobTitle: candidate.jobTitle,
+      entity: candidate.entity || 'Allied Pharmacies'
+    })
+    
+    // TODO: Add interview data when scheduling is implemented
+    // const interviewData = prepareInterviewData({ ... })
+    
+    return combinePlaceholderData(candidateData, {
+      // Use generated booking link if available, otherwise placeholder
+      interviewBookingLink: generatedBookingLink || '[Booking link will be generated]',
+      companyName: candidate.entity || 'Allied Pharmacies',
+      branchName: candidate.branchId || '',
+      branchAddress: ''  // Would come from branch lookup
+    })
+  }
+
+  // Generate a booking link for the candidate via Cloud Function
+  const generateBookingLinkForCandidate = async (type: 'interview' | 'trial'): Promise<string> => {
+    if (!candidate || !user) return ''
+    
+    // If we already generated one, return it
+    if (generatedBookingLink) return generatedBookingLink
+    
+    setGeneratingBookingLink(true)
+    try {
+      const functions = getFirebaseFunctions()
+      const createBookingLinkFn = httpsCallable<{
+        candidateId: string
+        candidateName: string
+        candidateEmail?: string
+        type: 'interview' | 'trial'
+        jobTitle?: string
+        expiryDays?: number
+        maxUses?: number
+      }, {
+        success: boolean
+        id: string
+        url: string
+        expiresAt: string
+      }>(functions, 'createBookingLink')
+      
+      const result = await createBookingLinkFn({
+        candidateId: candidate.id,
+        candidateName: `${candidate.firstName} ${candidate.lastName}`,
+        candidateEmail: candidate.email,
+        type,
+        jobTitle: candidate.jobTitle,
+        expiryDays: 3,
+        maxUses: 1,
+      })
+      
+      if (result.data.success) {
+        setGeneratedBookingLink(result.data.url)
+        
+        // Log activity
+        logActivity(
+          candidate.id,
+          'create',
+          `Generated ${type} booking link (expires ${new Date(result.data.expiresAt).toLocaleDateString()})`
+        )
+        
+        return result.data.url
+      }
+      
+      return ''
+    } catch (error) {
+      console.error('Error generating booking link:', error)
+      return ''
+    } finally {
+      setGeneratingBookingLink(false)
+    }
+  }
+
+  // Select a template and fill placeholders
+  const handleSelectTemplate = async (template: WhatsAppTemplate) => {
+    setSelectedTemplate(template)
+    setIsEditingMessage(false)
+    
+    // Check if template uses booking link placeholder
+    const usesBookingLink = template.content.includes('{{interviewBookingLink}}')
+    
+    // Generate booking link if needed
+    if (usesBookingLink && !generatedBookingLink) {
+      const linkType = template.category === 'trial' ? 'trial' : 'interview'
+      await generateBookingLinkForCandidate(linkType)
+    }
+    
+    // Replace placeholders with candidate data
+    const data = getPlaceholderData()
+    const result = replaceTemplatePlaceholders(template.content, data)
+    setMessageContent(result.text)
+  }
+
+  // Quick action: Interview invitation
+  const handleQuickInterviewInvite = async () => {
+    // Generate booking link first
+    const bookingUrl = await generateBookingLinkForCandidate('interview')
+    
+    const template = whatsappTemplates.find(t => 
+      t.category === 'interview' && t.name.toLowerCase().includes('invitation')
+    )
+    if (template) {
+      // Now select template (booking link already generated)
+      setSelectedTemplate(template)
+      setIsEditingMessage(false)
+      const data = getPlaceholderData()
+      const result = replaceTemplatePlaceholders(template.content, data)
+      setMessageContent(result.text)
+    } else {
+      // Fallback if no template found
+      const data = getPlaceholderData()
+      setMessageContent(`Hi ${data.firstName},\n\nThank you for applying for the ${data.jobTitle} position at Allied Pharmacies.\n\nWe would like to invite you for an interview. Please use the following link to book a convenient time:\n\n${bookingUrl || data.interviewBookingLink}\n\nBest regards,\nAllied Recruitment Team`)
+      setSelectedTemplate(null)
+    }
+  }
+
+  // Quick action: Trial invitation
+  const handleQuickTrialInvite = async () => {
+    // Generate booking link first
+    const bookingUrl = await generateBookingLinkForCandidate('trial')
+    
+    const template = whatsappTemplates.find(t => 
+      t.category === 'trial' && t.name.toLowerCase().includes('invitation')
+    )
+    if (template) {
+      // Now select template (booking link already generated)
+      setSelectedTemplate(template)
+      setIsEditingMessage(false)
+      const data = getPlaceholderData()
+      const result = replaceTemplatePlaceholders(template.content, data)
+      setMessageContent(result.text)
+    } else {
+      // Fallback if no template found
+      const data = getPlaceholderData()
+      setMessageContent(`Hi ${data.firstName},\n\nCongratulations! Following your successful interview, we would like to invite you for a trial shift.\n\nPlease use this link to book your trial: ${bookingUrl || '[Booking link]'}\n\nPlease bring your GPhC registration, ID, and wear smart clothing.\n\nBest regards,\nAllied Recruitment Team`)
+      setSelectedTemplate(null)
+    }
+  }
+
+  // Copy message to clipboard
+  const handleCopyMessage = async () => {
+    try {
+      await navigator.clipboard.writeText(messageContent)
+      setMessageCopied(true)
+      setTimeout(() => setMessageCopied(false), 2000)
+    } catch (error) {
+      console.error('Failed to copy:', error)
+    }
+  }
+
+  // Send via WhatsApp
+  const handleSendWhatsApp = () => {
+    if (!candidate?.phone || !messageContent) return
+    
+    const url = generateWhatsAppURL(candidate.phone, messageContent)
+    window.open(url, '_blank')
+    
+    // Log activity
+    logActivity(
+      candidate.id,
+      'update',
+      `Sent WhatsApp message${selectedTemplate ? ` using template "${selectedTemplate.name}"` : ''}`
+    )
+    
+    // Close modal
+    setShowWhatsAppModal(false)
+  }
+
+  // Filter templates by category
+  const filteredWhatsappTemplates = whatsappTemplates.filter(t => 
+    templateCategoryFilter === 'all' || t.category === templateCategoryFilter
+  )
+
+  // Render a line with unfilled placeholders highlighted
+  const renderLineWithPlaceholders = (line: string): React.ReactNode => {
+    const parts = line.split(/(\{\{[^}]+\}\})/g)
+    return parts.map((part, index) => {
+      if (part.match(/^\{\{[^}]+\}\}$/)) {
+        // This is an unfilled placeholder - highlight it
+        return (
+          <span key={index} className="unfilled-placeholder">
+            {part}
+          </span>
+        )
+      }
+      return part
+    })
   }
 
   // Send email
@@ -679,6 +1025,228 @@ export function CandidateDetail() {
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
+    }
+  }
+
+  // Parse CV with AI
+  const handleParseCv = async (retryAttempt = 0) => {
+    if (!candidate?.cvUrl || !candidate?.cvFileName) return
+
+    try {
+      setParsing(true)
+      setParseStatus('idle')
+      setParseError(null)
+      setParseRetryCount(retryAttempt)
+      
+      if (retryAttempt > 0) {
+        setUploadProgress(`Retrying... (attempt ${retryAttempt + 1}/${MAX_PARSE_RETRIES + 1})`)
+      } else {
+        setUploadProgress('Parsing CV with AI...')
+      }
+
+      const functions = getFirebaseFunctions()
+      const parseCV = httpsCallable(functions, 'parseCV', {
+        timeout: 120000, // 2 minute timeout
+      })
+
+      // Determine mime type from filename
+      const ext = candidate.cvFileName.toLowerCase().split('.').pop()
+      let mimeType = 'application/pdf'
+      if (ext === 'doc') mimeType = 'application/msword'
+      if (ext === 'docx') mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+
+      const result = await parseCV({
+        fileUrl: candidate.cvUrl,
+        fileName: candidate.cvFileName,
+        mimeType,
+      })
+
+      const response = result.data as { success: boolean; data?: any; usedAI?: boolean; error?: string }
+
+      if (response.success && response.data) {
+        // Include usedAI flag in parsed data
+        const dataWithAIFlag = {
+          ...response.data,
+          usedAI: response.usedAI ?? false
+        }
+        setParsedData(dataWithAIFlag)
+        setParseStatus(response.data.confidence.overall >= 70 ? 'success' : 'partial')
+        setShowParsedModal(true)
+        setParseRetryCount(0)
+
+        // Log the parse
+        await logActivity(
+          candidate.id,
+          'cv_parsed',
+          `CV parsed with ${response.data.confidence.overall}% confidence`,
+          undefined,
+          { confidence: response.data.confidence.overall }
+        )
+      } else {
+        throw new Error(response.error || 'Failed to parse CV')
+      }
+    } catch (err: any) {
+      console.error('Error parsing CV:', err)
+      
+      // Determine if error is retryable
+      const errorMessage = err.message || 'Unknown error'
+      const isRetryable = 
+        errorMessage.includes('timeout') ||
+        errorMessage.includes('DEADLINE_EXCEEDED') ||
+        errorMessage.includes('UNAVAILABLE') ||
+        errorMessage.includes('INTERNAL') ||
+        errorMessage.includes('network') ||
+        err.code === 'functions/deadline-exceeded' ||
+        err.code === 'functions/unavailable' ||
+        err.code === 'functions/internal'
+
+      if (isRetryable && retryAttempt < MAX_PARSE_RETRIES) {
+        // Wait before retrying (exponential backoff)
+        const delay = Math.min(1000 * Math.pow(2, retryAttempt), 10000)
+        setUploadProgress(`Error occurred. Retrying in ${delay / 1000}s...`)
+        
+        await new Promise(resolve => setTimeout(resolve, delay))
+        
+        // Retry
+        return handleParseCv(retryAttempt + 1)
+      }
+
+      // Max retries reached or non-retryable error
+      setParseStatus('error')
+      setParseError(getReadableErrorMessage(err))
+    } finally {
+      if (parseStatus !== 'idle') {
+        setParsing(false)
+        setUploadProgress('')
+      }
+    }
+  }
+
+  // Get human-readable error message
+  const getReadableErrorMessage = (err: any): string => {
+    const code = err.code || ''
+    const message = err.message || ''
+
+    if (code === 'functions/unauthenticated' || message.includes('unauthenticated')) {
+      return 'You need to be logged in to parse CVs. Please refresh the page and try again.'
+    }
+    if (code === 'functions/permission-denied') {
+      return 'You don\'t have permission to parse CVs.'
+    }
+    if (code === 'functions/not-found' || message.includes('not-found')) {
+      return 'The CV file could not be found. It may have been deleted.'
+    }
+    if (code === 'functions/deadline-exceeded' || message.includes('timeout')) {
+      return 'The parsing took too long. The CV may be too large or complex. Try a smaller file.'
+    }
+    if (code === 'functions/resource-exhausted') {
+      return 'Too many requests. Please wait a moment and try again.'
+    }
+    if (code === 'functions/unavailable' || message.includes('UNAVAILABLE')) {
+      return 'The parsing service is temporarily unavailable. Please try again in a few minutes.'
+    }
+    if (message.includes('ANTHROPIC_API_KEY')) {
+      return 'AI parsing is not configured. Please contact your administrator.'
+    }
+    if (message.includes('extract') || message.includes('text')) {
+      return 'Could not read the CV file. The file may be corrupted, password-protected, or contain only images.'
+    }
+
+    return message || 'An unexpected error occurred. Please try again.'
+  }
+
+  // Manual entry fallback
+  const handleManualEntry = () => {
+    setParseStatus('idle')
+    setParseError(null)
+    // Could open edit form here
+    alert('You can manually edit the candidate details using the Edit button in the Info section.')
+  }
+
+  // Apply parsed data to candidate
+  const handleApplyParsedData = async (fieldsToApply: string[]) => {
+    if (!candidate || !parsedData) return
+
+    try {
+      setSaving(true)
+      
+      console.log('Applying parsed data:', parsedData)
+      console.log('Fields to apply:', fieldsToApply)
+
+      const updates: Record<string, any> = {
+        updatedAt: serverTimestamp(),
+      }
+
+      // Build updates based on selected fields
+      if (fieldsToApply.includes('firstName') && parsedData.firstName) {
+        updates.firstName = parsedData.firstName
+      }
+      if (fieldsToApply.includes('lastName') && parsedData.lastName) {
+        updates.lastName = parsedData.lastName
+      }
+      if (fieldsToApply.includes('email') && parsedData.email) {
+        updates.email = parsedData.email
+      }
+      if (fieldsToApply.includes('phone') && parsedData.phone) {
+        updates.phone = parsedData.phone
+      }
+      if (fieldsToApply.includes('address') && parsedData.address) {
+        updates.address = parsedData.address
+      }
+      if (fieldsToApply.includes('postcode') && parsedData.postcode) {
+        updates.postcode = parsedData.postcode
+      }
+      if (fieldsToApply.includes('skills') && parsedData.skills?.length > 0) {
+        updates.skills = parsedData.skills
+      }
+      if (fieldsToApply.includes('qualifications') && parsedData.qualifications?.length > 0) {
+        updates.parsedQualifications = parsedData.qualifications
+      }
+      if (fieldsToApply.includes('experience') && parsedData.experience?.length > 0) {
+        updates.experience = parsedData.experience
+      }
+      if (fieldsToApply.includes('education') && parsedData.education?.length > 0) {
+        updates.education = parsedData.education
+      }
+
+      // Store full parsed data for reference - remove null/undefined values
+      const cleanParsedData = JSON.parse(JSON.stringify(parsedData, (key, value) => 
+        value === null || value === undefined ? undefined : value
+      ))
+      updates.cvParsedData = cleanParsedData
+      updates.cvParsedAt = serverTimestamp()
+
+      console.log('Updates to save:', updates)
+
+      const candidateRef = doc(db, COLLECTIONS.CANDIDATES, candidate.id)
+      await updateDoc(candidateRef, updates)
+      
+      console.log('Firestore update complete')
+
+      // Log the update
+      await logActivity(
+        candidate.id,
+        'updated',
+        `Applied ${fieldsToApply.length} fields from parsed CV`,
+        undefined,
+        { fields: fieldsToApply }
+      )
+
+      // Refetch candidate to get the updated data from Firestore
+      const refreshedSnap = await getDoc(candidateRef)
+      console.log('Refreshed data:', refreshedSnap.data())
+      if (refreshedSnap.exists()) {
+        setCandidate({ id: refreshedSnap.id, ...refreshedSnap.data() } as Candidate)
+      }
+      
+      setShowParsedModal(false)
+      setParsedData(null)
+
+    } catch (err) {
+      console.error('Error applying parsed data:', err)
+      alert('Failed to apply parsed data. Please try again.')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -843,7 +1411,7 @@ export function CandidateDetail() {
               <Button variant="outline" size="sm" onClick={sendEmail}>
                 ✉️ Email
               </Button>
-              <Button variant="outline" size="sm" onClick={openWhatsApp}>
+              <Button variant="outline" size="sm" onClick={openWhatsAppModal}>
                 💬 WhatsApp
               </Button>
             </div>
@@ -886,7 +1454,7 @@ export function CandidateDetail() {
               style={{ display: 'none' }}
             />
             
-            {uploading ? (
+            {uploading || parsing ? (
               <div className="cv-uploading">
                 <Spinner size="sm" />
                 <span>{uploadProgress || 'Processing...'}</span>
@@ -908,6 +1476,14 @@ export function CandidateDetail() {
                       View
                     </Button>
                     <Button 
+                      variant="primary" 
+                      size="sm"
+                      onClick={handleParseCv}
+                      disabled={parsing}
+                    >
+                      🤖 Parse CV
+                    </Button>
+                    <Button 
                       variant="outline" 
                       size="sm"
                       onClick={triggerFileUpload}
@@ -923,6 +1499,36 @@ export function CandidateDetail() {
                     </Button>
                   </div>
                 </div>
+                {parseStatus !== 'idle' && (
+                  <div className={`parse-status parse-status-${parseStatus}`}>
+                    {parseStatus === 'success' && '✅ CV parsed successfully'}
+                    {parseStatus === 'partial' && '⚠️ CV parsed with low confidence - you may need to verify the extracted data'}
+                    {parseStatus === 'error' && (
+                      <div className="parse-error-container">
+                        <div className="parse-error-message">
+                          <span className="error-icon">❌</span>
+                          <span>{parseError || 'CV parsing failed'}</span>
+                        </div>
+                        <div className="parse-error-actions">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleParseCv()}
+                          >
+                            🔄 Retry
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={handleManualEntry}
+                          >
+                            Enter Manually
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="no-cv">
@@ -938,15 +1544,24 @@ export function CandidateDetail() {
           {/* Notes Card */}
           <Card className="detail-card">
             <h2>Notes</h2>
+            {/* CV Summary from AI Parsing */}
+            {candidate.cvParsedData?.summary && (
+              <div className="cv-summary-notes">
+                <h4>📄 CV Summary</h4>
+                <p>{candidate.cvParsedData.summary}</p>
+              </div>
+            )}
+            {/* User Notes */}
             {candidate.notes ? (
               <div className="notes-content">
+                <h4>📝 Notes</h4>
                 <p>{candidate.notes}</p>
               </div>
-            ) : (
+            ) : !candidate.cvParsedData?.summary ? (
               <div className="no-notes">
                 <p>No notes added yet</p>
               </div>
-            )}
+            ) : null}
           </Card>
         </div>
 
@@ -968,7 +1583,7 @@ export function CandidateDetail() {
               <Button variant="outline" fullWidth>
                 Schedule Trial
               </Button>
-              <Button variant="outline" fullWidth onClick={openWhatsApp}>
+              <Button variant="outline" fullWidth onClick={openWhatsAppModal}>
                 Send WhatsApp
               </Button>
             </div>
@@ -992,13 +1607,18 @@ export function CandidateDetail() {
             <div className="experience-info">
               <div className="exp-item">
                 <span className="exp-label">Years of Experience</span>
-                <span className="exp-value">{candidate.yearsExperience ?? '-'}</span>
+                <span className="exp-value">
+                  {candidate.cvParsedData?.totalYearsExperience ?? candidate.yearsExperience ?? '-'}
+                </span>
               </div>
               <div className="exp-item">
                 <span className="exp-label">Pharmacy Experience</span>
                 <span className="exp-value">
-                  {candidate.pharmacyExperience === true ? 'Yes' : 
-                   candidate.pharmacyExperience === false ? 'No' : '-'}
+                  {candidate.cvParsedData?.pharmacyYearsExperience != null 
+                    ? `${candidate.cvParsedData.pharmacyYearsExperience} years`
+                    : candidate.pharmacyExperience === true ? 'Yes' 
+                    : candidate.pharmacyExperience === false ? 'No' 
+                    : '-'}
                 </span>
               </div>
               <div className="exp-item">
@@ -1009,6 +1629,77 @@ export function CandidateDetail() {
                 </span>
               </div>
             </div>
+          </Card>
+
+          {/* CV Summary Card */}
+          <Card className="sidebar-card cv-summary-card">
+            <h3>CV Summary</h3>
+            {candidate.cvParsedData ? (
+              <div className="cv-summary">
+                {/* AI Indicator */}
+                <div className="cv-parse-method">
+                  {candidate.cvParsedData.usedAI === true ? (
+                    <span className="parse-badge ai">🤖 AI Parsed</span>
+                  ) : (
+                    <span className="parse-badge regex">📝 Basic Parse</span>
+                  )}
+                </div>
+
+                {/* Years of Experience */}
+                <div className="experience-stats">
+                  {candidate.cvParsedData.totalYearsExperience != null && (
+                    <div className="stat-item">
+                      <span className="stat-value">{candidate.cvParsedData.totalYearsExperience}</span>
+                      <span className="stat-label">Years Experience</span>
+                    </div>
+                  )}
+                  {candidate.cvParsedData.pharmacyYearsExperience != null && (
+                    <div className="stat-item">
+                      <span className="stat-value">{candidate.cvParsedData.pharmacyYearsExperience}</span>
+                      <span className="stat-label">Years in Pharmacy</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Qualifications */}
+                {candidate.cvParsedData.qualifications?.length > 0 && (
+                  <div className="cv-qualifications">
+                    <span className="qual-label">Qualifications:</span>
+                    <div className="qual-tags">
+                      {candidate.cvParsedData.qualifications.slice(0, 5).map((qual: string, i: number) => (
+                        <span key={i} className="qual-tag">{qual}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Confidence Score */}
+                {candidate.cvParsedData.confidence?.overall != null && (
+                  <div className="confidence-score">
+                    <span className="confidence-label">Confidence:</span>
+                    <span className={`confidence-value ${candidate.cvParsedData.confidence.overall >= 70 ? 'high' : candidate.cvParsedData.confidence.overall >= 40 ? 'medium' : 'low'}`}>
+                      {candidate.cvParsedData.confidence.overall}%
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : candidate.cvUrl ? (
+              <div className="cv-not-parsed">
+                <p>CV not yet parsed</p>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleParseCv}
+                  disabled={parsing}
+                >
+                  🤖 Parse CV
+                </Button>
+              </div>
+            ) : (
+              <div className="cv-not-uploaded">
+                <p>No CV uploaded</p>
+              </div>
+            )}
           </Card>
 
           {/* Timestamps Card */}
@@ -1027,6 +1718,114 @@ export function CandidateDetail() {
           </Card>
         </div>
       </div>
+
+      {/* Application History - Only show if there are linked records */}
+      {(linkedCandidates.length > 0 || candidate.applicationHistory?.length > 0 || candidate.duplicateStatus) && (
+        <Card className="application-history-card">
+          <div className="application-history-header">
+            <h2>📋 Application History</h2>
+            {candidate.duplicateStatus && (
+              <Badge variant={candidate.duplicateStatus === 'primary' ? 'success' : 'info'}>
+                {candidate.duplicateStatus === 'primary' ? '🔵 Primary Record' : '🔗 Linked Record'}
+              </Badge>
+            )}
+          </div>
+          
+          {loadingLinkedCandidates ? (
+            <div className="application-history-loading">
+              <Spinner size="sm" />
+              <span>Loading application history...</span>
+            </div>
+          ) : (
+            <div className="application-history-content">
+              {/* Current Application */}
+              <div className="application-timeline">
+                <div className="application-item current">
+                  <div className="application-timeline-dot current" />
+                  <div className="application-card">
+                    <div className="application-card-header">
+                      <span className="application-job">{candidate.jobTitle || 'Position not specified'}</span>
+                      <Badge variant={STATUS_COLORS[candidate.status] as any} size="sm">
+                        {candidate.status.replace(/_/g, ' ')}
+                      </Badge>
+                    </div>
+                    <div className="application-card-details">
+                      <span className="application-detail">📍 {candidate.branchName || candidate.location || 'Branch not specified'}</span>
+                      <span className="application-detail">📅 {formatDate(candidate.createdAt)}</span>
+                      {candidate.source && <span className="application-detail">📥 via {candidate.source}</span>}
+                    </div>
+                    <div className="application-card-badge">
+                      <span className="current-badge">Current Application</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Linked Applications */}
+                {linkedCandidates.map((linked) => (
+                  <div key={linked.id} className="application-item">
+                    <div className="application-timeline-dot" />
+                    <div 
+                      className="application-card clickable"
+                      onClick={() => window.open(`/candidates/${linked.id}`, '_blank')}
+                      title="Click to view this application"
+                    >
+                      <div className="application-card-header">
+                        <span className="application-job">{linked.jobTitle || 'Position not specified'}</span>
+                        <Badge variant={STATUS_COLORS[linked.status] as any} size="sm">
+                          {linked.status.replace(/_/g, ' ')}
+                        </Badge>
+                      </div>
+                      <div className="application-card-details">
+                        <span className="application-detail">📍 {linked.branchName || linked.location || 'Branch not specified'}</span>
+                        <span className="application-detail">📅 {formatDate(linked.createdAt)}</span>
+                        {linked.source && <span className="application-detail">📥 via {linked.source}</span>}
+                      </div>
+                      <div className="application-card-footer">
+                        <span className="view-link">View Application →</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Historical Application Records (from applicationHistory array) */}
+                {candidate.applicationHistory?.filter(app => 
+                  !linkedCandidates.some(lc => lc.id === app.candidateId)
+                ).map((app, index) => (
+                  <div key={`history-${index}`} className="application-item historical">
+                    <div className="application-timeline-dot historical" />
+                    <div className="application-card historical">
+                      <div className="application-card-header">
+                        <span className="application-job">{app.jobTitle || 'Position not specified'}</span>
+                        <Badge variant={STATUS_COLORS[app.status] as any} size="sm">
+                          {app.status.replace(/_/g, ' ')}
+                        </Badge>
+                      </div>
+                      <div className="application-card-details">
+                        <span className="application-detail">📍 {app.branchName || 'Branch not specified'}</span>
+                        <span className="application-detail">📅 {formatDate(app.appliedAt)}</span>
+                      </div>
+                      {app.outcome && (
+                        <div className="application-outcome">
+                          <Badge variant={app.outcome === 'hired' ? 'success' : app.outcome === 'rejected' ? 'error' : 'neutral'}>
+                            {app.outcome}
+                          </Badge>
+                          {app.outcomeNotes && <span className="outcome-notes">{app.outcomeNotes}</span>}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {linkedCandidates.length === 0 && !candidate.applicationHistory?.length && (
+                <p className="no-linked-records">
+                  This is the only application record for this candidate.
+                </p>
+              )}
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Activity Timeline */}
       <Card className="activity-timeline-card">
@@ -1261,6 +2060,410 @@ export function CandidateDetail() {
           </div>
         </div>
       </Modal>
+
+      {/* Parsed CV Modal */}
+      <Modal
+        isOpen={showParsedModal}
+        onClose={() => setShowParsedModal(false)}
+        title="CV Parsed Successfully"
+        size="lg"
+      >
+        {parsedData && (
+          <ParsedCVModal
+            parsedData={parsedData}
+            currentCandidate={candidate}
+            onApply={handleApplyParsedData}
+            onCancel={() => setShowParsedModal(false)}
+            saving={saving}
+          />
+        )}
+      </Modal>
+
+      {/* WhatsApp Modal */}
+      <Modal
+        isOpen={showWhatsAppModal}
+        onClose={() => setShowWhatsAppModal(false)}
+        title="Send WhatsApp Message"
+        size="lg"
+      >
+        <div className="whatsapp-modal">
+          {/* Candidate info header */}
+          <div className="whatsapp-recipient">
+            <div className="recipient-avatar">
+              {candidate?.firstName?.[0]}{candidate?.lastName?.[0]}
+            </div>
+            <div className="recipient-info">
+              <span className="recipient-name">{candidate?.firstName} {candidate?.lastName}</span>
+              <span className="recipient-phone">{candidate?.phone}</span>
+            </div>
+          </div>
+
+          {/* Quick Actions */}
+          <div className="whatsapp-quick-actions">
+            <h4>Quick Actions</h4>
+            <div className="quick-action-buttons">
+              <button 
+                className="quick-action-btn"
+                onClick={handleQuickInterviewInvite}
+                disabled={generatingBookingLink}
+              >
+                <span className="quick-action-icon">📅</span>
+                <span>{generatingBookingLink ? 'Generating link...' : 'Invite to Interview'}</span>
+              </button>
+              <button 
+                className="quick-action-btn"
+                onClick={handleQuickTrialInvite}
+                disabled={generatingBookingLink}
+              >
+                <span className="quick-action-icon">📋</span>
+                <span>{generatingBookingLink ? 'Generating link...' : 'Invite to Trial'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="whatsapp-divider">
+            <span>or choose a template</span>
+          </div>
+
+          {/* Booking link generated indicator */}
+          {generatedBookingLink && (
+            <div className="booking-link-generated">
+              ✅ Booking link generated and ready to send
+            </div>
+          )}
+
+          {/* Template Selection */}
+          <div className="template-selection">
+            <div className="template-header">
+              <h4>Choose a template</h4>
+              <Select
+                value={templateCategoryFilter}
+                onChange={(e) => setTemplateCategoryFilter(e.target.value as TemplateCategory | 'all')}
+                options={[
+                  { value: 'all', label: 'All Categories' },
+                  ...TEMPLATE_CATEGORIES.map(c => ({ value: c.value, label: c.label }))
+                ]}
+              />
+            </div>
+
+            {loadingTemplates ? (
+              <div className="template-loading">
+                <Spinner size="md" />
+              </div>
+            ) : (
+              <div className="template-grid">
+                {filteredWhatsappTemplates.length === 0 ? (
+                  <p className="no-templates">No templates available in this category.</p>
+                ) : (
+                  filteredWhatsappTemplates.map(template => {
+                    const category = TEMPLATE_CATEGORIES.find(c => c.value === template.category)
+                    return (
+                      <button
+                        key={template.id}
+                        className={`template-option ${selectedTemplate?.id === template.id ? 'selected' : ''}`}
+                        onClick={() => handleSelectTemplate(template)}
+                      >
+                        <span 
+                          className="template-option-category"
+                          style={{ backgroundColor: `${category?.color}20`, color: category?.color }}
+                        >
+                          {category?.label}
+                        </span>
+                        <span className="template-option-name">{template.name}</span>
+                      </button>
+                    )
+                  })
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Message Preview/Edit */}
+          {messageContent && (
+            <div className="message-section">
+              <div className="message-header">
+                <h4>Message</h4>
+                <div className="message-actions">
+                  <button 
+                    className={`message-action-btn ${isEditingMessage ? 'active' : ''}`}
+                    onClick={() => setIsEditingMessage(!isEditingMessage)}
+                  >
+                    {isEditingMessage ? '👁 Preview' : '✏️ Edit'}
+                  </button>
+                </div>
+              </div>
+
+              {isEditingMessage ? (
+                <Textarea
+                  value={messageContent}
+                  onChange={(e) => setMessageContent(e.target.value)}
+                  rows={10}
+                  className="message-editor"
+                />
+              ) : (
+                <div className="message-preview">
+                  {messageContent.split('\n').map((line, i) => (
+                    <p key={i}>
+                      {line ? renderLineWithPlaceholders(line) : '\u00A0'}
+                    </p>
+                  ))}
+                </div>
+              )}
+
+              {/* Unfilled placeholders warning */}
+              {messageContent.includes('{{') && (
+                <div className="unfilled-warning">
+                  ⚠️ Some placeholders couldn't be filled automatically. Please edit the message to complete them.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Modal Actions */}
+          <div className="whatsapp-modal-actions">
+            <Button variant="secondary" onClick={() => setShowWhatsAppModal(false)}>
+              Cancel
+            </Button>
+            <Button 
+              variant="secondary" 
+              onClick={handleCopyMessage}
+              disabled={!messageContent}
+            >
+              {messageCopied ? '✓ Copied!' : '📋 Copy'}
+            </Button>
+            <Button 
+              variant="primary" 
+              onClick={handleSendWhatsApp}
+              disabled={!messageContent || !candidate?.phone}
+            >
+              💬 Send via WhatsApp
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  )
+}
+
+// ============================================================================
+// PARSED CV MODAL COMPONENT
+// ============================================================================
+
+interface ParsedCVModalProps {
+  parsedData: any
+  currentCandidate: Candidate
+  onApply: (fields: string[]) => void
+  onCancel: () => void
+  saving: boolean
+}
+
+function ParsedCVModal({ parsedData, currentCandidate, onApply, onCancel, saving }: ParsedCVModalProps) {
+  const [selectedFields, setSelectedFields] = useState<string[]>([
+    'firstName', 'lastName', 'email', 'phone', 'address', 'postcode',
+    'skills', 'qualifications', 'experience', 'education'
+  ])
+
+  const toggleField = (field: string) => {
+    setSelectedFields(prev => 
+      prev.includes(field) 
+        ? prev.filter(f => f !== field)
+        : [...prev, field]
+    )
+  }
+
+  const getConfidenceColor = (score: number) => {
+    if (score >= 80) return 'confidence-high'
+    if (score >= 50) return 'confidence-medium'
+    return 'confidence-low'
+  }
+
+  const renderFieldRow = (
+    field: string, 
+    label: string, 
+    parsedValue: any, 
+    currentValue: any,
+    confidence?: number
+  ) => {
+    const hasValue = parsedValue !== null && parsedValue !== undefined && parsedValue !== ''
+    const isDifferent = hasValue && parsedValue !== currentValue
+    
+    if (!hasValue) return null
+
+    return (
+      <div key={field} className="parsed-field-row">
+        <div className="parsed-field-checkbox">
+          <input
+            type="checkbox"
+            id={`field-${field}`}
+            checked={selectedFields.includes(field)}
+            onChange={() => toggleField(field)}
+          />
+        </div>
+        <div className="parsed-field-content">
+          <label htmlFor={`field-${field}`} className="parsed-field-label">
+            {label}
+            {confidence !== undefined && (
+              <span className={`confidence-badge ${getConfidenceColor(confidence)}`}>
+                {confidence}%
+              </span>
+            )}
+          </label>
+          <div className="parsed-field-values">
+            <div className="parsed-value">
+              <span className="value-label">Parsed:</span>
+              <span className="value-text">{String(parsedValue)}</span>
+            </div>
+            {currentValue && isDifferent && (
+              <div className="current-value">
+                <span className="value-label">Current:</span>
+                <span className="value-text">{String(currentValue)}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="parsed-cv-modal">
+      <div className="parsed-cv-header">
+        <div className="overall-confidence">
+          <span>Overall Confidence:</span>
+          <span className={`confidence-score ${getConfidenceColor(parsedData.confidence.overall)}`}>
+            {parsedData.confidence.overall}%
+          </span>
+        </div>
+        <p className="parsed-cv-description">
+          Select the fields you want to apply to this candidate's profile.
+        </p>
+      </div>
+
+      <div className="parsed-fields-list">
+        {renderFieldRow('firstName', 'First Name', parsedData.firstName, currentCandidate.firstName, parsedData.confidence.firstName)}
+        {renderFieldRow('lastName', 'Last Name', parsedData.lastName, currentCandidate.lastName, parsedData.confidence.lastName)}
+        {renderFieldRow('email', 'Email', parsedData.email, currentCandidate.email, parsedData.confidence.email)}
+        {renderFieldRow('phone', 'Phone', parsedData.phone, currentCandidate.phone, parsedData.confidence.phone)}
+        {renderFieldRow('address', 'Address', parsedData.address, currentCandidate.address)}
+        {renderFieldRow('postcode', 'Postcode', parsedData.postcode, currentCandidate.postcode)}
+        
+        {parsedData.qualifications?.length > 0 && (
+          <div className="parsed-field-row">
+            <div className="parsed-field-checkbox">
+              <input
+                type="checkbox"
+                id="field-qualifications"
+                checked={selectedFields.includes('qualifications')}
+                onChange={() => toggleField('qualifications')}
+              />
+            </div>
+            <div className="parsed-field-content">
+              <label htmlFor="field-qualifications" className="parsed-field-label">
+                Qualifications
+              </label>
+              <div className="parsed-tags">
+                {parsedData.qualifications.map((q: string, i: number) => (
+                  <span key={i} className="parsed-tag qualification-tag">{q}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {parsedData.skills?.length > 0 && (
+          <div className="parsed-field-row">
+            <div className="parsed-field-checkbox">
+              <input
+                type="checkbox"
+                id="field-skills"
+                checked={selectedFields.includes('skills')}
+                onChange={() => toggleField('skills')}
+              />
+            </div>
+            <div className="parsed-field-content">
+              <label htmlFor="field-skills" className="parsed-field-label">
+                Skills
+              </label>
+              <div className="parsed-tags">
+                {parsedData.skills.slice(0, 10).map((s: string, i: number) => (
+                  <span key={i} className="parsed-tag skill-tag">{s}</span>
+                ))}
+                {parsedData.skills.length > 10 && (
+                  <span className="parsed-tag more-tag">+{parsedData.skills.length - 10} more</span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {parsedData.experience?.length > 0 && (
+          <div className="parsed-field-row">
+            <div className="parsed-field-checkbox">
+              <input
+                type="checkbox"
+                id="field-experience"
+                checked={selectedFields.includes('experience')}
+                onChange={() => toggleField('experience')}
+              />
+            </div>
+            <div className="parsed-field-content">
+              <label htmlFor="field-experience" className="parsed-field-label">
+                Experience ({parsedData.experience.length} positions)
+              </label>
+              <div className="parsed-experience">
+                {parsedData.experience.slice(0, 3).map((exp: any, i: number) => (
+                  <div key={i} className="experience-item">
+                    <strong>{exp.title}</strong> at {exp.company}
+                    {exp.current && <span className="current-badge">Current</span>}
+                  </div>
+                ))}
+                {parsedData.experience.length > 3 && (
+                  <span className="more-text">+{parsedData.experience.length - 3} more positions</span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {parsedData.education?.length > 0 && (
+          <div className="parsed-field-row">
+            <div className="parsed-field-checkbox">
+              <input
+                type="checkbox"
+                id="field-education"
+                checked={selectedFields.includes('education')}
+                onChange={() => toggleField('education')}
+              />
+            </div>
+            <div className="parsed-field-content">
+              <label htmlFor="field-education" className="parsed-field-label">
+                Education ({parsedData.education.length} entries)
+              </label>
+              <div className="parsed-education">
+                {parsedData.education.map((edu: any, i: number) => (
+                  <div key={i} className="education-item">
+                    <strong>{edu.qualification}</strong> - {edu.institution}
+                    {edu.year && <span className="year-badge">{edu.year}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="modal-actions">
+        <Button variant="secondary" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button 
+          variant="primary" 
+          onClick={() => onApply(selectedFields)}
+          disabled={saving || selectedFields.length === 0}
+        >
+          {saving ? 'Applying...' : `Apply ${selectedFields.length} Fields`}
+        </Button>
+      </div>
     </div>
   )
 }

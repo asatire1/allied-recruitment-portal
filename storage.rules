@@ -145,6 +145,23 @@ service firebase.storage {
     }
     
     // ============================================================
+    // TEMPORARY CV UPLOADS (for bulk upload)
+    // Path: temp-cvs/{userId}/{filename}
+    // ============================================================
+    match /temp-cvs/{userId}/{filename} {
+      // Recruiters can read temp CV files
+      allow read: if isAuthenticated() && isRecruiterOrAdmin();
+      
+      // Recruiters can upload temp CV files for processing
+      allow create: if isAuthenticated() 
+        && isRecruiterOrAdmin()
+        && isValidFileSize();
+      
+      // Allow delete for cleanup
+      allow delete: if isAuthenticated() && isRecruiterOrAdmin();
+    }
+    
+    // ============================================================
     // EXPORTS (generated reports)
     // Path: exports/{userId}/{filename}
     // ============================================================

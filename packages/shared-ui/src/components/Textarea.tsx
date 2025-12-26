@@ -1,4 +1,4 @@
-import { forwardRef, TextareaHTMLAttributes } from 'react'
+import { forwardRef, TextareaHTMLAttributes, useId } from 'react'
 
 export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string
@@ -10,7 +10,8 @@ export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElemen
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ label, error, hint, maxLength, showCount, className = '', id, value, ...props }, ref) => {
-    const textareaId = id || `textarea-${Math.random().toString(36).slice(2, 9)}`
+    const generatedId = useId()
+    const textareaId = id || generatedId
     const charCount = typeof value === 'string' ? value.length : 0
     
     return (

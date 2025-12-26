@@ -205,19 +205,13 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       {/* Sidebar */}
       <aside className={`sidebar ${isOpen ? 'sidebar-open' : ''}`}>
-        {/* Logo */}
+        {/* Logo - Allied Pharmacies */}
         <div className="sidebar-header">
           <div className="sidebar-logo">
             <svg viewBox="0 0 40 40" className="sidebar-logo-icon" aria-hidden="true">
-              <rect x="4" y="4" width="32" height="32" rx="8" fill="var(--color-primary-600)" />
-              <path 
-                d="M12 28L20 12L28 28M14.5 24H25.5" 
-                stroke="white" 
-                strokeWidth="2.5" 
-                strokeLinecap="round" 
-                strokeLinejoin="round"
-                fill="none"
-              />
+              {/* Pharmacy cross in green */}
+              <rect x="16" y="4" width="8" height="32" rx="2" fill="#2e7d32" />
+              <rect x="4" y="16" width="32" height="8" rx="2" fill="#2e7d32" />
             </svg>
             <span className="sidebar-logo-text">Allied</span>
           </div>

@@ -2,7 +2,7 @@ import React from 'react'
 
 export interface BadgeProps {
   children: React.ReactNode
-  variant?: 'default' | 'primary' | 'success' | 'warning' | 'error' | 'info'
+  variant?: 'default' | 'primary' | 'success' | 'warning' | 'error' | 'info' | 'neutral'
   size?: 'sm' | 'md'
   dot?: boolean
   className?: string
@@ -22,6 +22,7 @@ export function Badge({
     warning: 'badge-warning',
     error: 'badge-error',
     info: 'badge-info',
+    neutral: 'badge-neutral',
   }
 
   const sizeClasses = {

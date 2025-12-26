@@ -1,5 +1,26 @@
 // Utility functions for Allied Recruitment Portal
 
+// Re-export duplicate detection module (excluding types that are in ../types)
+export { 
+  findDuplicates, 
+  checkDuplicateMatch, 
+  isLikelyDuplicate,
+  normalizePhone as normalizePhoneForDuplicates,
+  normalizeName,
+  normalizeEmail,
+  generateDuplicateKey,
+  calculateStringSimilarity,
+  calculateNameSimilarity,
+  type DuplicateMatchType,
+  type DuplicateCheckResult,
+  type DuplicateCheckInput,
+  type ExistingCandidateData,
+  type DuplicateCheckResponse,
+} from './duplicateDetection'
+
+// Import checkDuplicateMatch for use in legacy wrapper
+import { checkDuplicateMatch } from './duplicateDetection'
+
 /**
  * Format UK phone number for display
  */
@@ -197,23 +218,54 @@ export const STATUS_CONFIG = {
 } as const
 
 // ============================================================================
-// DUPLICATE DETECTION
+// DUPLICATE DETECTION (Legacy exports for backwards compatibility)
+// Full implementation in ./duplicateDetection.ts
 // ============================================================================
 
+// Re-export the comprehensive duplicate detection from the dedicated module
+// Note: The new module provides much richer functionality including:
+// - Scenario detection (same job, previously rejected, etc.)
+// - Severity levels (high/medium/low)
+// - Recommended actions (block/warn/allow)
+// - Enhanced name matching with swapped name detection
+
+// Legacy type - kept for backwards compatibility
+// Use DuplicateCheckResult from duplicateDetection.ts for new code
+export interface DuplicateMatch {
+  candidateId: string
+  matchType: 'exact' | 'email' | 'phone' | 'name_fuzzy' | 'partial'
+  confidence: number // 0-100
+  matchedFields: string[]
+}
+
 /**
- * Generate duplicate key for matching candidates
- * Key format: lowercase firstName|lastName|normalizedPhone
+ * Legacy findDuplicates wrapper for backwards compatibility
+ * @deprecated Use findDuplicates from duplicateDetection.ts for full functionality
  */
-export function generateDuplicateKey(
-  firstName: string,
-  lastName: string,
-  phone: string
-): string {
-  const normalizedFirst = (firstName || '').toLowerCase().trim()
-  const normalizedLast = (lastName || '').toLowerCase().trim()
-  const normalizedPhoneNum = normalizePhone(phone)
+export function findDuplicatesLegacy(
+  candidate: { firstName: string; lastName: string; phone: string; email: string; id?: string },
+  existingCandidates: Array<{ id: string; firstName: string; lastName: string; phone: string; email: string; duplicateKey?: string }>
+): DuplicateMatch[] {
+  // Use imported functions from duplicateDetection
+  const matches: DuplicateMatch[] = []
   
-  return `${normalizedFirst}|${normalizedLast}|${normalizedPhoneNum}`
+  for (const existing of existingCandidates) {
+    const result = checkDuplicateMatch(
+      { ...candidate, jobId: undefined, branchId: undefined },
+      { ...existing, status: 'new', phoneNormalized: undefined }
+    )
+    
+    if (result) {
+      matches.push({
+        candidateId: result.candidateId,
+        matchType: result.matchType as DuplicateMatch['matchType'],
+        confidence: result.confidence,
+        matchedFields: result.matchedFields,
+      })
+    }
+  }
+  
+  return matches.sort((a, b) => b.confidence - a.confidence)
 }
 
 // ============================================================================
@@ -415,11 +467,68 @@ export async function retry<T>(
 }
 
 // ============================================================================
-// WHATSAPP UTILITIES
+// BOOKING LINKS
+// NOTE: Primary booking link generation is via Cloud Function
+// This module provides client-side helpers and types
+// ============================================================================
+
+export {
+  // Types
+  type BookingLinkType,
+  type BookingLinkStatus,
+  type BookingLinkData,
+  type BookingLink,
+  type CreateBookingLinkResult,
+  // Client-side helpers
+  getBookingBaseUrl,
+  formatBookingLinkForDisplay,
+  hashTokenClient,
+  getCandidateBookingLinks,
+  revokeBookingLink,
+} from './bookingLinks'
+
+// ============================================================================
+// WHATSAPP PLACEHOLDERS (Comprehensive module)
+// Full implementation in ./placeholders.ts
+// ============================================================================
+
+export {
+  // Types
+  type PlaceholderDefinition,
+  type PlaceholderData,
+  type PlaceholderResult,
+  // Constants
+  PLACEHOLDER_DEFINITIONS,
+  PLACEHOLDER_MAP,
+  // Core functions
+  extractPlaceholders as extractTemplatePlaceholders,
+  extractPlaceholderKeys,
+  replacePlaceholders as replaceTemplatePlaceholders,
+  getMissingPlaceholders,
+  validatePlaceholders,
+  highlightPlaceholdersHTML,
+  // Booking link
+  generateBookingLinkPlaceholder,
+  usesBookingLink,
+  // Data preparation
+  prepareCandidateData,
+  prepareInterviewData,
+  combinePlaceholderData,
+  // WhatsApp utilities
+  formatPhoneForWhatsApp,
+  generateWhatsAppURL,
+  // Helpers
+  getPlaceholdersByCategory,
+  getUnfilledSummary,
+} from './placeholders'
+
+// ============================================================================
+// WHATSAPP UTILITIES (Legacy - kept for backwards compatibility)
 // ============================================================================
 
 /**
  * Generate WhatsApp URL for sending message
+ * @deprecated Use generateWhatsAppURL from placeholders.ts for new code
  */
 export function generateWhatsAppUrl(phone: string, message?: string): string {
   const normalizedPhone = normalizePhone(phone)
@@ -442,6 +551,7 @@ export function generateWhatsAppUrl(phone: string, message?: string): string {
 /**
  * Replace placeholders in template string
  * Placeholders format: {{fieldName}}
+ * @deprecated Use replaceTemplatePlaceholders from placeholders.ts for full functionality
  */
 export function replacePlaceholders(
   template: string,
@@ -454,6 +564,7 @@ export function replacePlaceholders(
 
 /**
  * Extract placeholder names from template
+ * @deprecated Use extractTemplatePlaceholders from placeholders.ts for full functionality
  */
 export function extractPlaceholders(template: string): string[] {
   const matches = template.match(/\{\{(\w+)\}\}/g) || []

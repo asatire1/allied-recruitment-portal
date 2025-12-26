@@ -1,14 +1,15 @@
-import React, { forwardRef } from 'react'
+import React, { forwardRef, useId } from 'react'
 
 export interface CheckboxProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type'> {
-  label: string
+  label?: string
   error?: string
   hint?: string
 }
 
 export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
   ({ label, error, hint, className = '', id, ...props }, ref) => {
-    const checkboxId = id || `checkbox-${Math.random().toString(36).slice(2, 9)}`
+    const generatedId = useId()
+    const checkboxId = id || generatedId
     
     return (
       <div className="form-field form-field-checkbox">
@@ -22,9 +23,11 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
             aria-describedby={error ? `${checkboxId}-error` : hint ? `${checkboxId}-hint` : undefined}
             {...props}
           />
-          <label htmlFor={checkboxId} className="checkbox-label">
-            {label}
-          </label>
+          {label && (
+            <label htmlFor={checkboxId} className="checkbox-label">
+              {label}
+            </label>
+          )}
         </div>
         {error && (
           <p id={`${checkboxId}-error`} className="form-error">
