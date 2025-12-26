@@ -9,7 +9,6 @@
  * - Types for booking link data
  * - Utility functions that may be useful for the public booking page
  */
-
 import { 
   collection, 
   query, 
@@ -21,12 +20,13 @@ import {
   type Firestore
 } from 'firebase/firestore'
 
+// Import BookingLinkStatus from types to avoid duplicate definition
+import type { BookingLinkStatus } from '../types'
+
 // ============================================================================
 // Types
 // ============================================================================
-
 export type BookingLinkType = 'interview' | 'trial'
-export type BookingLinkStatus = 'active' | 'used' | 'expired' | 'revoked'
 
 export interface BookingLinkData {
   candidateId: string
@@ -69,7 +69,6 @@ export interface CreateBookingLinkResult {
 // ============================================================================
 // URL Helpers (Client-side utilities)
 // ============================================================================
-
 /**
  * Get the base booking URL from environment or default
  */
@@ -99,7 +98,6 @@ export function formatBookingLinkForDisplay(url: string): string {
 // ============================================================================
 // Client-side Token Utilities (for public booking page)
 // ============================================================================
-
 /**
  * Hash a token using Web Crypto API (browser-compatible)
  * Used by the public booking page to validate tokens locally before API call
