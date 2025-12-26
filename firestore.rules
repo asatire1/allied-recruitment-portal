@@ -204,7 +204,7 @@ service cloud.firestore {
     }
     
     // ============================================================
-    // INTERVIEWS COLLECTION
+    // INTERVIEWS COLLECTION (R6.6-R6.11)
     // ============================================================
     match /interviews/{interviewId} {
       // Read access based on role and branch
@@ -232,19 +232,25 @@ service cloud.firestore {
       function isValidInterviewData() {
         let data = request.resource.data;
         return data.candidateId is string
+          && data.candidateName is string
           && data.type in ['interview', 'trial']
-          && data.status in ['scheduled', 'completed', 'cancelled', 'no_show'];
+          && data.status in ['scheduled', 'completed', 'cancelled', 'no_show']
+          && data.duration is number
+          && data.duration > 0
+          && data.duration <= 480  // Max 8 hours
+          && data.scheduledAt is timestamp
+          && data.bookedVia in ['manual', 'self_service'];
       }
       
       function onlyUpdatingFeedbackFields() {
-        let allowedFields = ['feedback', 'rating', 'notes', 'status', 'updatedAt'];
+        let allowedFields = ['feedback', 'rating', 'notes', 'internalNotes', 'status', 'updatedAt'];
         let changedFields = request.resource.data.diff(resource.data).affectedKeys();
         return changedFields.hasOnly(allowedFields);
       }
     }
     
     // ============================================================
-    // BOOKING LINKS COLLECTION
+    // BOOKING LINKS COLLECTION (R6.3-R6.11)
     // ============================================================
     match /bookingLinks/{linkId} {
       // Only recruiters can read booking links
@@ -252,16 +258,44 @@ service cloud.firestore {
       
       // Only recruiters can create booking links
       allow create: if isRecruiterOrAdmin() 
+        && isValidBookingLinkData()
         && request.resource.data.status == 'active'
         && isValidTimestamp('createdAt');
       
-      // Recruiters can update status (revoke)
+      // Recruiters can update status (revoke, mark used)
       // Cloud Functions can update usage (via admin SDK)
       allow update: if isRecruiterOrAdmin() 
         && isUnchanged('tokenHash')
+        && isUnchanged('candidateId')
         && isUnchanged('createdAt')
         && isUnchanged('createdBy');
       
+      allow delete: if isSuperAdmin();
+      
+      function isValidBookingLinkData() {
+        let data = request.resource.data;
+        return data.candidateId is string
+          && data.candidateName is string
+          && data.tokenHash is string
+          && data.type in ['interview', 'trial']
+          && data.status in ['active', 'used', 'expired', 'revoked']
+          && data.expiresAt is timestamp
+          && data.maxUses is number
+          && data.maxUses >= 1
+          && data.duration is number
+          && data.duration > 0;
+      }
+    }
+    
+    // ============================================================
+    // SCHEDULING AVAILABILITY COLLECTION (R6.1-R6.2)
+    // ============================================================
+    match /schedulingAvailability/{docId} {
+      // All active users can read availability (needed for self-service booking)
+      allow read: if isActiveUser() || true;  // Public for booking page
+      
+      // Only recruiters and admins can modify availability
+      allow create, update: if isRecruiterOrAdmin();
       allow delete: if isSuperAdmin();
     }
     
