@@ -71,10 +71,13 @@ function startOfDay(date: Date): Date {
 }
 
 /**
- * Format date as ISO string (YYYY-MM-DD)
+ * Format date as ISO string (YYYY-MM-DD) in local timezone
  */
 function toISODateString(date: Date): string {
-  return date.toISOString().split('T')[0]
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 /**
@@ -229,27 +232,28 @@ export function DatePicker({
 
   /**
    * Check if we can navigate to previous month
-   * (at least one day should be bookable)
+   * Allow if any part of that month overlaps with the booking window
    */
   const canGoPrevious = useMemo(() => {
     const prevMonth = viewDate.month === 0 ? 11 : viewDate.month - 1
     const prevYear = viewDate.month === 0 ? viewDate.year - 1 : viewDate.year
-    const firstOfPrev = new Date(prevYear, prevMonth, 1)
-    return firstOfPrev >= constraints.minDate || 
-           (viewDate.year === constraints.minDate.getFullYear() && 
-            viewDate.month > constraints.minDate.getMonth())
+    // Last day of previous month
+    const lastOfPrev = new Date(prevYear, prevMonth + 1, 0)
+    // Can go back if the last day of prev month is >= minDate
+    return lastOfPrev >= constraints.minDate
   }, [viewDate, constraints.minDate])
 
   /**
    * Check if we can navigate to next month
+   * Allow if any part of that month overlaps with the booking window
    */
   const canGoNext = useMemo(() => {
     const nextMonth = viewDate.month === 11 ? 0 : viewDate.month + 1
     const nextYear = viewDate.month === 11 ? viewDate.year + 1 : viewDate.year
-    const lastOfNext = new Date(nextYear, nextMonth + 1, 0)
-    return lastOfNext <= constraints.maxDate ||
-           (viewDate.year === constraints.maxDate.getFullYear() && 
-            viewDate.month < constraints.maxDate.getMonth())
+    // First day of next month
+    const firstOfNext = new Date(nextYear, nextMonth, 1)
+    // Can go forward if the first day of next month is <= maxDate
+    return firstOfNext <= constraints.maxDate
   }, [viewDate, constraints.maxDate])
 
   return (
