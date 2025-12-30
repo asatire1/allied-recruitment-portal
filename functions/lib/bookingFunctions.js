@@ -5,6 +5,8 @@
  * P2.3: Get time slots for a date
  * P2.4: Slot conflict checking
  * P2.6: Submit booking
+ *
+ * Updated: Teams meeting integration for interviews
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -44,6 +46,7 @@ exports.submitBooking = exports.getBookingTimeSlots = exports.getBookingAvailabi
 const https_1 = require("firebase-functions/v2/https");
 const admin = __importStar(require("firebase-admin"));
 const crypto = __importStar(require("crypto"));
+const teamsMeeting_1 = require("./teamsMeeting");
 const db = admin.firestore();
 // ============================================================================
 // HELPERS
@@ -69,36 +72,6 @@ function getDefaultSettings() {
         minNoticeHours: 24,
         enabled: true
     };
-}
-/**
- * Convert Settings page slot format to DatePicker schedule format
- * Settings page uses: slots: [{ dayOfWeek: 0, enabled: true, startTime: '09:00', endTime: '17:00' }]
- * DatePicker expects: schedule: { sunday: { enabled: true, slots: [{ start: '09:00', end: '17:00' }] } }
- */
-function convertSlotsToSchedule(slots) {
-    const schedule = {};
-    // Initialize all days as disabled with empty slots
-    DAYS_FULL.forEach((dayName, index) => {
-        schedule[dayName] = {
-            enabled: false,
-            slots: []
-        };
-    });
-    // Convert each slot from the Settings format
-    if (Array.isArray(slots)) {
-        slots.forEach(slot => {
-            const dayName = DAYS_FULL[slot.dayOfWeek];
-            if (dayName && schedule[dayName]) {
-                schedule[dayName] = {
-                    enabled: slot.enabled,
-                    slots: slot.enabled && slot.startTime && slot.endTime
-                        ? [{ start: slot.startTime, end: slot.endTime }]
-                        : []
-                };
-            }
-        });
-    }
-    return schedule;
 }
 async function validateToken(token) {
     const tokenHash = hashToken(token.trim());
@@ -133,81 +106,31 @@ exports.getBookingAvailability = (0, https_1.onCall)({ cors: true, region: 'us-c
     if (!token) {
         throw new https_1.HttpsError('invalid-argument', 'Token is required');
     }
-    // Validate token and get booking link data
-    const linkDoc = await validateToken(token);
-    const linkData = linkDoc.data();
-    const bookingType = linkData.type; // 'interview' or 'trial'
-    // Determine which settings document to use based on booking type
-    const settingsDocId = bookingType === 'trial' ? 'trialAvailability' : 'interviewAvailability';
+    // Validate token
+    await validateToken(token);
     // Get availability settings
     let settings;
     try {
-        const settingsDoc = await db.collection('settings').doc(settingsDocId).get();
+        const settingsDoc = await db.collection('settings').doc('bookingAvailability').get();
         if (settingsDoc.exists) {
             const data = settingsDoc.data();
-            // Check if data uses the old 'schedule' format or new 'slots' format
-            let schedule;
-            if (data?.schedule) {
-                // Old format - already has schedule object
-                schedule = data.schedule;
-            }
-            else if (data?.slots && Array.isArray(data.slots)) {
-                // New format from Settings page - needs conversion
-                schedule = convertSlotsToSchedule(data.slots);
-            }
-            else {
-                // No valid data - use defaults
-                schedule = getDefaultSettings().schedule;
-            }
             settings = {
-                schedule,
+                schedule: data?.schedule || getDefaultSettings().schedule,
                 slotDuration: data?.slotDuration || 30,
                 bufferTime: data?.bufferTime || 15,
-                advanceBookingDays: data?.maxAdvanceBooking || data?.advanceBookingDays || 14,
+                advanceBookingDays: data?.advanceBookingDays || 14,
                 minNoticeHours: data?.minNoticeHours || 24,
                 enabled: data?.enabled !== false
             };
         }
         else {
-            // Also try the legacy 'bookingAvailability' document
-            const legacyDoc = await db.collection('settings').doc('bookingAvailability').get();
-            if (legacyDoc.exists) {
-                const data = legacyDoc.data();
-                let schedule;
-                if (data?.schedule) {
-                    schedule = data.schedule;
-                }
-                else if (data?.slots && Array.isArray(data.slots)) {
-                    schedule = convertSlotsToSchedule(data.slots);
-                }
-                else {
-                    schedule = getDefaultSettings().schedule;
-                }
-                settings = {
-                    schedule,
-                    slotDuration: data?.slotDuration || 30,
-                    bufferTime: data?.bufferTime || 15,
-                    advanceBookingDays: data?.maxAdvanceBooking || data?.advanceBookingDays || 14,
-                    minNoticeHours: data?.minNoticeHours || 24,
-                    enabled: data?.enabled !== false
-                };
-            }
-            else {
-                settings = getDefaultSettings();
-            }
+            settings = getDefaultSettings();
         }
     }
     catch (error) {
         console.error('Failed to get settings:', error);
         settings = getDefaultSettings();
     }
-    // Log for debugging
-    console.log(`Booking availability for ${bookingType}:`, {
-        settingsDocId,
-        scheduleKeys: Object.keys(settings.schedule),
-        mondayEnabled: settings.schedule.monday?.enabled,
-        advanceBookingDays: settings.advanceBookingDays
-    });
     // Get fully booked dates (dates where all slots are taken)
     const fullyBookedDates = [];
     // Query interviews in the booking window
@@ -258,67 +181,16 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({ cors: true, region: 'us-cent
     // Validate token and get booking link data
     const linkDoc = await validateToken(token);
     const linkData = linkDoc.data();
-    const bookingType = linkData.type;
     // Parse date
     const selectedDate = new Date(date + 'T00:00:00');
     if (isNaN(selectedDate.getTime())) {
         throw new https_1.HttpsError('invalid-argument', 'Invalid date format');
     }
-    // Determine which settings to use
-    const settingsDocId = bookingType === 'trial' ? 'trialAvailability' : 'interviewAvailability';
     // Get availability settings
     let settings;
     try {
-        const settingsDoc = await db.collection('settings').doc(settingsDocId).get();
-        if (settingsDoc.exists) {
-            const data = settingsDoc.data();
-            let schedule;
-            if (data?.schedule) {
-                schedule = data.schedule;
-            }
-            else if (data?.slots && Array.isArray(data.slots)) {
-                schedule = convertSlotsToSchedule(data.slots);
-            }
-            else {
-                schedule = getDefaultSettings().schedule;
-            }
-            settings = {
-                schedule,
-                slotDuration: data?.slotDuration || 30,
-                bufferTime: data?.bufferTime || 15,
-                advanceBookingDays: data?.maxAdvanceBooking || data?.advanceBookingDays || 14,
-                minNoticeHours: data?.minNoticeHours || 24,
-                enabled: data?.enabled !== false
-            };
-        }
-        else {
-            // Try legacy document
-            const legacyDoc = await db.collection('settings').doc('bookingAvailability').get();
-            if (legacyDoc.exists) {
-                const data = legacyDoc.data();
-                let schedule;
-                if (data?.schedule) {
-                    schedule = data.schedule;
-                }
-                else if (data?.slots && Array.isArray(data.slots)) {
-                    schedule = convertSlotsToSchedule(data.slots);
-                }
-                else {
-                    schedule = getDefaultSettings().schedule;
-                }
-                settings = {
-                    schedule,
-                    slotDuration: data?.slotDuration || 30,
-                    bufferTime: data?.bufferTime || 15,
-                    advanceBookingDays: data?.maxAdvanceBooking || data?.advanceBookingDays || 14,
-                    minNoticeHours: data?.minNoticeHours || 24,
-                    enabled: data?.enabled !== false
-                };
-            }
-            else {
-                settings = getDefaultSettings();
-            }
-        }
+        const settingsDoc = await db.collection('settings').doc('bookingAvailability').get();
+        settings = settingsDoc.exists ? settingsDoc.data() : getDefaultSettings();
     }
     catch {
         settings = getDefaultSettings();
@@ -397,9 +269,14 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({ cors: true, region: 'us-cent
     return { slots, date };
 });
 // ============================================================================
-// P2.6: SUBMIT BOOKING
+// P2.6: SUBMIT BOOKING (with Teams integration for interviews)
 // ============================================================================
-exports.submitBooking = (0, https_1.onCall)({ cors: true, region: 'us-central1' }, async (request) => {
+exports.submitBooking = (0, https_1.onCall)({
+    cors: true,
+    region: 'us-central1',
+    // Include Teams secrets so they're available
+    secrets: [teamsMeeting_1.msClientId, teamsMeeting_1.msClientSecret, teamsMeeting_1.msTenantId, teamsMeeting_1.msOrganizerUserId],
+}, async (request) => {
     const { token, date, time } = request.data;
     if (!token || !date || !time) {
         throw new https_1.HttpsError('invalid-argument', 'Token, date, and time are required');
@@ -448,12 +325,27 @@ exports.submitBooking = (0, https_1.onCall)({ cors: true, region: 'us-central1' 
     }
     // Generate confirmation code
     const confirmationCode = `AP-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    // =========================================================================
+    // CREATE TEAMS MEETING FOR INTERVIEWS ONLY
+    // =========================================================================
+    let teamsMeetingResult = null;
+    if (linkData.type === 'interview') {
+        console.log('Creating Teams meeting for interview...');
+        const meetingSubject = `Interview: ${linkData.candidateName}${linkData.jobTitle ? ` - ${linkData.jobTitle}` : ''}`;
+        teamsMeetingResult = await (0, teamsMeeting_1.createTeamsMeeting)(meetingSubject, scheduledDate, endTime, linkData.candidateName, linkData.jobTitle || undefined, linkData.branchName || undefined);
+        if (teamsMeetingResult.success) {
+            console.log(`Teams meeting created: ${teamsMeetingResult.joinUrl}`);
+        }
+        else {
+            // Log warning but don't fail the booking
+            console.warn('Teams meeting creation failed:', teamsMeetingResult.error);
+        }
+    }
     // Create interview record
     const interviewData = {
         candidateId: linkData.candidateId,
         candidateName: linkData.candidateName,
         candidateEmail: linkData.candidateEmail || null,
-        candidatePhone: linkData.candidatePhone || null,
         type: linkData.type,
         jobId: linkData.jobId || null,
         jobTitle: linkData.jobTitle || null,
@@ -468,6 +360,12 @@ exports.submitBooking = (0, https_1.onCall)({ cors: true, region: 'us-central1' 
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
     };
+    // Add Teams meeting details if created successfully
+    if (teamsMeetingResult?.success && teamsMeetingResult.joinUrl) {
+        interviewData.teamsJoinUrl = teamsMeetingResult.joinUrl;
+        interviewData.teamsMeetingId = teamsMeetingResult.meetingId || null;
+        interviewData.meetingType = 'teams';
+    }
     // Use transaction to ensure atomicity
     const interviewRef = db.collection('interviews').doc();
     await db.runTransaction(async (transaction) => {
@@ -492,10 +390,15 @@ exports.submitBooking = (0, https_1.onCall)({ cors: true, region: 'us-central1' 
         });
     });
     console.log(`Booking created: ${interviewRef.id} for ${linkData.candidateName}`);
+    if (teamsMeetingResult?.success) {
+        console.log(`Teams meeting URL: ${teamsMeetingResult.joinUrl}`);
+    }
     return {
         success: true,
         interviewId: interviewRef.id,
-        confirmationCode
+        confirmationCode,
+        // Include Teams link in response so booking confirmation page can show it
+        teamsJoinUrl: teamsMeetingResult?.joinUrl || null,
     };
 });
 //# sourceMappingURL=bookingFunctions.js.map

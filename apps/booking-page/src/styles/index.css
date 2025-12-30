@@ -1305,3 +1305,7 @@ body {
   width: auto;
 }
 
+
+.date-picker-day.available.other-month {
+  opacity: 1;
+}
