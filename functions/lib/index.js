@@ -40,7 +40,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.parseIndeedJob = exports.submitBooking = exports.getBookingTimeSlots = exports.getBookingAvailability = exports.onTrialCompleted = exports.sendFeedbackReminders = exports.onTrialCreated = exports.createUserWithPassword = exports.sendBookingConfirmation = exports.markBookingLinkUsed = exports.validateBookingToken = exports.createBookingLink = exports.healthCheck = exports.parseCV = void 0;
+exports.onCandidateDeleted = exports.permanentlyDeleteCandidate = exports.reactivateCandidate = exports.checkReturningCandidate = exports.restoreCandidate = exports.archiveCandidate = exports.parseIndeedJob = exports.submitBooking = exports.getBookingTimeSlots = exports.getBookingAvailability = exports.onTrialCompleted = exports.sendFeedbackReminders = exports.onTrialCreated = exports.createUserWithPassword = exports.sendBookingConfirmation = exports.markBookingLinkUsed = exports.validateBookingToken = exports.createBookingLink = exports.healthCheck = exports.parseCV = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const options_1 = require("firebase-functions/v2/options");
 const params_1 = require("firebase-functions/params");
@@ -673,4 +673,12 @@ Object.defineProperty(exports, "submitBooking", { enumerable: true, get: functio
 // Indeed Job Import
 var jobImport_1 = require("./jobImport");
 Object.defineProperty(exports, "parseIndeedJob", { enumerable: true, get: function () { return jobImport_1.parseIndeedJob; } });
+// Candidate archive functions
+var cascadeDeletion_1 = require("./cascadeDeletion");
+Object.defineProperty(exports, "archiveCandidate", { enumerable: true, get: function () { return cascadeDeletion_1.archiveCandidate; } });
+Object.defineProperty(exports, "restoreCandidate", { enumerable: true, get: function () { return cascadeDeletion_1.restoreCandidate; } });
+Object.defineProperty(exports, "checkReturningCandidate", { enumerable: true, get: function () { return cascadeDeletion_1.checkReturningCandidate; } });
+Object.defineProperty(exports, "reactivateCandidate", { enumerable: true, get: function () { return cascadeDeletion_1.reactivateCandidate; } });
+Object.defineProperty(exports, "permanentlyDeleteCandidate", { enumerable: true, get: function () { return cascadeDeletion_1.permanentlyDeleteCandidate; } });
+Object.defineProperty(exports, "onCandidateDeleted", { enumerable: true, get: function () { return cascadeDeletion_1.onCandidateDeleted; } });
 //# sourceMappingURL=index.js.map

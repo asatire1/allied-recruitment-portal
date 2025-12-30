@@ -567,3 +567,72 @@
 .success-next {
   content-visibility: auto;
 }
+/* ============================================================================
+   TEAMS MEETING STYLES
+   Add this to your existing CSS file (e.g., index.css or p3-polish.css)
+   ============================================================================ */
+
+/* Teams Meeting Section */
+.teams-meeting {
+  margin: 1.5rem 0;
+  text-align: center;
+}
+
+.teams-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 320px;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, #5558AF 0%, #6264A7 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(98, 100, 167, 0.3);
+}
+
+.teams-btn:hover {
+  background: linear-gradient(135deg, #4B4E9E 0%, #5558AF 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(98, 100, 167, 0.4);
+}
+
+.teams-btn:active {
+  transform: translateY(0);
+}
+
+.teams-btn svg {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.teams-hint {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+/* Video icon in summary */
+.summary-row svg[viewBox="0 0 24 24"] {
+  color: #6264A7;
+}
+
+/* Mobile adjustments */
+@media (max-width: 480px) {
+  .teams-btn {
+    max-width: 100%;
+    padding: 0.875rem 1.25rem;
+    font-size: 0.9375rem;
+  }
+  
+  .teams-hint {
+    font-size: 0.8rem;
+  }
+}

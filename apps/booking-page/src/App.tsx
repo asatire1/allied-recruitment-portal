@@ -1,7 +1,7 @@
 /**
  * Allied Pharmacies Booking Page
  * Public page for candidate self-service scheduling
- * 
+ *
  * Phase P1: Token validation & landing
  * Phase P2: Calendar & booking flow
  * Phase P3: Polish & mobile
@@ -10,10 +10,10 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useBookingToken } from './hooks/useBookingToken'
-import { 
-  Header, 
-  LoadingSpinner, 
-  ErrorDisplay, 
+import {
+  Header,
+  LoadingSpinner,
+  ErrorDisplay,
   WelcomePage,
   NoTokenPage,
   DatePicker,
@@ -44,11 +44,11 @@ import './styles/job-application.css'
 // TYPES
 // ============================================================================
 
-type AppState = 
-  | 'landing' 
-  | 'selecting-date' 
-  | 'selecting-time' 
-  | 'confirming' 
+type AppState =
+  | 'landing'
+  | 'selecting-date'
+  | 'selecting-time'
+  | 'confirming'
   | 'submitting'
   | 'success'
   | 'error'
@@ -57,6 +57,7 @@ interface BookingState {
   selectedDate: Date | null
   selectedTime: string | null
   confirmationId: string | null
+  teamsJoinUrl: string | null
 }
 
 // ============================================================================
@@ -75,7 +76,8 @@ function App() {
   const [bookingState, setBookingState] = useState<BookingState>({
     selectedDate: null,
     selectedTime: null,
-    confirmationId: null
+    confirmationId: null,
+    teamsJoinUrl: null
   })
   
   // Availability
@@ -212,9 +214,10 @@ function App() {
     )
     
     if (result.success) {
-      setBookingState(prev => ({ 
-        ...prev, 
-        confirmationId: result.data.confirmationCode 
+      setBookingState(prev => ({
+        ...prev,
+        confirmationId: result.data.confirmationCode,
+        teamsJoinUrl: result.data.teamsJoinUrl || null
       }))
       setAppState('success')
     } else {
@@ -239,7 +242,7 @@ function App() {
   
   const renderContent = () => {
     // Check if we're on the /apply route for job applications
-    const isApplyRoute = window.location.pathname === '/apply' || 
+    const isApplyRoute = window.location.pathname === '/apply' ||
                          window.location.pathname.startsWith('/apply/')
     
     if (isApplyRoute) {
@@ -268,9 +271,9 @@ function App() {
       switch (appState) {
         case 'landing':
           return (
-            <WelcomePage 
-              data={data} 
-              onContinue={handleContinueToCalendar} 
+            <WelcomePage
+              data={data}
+              onContinue={handleContinueToCalendar}
             />
           )
 
@@ -278,8 +281,8 @@ function App() {
           return (
             <div className="booking-flow" role="region" aria-label="Date selection">
               <div className="flow-header">
-                <button 
-                  className="btn-back" 
+                <button
+                  className="btn-back"
                   onClick={() => setAppState('landing')}
                   aria-label="Go back to welcome page"
                 >
@@ -318,8 +321,8 @@ function App() {
           return (
             <div className="booking-flow" role="region" aria-label="Time selection">
               <div className="flow-header">
-                <button 
-                  className="btn-back" 
+                <button
+                  className="btn-back"
                   onClick={handleBackToDate}
                   aria-label="Go back to date selection"
                 >
@@ -350,7 +353,7 @@ function App() {
               
               {bookingState.selectedTime && (
                 <div className="flow-actions">
-                  <button 
+                  <button
                     className="btn btn-primary btn-large"
                     onClick={handleContinueToConfirm}
                     aria-label="Continue to confirm your booking"
@@ -399,6 +402,7 @@ function App() {
               bookedDate={bookingState.selectedDate}
               bookedTime={bookingState.selectedTime}
               confirmationId={bookingState.confirmationId}
+              teamsJoinUrl={bookingState.teamsJoinUrl || undefined}
             />
           )
 
@@ -410,7 +414,7 @@ function App() {
               </div>
               <h1 className="error-title">Booking Failed</h1>
               <p className="error-message">{submitError || 'Something went wrong. Please try again.'}</p>
-              <button 
+              <button
                 className="btn btn-primary"
                 onClick={() => setAppState('selecting-date')}
               >
@@ -454,10 +458,10 @@ function App() {
       }} />
       
       {/* P3.4: Live region for screen reader announcements */}
-      <div 
-        className="live-region" 
-        role="status" 
-        aria-live="polite" 
+      <div
+        className="live-region"
+        role="status"
+        aria-live="polite"
         aria-atomic="true"
         id="announcements"
       />

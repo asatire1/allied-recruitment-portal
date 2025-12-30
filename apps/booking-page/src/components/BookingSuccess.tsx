@@ -1,10 +1,11 @@
 /**
  * BookingSuccess Component
  * P2.7: Success confirmation with WhatsApp share and calendar add link
- * 
+ *
  * Shows:
  * - Success message with animation
  * - Booking details summary
+ * - Teams meeting link (if interview)
  * - WhatsApp confirmation button (primary action)
  * - Add to calendar buttons (Google, Apple, Outlook)
  */
@@ -26,6 +27,8 @@ export interface BookingSuccessProps {
   confirmationId: string
   /** Candidate phone number (for WhatsApp) */
   candidatePhone?: string
+  /** Teams meeting join URL (for interviews) */
+  teamsJoinUrl?: string
 }
 
 // ============================================================================
@@ -171,7 +174,8 @@ function generateWhatsAppMessage(
   endTime: string,
   location: string | undefined,
   confirmationId: string,
-  calendarUrl: string
+  calendarUrl: string,
+  teamsUrl?: string
 ): string {
   const eventType = type === 'interview' ? 'Interview' : 'Trial Shift'
   const dateStr = formatDateShort(date)
@@ -184,6 +188,9 @@ function generateWhatsAppMessage(
   message += `🕐 *${timeStr}*\n`
   if (location) {
     message += `📍 *${location}*\n`
+  }
+  if (teamsUrl) {
+    message += `\n💻 *Join Teams Meeting:*\n${teamsUrl}\n`
   }
   message += `\n🔖 Confirmation: ${confirmationId}\n\n`
   message += `👉 *Add to your calendar:*\n${calendarUrl}\n\n`
@@ -204,10 +211,10 @@ function openWhatsApp(phone: string | undefined, message: string): void {
     // Clean phone number (remove spaces, dashes, etc.)
     const cleanPhone = phone.replace(/[\s\-\(\)]/g, '')
     // Add UK country code if not present
-    const fullPhone = cleanPhone.startsWith('+') 
-      ? cleanPhone 
-      : cleanPhone.startsWith('0') 
-        ? `+44${cleanPhone.slice(1)}` 
+    const fullPhone = cleanPhone.startsWith('+')
+      ? cleanPhone
+      : cleanPhone.startsWith('0')
+        ? `+44${cleanPhone.slice(1)}`
         : `+44${cleanPhone}`
     
     window.open(`https://wa.me/${fullPhone.replace('+', '')}?text=${encodedMessage}`, '_blank')
@@ -226,20 +233,28 @@ export function BookingSuccess({
   bookedDate,
   bookedTime,
   confirmationId,
-  candidatePhone
+  candidatePhone,
+  teamsJoinUrl
 }: BookingSuccessProps) {
   const endTime = getEndTime(bookedTime, bookingData.duration)
   const isInterview = bookingData.type === 'interview'
   
-  const eventTitle = isInterview 
+  const eventTitle = isInterview
     ? `Interview at Allied Pharmacies${bookingData.jobTitle ? ` - ${bookingData.jobTitle}` : ''}`
     : `Trial Shift at Allied Pharmacies${bookingData.jobTitle ? ` - ${bookingData.jobTitle}` : ''}`
   
-  const eventDescription = `Your ${isInterview ? 'interview' : 'trial shift'} with Allied Pharmacies.\n\nConfirmation: ${confirmationId}\n\nIf you need to reschedule or cancel, please contact recruitment@alliedpharmacies.co.uk`
+  // Include Teams link in description if available
+  let eventDescription = `Your ${isInterview ? 'interview' : 'trial shift'} with Allied Pharmacies.\n\nConfirmation: ${confirmationId}`
+  if (teamsJoinUrl) {
+    eventDescription += `\n\nJoin Teams Meeting: ${teamsJoinUrl}`
+  }
+  eventDescription += `\n\nIf you need to reschedule or cancel, please contact recruitment@alliedpharmacies.co.uk`
   
-  const location = bookingData.branchAddress 
-    ? `${bookingData.branchName}, ${bookingData.branchAddress}`
-    : bookingData.branchName
+  const location = teamsJoinUrl 
+    ? 'Microsoft Teams (Online)'
+    : bookingData.branchAddress
+      ? `${bookingData.branchName}, ${bookingData.branchAddress}`
+      : bookingData.branchName
 
   // Generate Google Calendar URL for sharing
   const googleCalendarUrl = getGoogleCalendarUrl(
@@ -260,7 +275,8 @@ export function BookingSuccess({
       endTime,
       location,
       confirmationId,
-      googleCalendarUrl
+      googleCalendarUrl,
+      teamsJoinUrl
     )
     openWhatsApp(candidatePhone, message)
   }
@@ -299,6 +315,12 @@ export function BookingSuccess({
     window.open(`https://outlook.live.com/calendar/0/deeplink/compose?${params.toString()}`, '_blank')
   }
 
+  const handleJoinTeams = () => {
+    if (teamsJoinUrl) {
+      window.open(teamsJoinUrl, '_blank')
+    }
+  }
+
   return (
     <div className="booking-success">
       {/* Success Animation */}
@@ -330,7 +352,12 @@ export function BookingSuccess({
           <ClockIcon />
           <span>{formatTime(bookedTime)} – {formatTime(endTime)}</span>
         </div>
-        {location && (
+        {teamsJoinUrl ? (
+          <div className="summary-row">
+            <VideoIcon />
+            <span>Microsoft Teams (Online)</span>
+          </div>
+        ) : location && (
           <div className="summary-row">
             <MapPinIcon />
             <span>{location}</span>
@@ -338,9 +365,25 @@ export function BookingSuccess({
         )}
       </div>
 
+      {/* Teams Meeting Link - Primary for interviews */}
+      {teamsJoinUrl && (
+        <div className="teams-meeting">
+          <button
+            className="teams-btn"
+            onClick={handleJoinTeams}
+          >
+            <TeamsIcon />
+            <span>Join Teams Meeting</span>
+          </button>
+          <p className="teams-hint">
+            Save this link - you'll need it to join your interview
+          </p>
+        </div>
+      )}
+
       {/* WhatsApp Confirmation - Primary Action */}
       <div className="whatsapp-confirmation">
-        <button 
+        <button
           className="whatsapp-btn"
           onClick={handleWhatsAppShare}
         >
@@ -348,7 +391,7 @@ export function BookingSuccess({
           <span>Save Confirmation to WhatsApp</span>
         </button>
         <p className="whatsapp-hint">
-          Tap to save your booking details and calendar link to WhatsApp
+          Tap to save your booking details{teamsJoinUrl ? ', Teams link,' : ''} and calendar link to WhatsApp
         </p>
       </div>
 
@@ -356,21 +399,21 @@ export function BookingSuccess({
       <div className="calendar-buttons">
         <p className="calendar-buttons-title">Or add directly to calendar</p>
         <div className="calendar-buttons-grid">
-          <button 
+          <button
             className="calendar-btn google"
             onClick={handleGoogleCalendar}
           >
             <GoogleIcon />
             <span>Google</span>
           </button>
-          <button 
+          <button
             className="calendar-btn apple"
             onClick={handleAppleCalendar}
           >
             <AppleIcon />
             <span>Apple</span>
           </button>
-          <button 
+          <button
             className="calendar-btn outlook"
             onClick={handleOutlookCalendar}
           >
@@ -386,7 +429,11 @@ export function BookingSuccess({
         <ul>
           <li>Save your booking details via WhatsApp above</li>
           <li>Add the event to your calendar</li>
-          <li>Arrive 5-10 minutes early</li>
+          {teamsJoinUrl ? (
+            <li>Test your camera and microphone before the interview</li>
+          ) : (
+            <li>Arrive 5-10 minutes early</li>
+          )}
           {!isInterview && <li>Wear comfortable, professional attire</li>}
           <li>Bring a valid photo ID</li>
         </ul>
@@ -436,6 +483,24 @@ function MapPinIcon() {
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width="20" height="20">
       <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+    </svg>
+  )
+}
+
+function VideoIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width="20" height="20">
+      <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+    </svg>
+  )
+}
+
+function TeamsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+      <path d="M20.625 8.073c-.003-.022-.003-.043-.01-.065a.403.403 0 0 0-.087-.156.476.476 0 0 0-.147-.103.415.415 0 0 0-.167-.044H14.5V5.5a.5.5 0 0 0-.5-.5h-4a.5.5 0 0 0-.5.5v2.205H3.786a.415.415 0 0 0-.167.044.476.476 0 0 0-.147.103.403.403 0 0 0-.087.156c-.007.022-.007.043-.01.065a.388.388 0 0 0 0 .082v7.69c0 .027 0 .055.01.082.003.022.003.043.01.065a.403.403 0 0 0 .087.156.476.476 0 0 0 .147.103.415.415 0 0 0 .167.044H9.5v2.205a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5v-2.205h5.714a.415.415 0 0 0 .167-.044.476.476 0 0 0 .147-.103.403.403 0 0 0 .087-.156c.007-.022.007-.043.01-.065a.388.388 0 0 0 0-.082v-7.69a.388.388 0 0 0 0-.082zM10.5 6h3v1.705h-3V6zm3 12h-3v-1.705h3V18zm5.5-2.5h-5V8.5h5v7z"/>
+      <circle cx="17" cy="4" r="2"/>
+      <circle cx="21" cy="6" r="1.5"/>
     </svg>
   )
 }

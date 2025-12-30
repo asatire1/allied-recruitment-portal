@@ -1,12 +1,12 @@
 /**
- * Booking Cloud Functions
- * P2.2: Get availability settings
- * P2.3: Get time slots for a date
- * P2.4: Slot conflict checking
- * P2.6: Submit booking
- * 
- * Updated: Teams meeting integration for interviews
- */
+* Booking Cloud Functions
+* P2.2: Get availability settings
+* P2.3: Get time slots for a date
+* P2.4: Slot conflict checking
+* P2.6: Submit booking
+*
+* Updated: Teams meeting integration for interviews
+*/
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import * as admin from 'firebase-admin'
@@ -320,8 +320,8 @@ export const getBookingTimeSlots = onCall<{ token: string; date: string }>(
 // ============================================================================
 
 export const submitBooking = onCall<{ token: string; date: string; time: string }>(
-  { 
-    cors: true, 
+  {
+    cors: true,
     region: 'us-central1',
     // Include Teams secrets so they're available
     secrets: [msClientId, msClientSecret, msTenantId, msOrganizerUserId],

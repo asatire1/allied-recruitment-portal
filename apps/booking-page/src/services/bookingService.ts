@@ -155,6 +155,7 @@ export interface SubmitBookingRequest {
 }
 
 export interface SubmitBookingResponse {
+  teamsJoinUrl?: string
   success: boolean
   interviewId: string
   confirmationCode: string

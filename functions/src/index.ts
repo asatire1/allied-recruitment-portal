@@ -827,3 +827,6 @@ export { getBookingAvailability, getBookingTimeSlots, submitBooking } from './bo
 
 // Indeed Job Import
 export { parseIndeedJob } from './jobImport'
+
+// Candidate archive functions
+export { archiveCandidate, restoreCandidate, checkReturningCandidate, reactivateCandidate, permanentlyDeleteCandidate, onCandidateDeleted } from './cascadeDeletion'

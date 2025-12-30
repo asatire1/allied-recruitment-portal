@@ -1,13 +1,13 @@
 "use strict";
 /**
- * Booking Cloud Functions
- * P2.2: Get availability settings
- * P2.3: Get time slots for a date
- * P2.4: Slot conflict checking
- * P2.6: Submit booking
- *
- * Updated: Teams meeting integration for interviews
- */
+* Booking Cloud Functions
+* P2.2: Get availability settings
+* P2.3: Get time slots for a date
+* P2.4: Slot conflict checking
+* P2.6: Submit booking
+*
+* Updated: Teams meeting integration for interviews
+*/
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
