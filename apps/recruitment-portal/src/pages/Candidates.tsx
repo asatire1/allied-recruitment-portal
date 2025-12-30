@@ -26,10 +26,12 @@ import './Candidates.css'
 // CONSTANTS
 // ============================================================================
 
-const STATUS_OPTIONS: { value: CandidateStatus | 'all'; label: string }[] = [
-  { value: 'all', label: 'All Statuses' },
+// Note: 'all' now means "all except rejected" - rejected candidates are hidden by default
+const STATUS_OPTIONS: { value: CandidateStatus | 'all' | 'all_including_rejected'; label: string }[] = [
+  { value: 'all', label: 'All Active' },  // Excludes rejected
   { value: 'new', label: 'New' },
   { value: 'screening', label: 'Screening' },
+  { value: 'invite_sent', label: 'Invite Sent' },
   { value: 'interview_scheduled', label: 'Interview Scheduled' },
   { value: 'interview_complete', label: 'Interview Complete' },
   { value: 'trial_scheduled', label: 'Trial Scheduled' },
@@ -37,11 +39,13 @@ const STATUS_OPTIONS: { value: CandidateStatus | 'all'; label: string }[] = [
   { value: 'approved', label: 'Approved' },
   { value: 'rejected', label: 'Rejected' },
   { value: 'withdrawn', label: 'Withdrawn' },
+  { value: 'all_including_rejected', label: '── Show All (incl. Rejected)' },
 ]
 
 const STATUS_COLORS: Record<CandidateStatus, string> = {
   new: 'info',
   screening: 'warning',
+  invite_sent: 'info',
   interview_scheduled: 'info',
   interview_complete: 'info',
   trial_scheduled: 'warning',
@@ -203,7 +207,7 @@ export function Candidates() {
   
   // Filters - initialize from URL params
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState<CandidateStatus | 'all'>('all')
+  const [statusFilter, setStatusFilter] = useState<CandidateStatus | 'all' | 'all_including_rejected'>('all')
   
   // Selected candidate for status change
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null)
@@ -269,14 +273,14 @@ export function Candidates() {
       // Handle comma-separated statuses (e.g., "interview_complete,trial_complete")
       const statuses = statusParam.split(',')
       if (statuses.length === 1 && STATUS_OPTIONS.some(opt => opt.value === statuses[0])) {
-        setStatusFilter(statuses[0] as CandidateStatus)
+        setStatusFilter(statuses[0] as CandidateStatus | 'all' | 'all_including_rejected')
       }
       // For multiple statuses, we'd need to enhance the filter - for now just use first one
       else if (statuses.length > 1) {
         // Set to first valid status
         const validStatus = statuses.find(s => STATUS_OPTIONS.some(opt => opt.value === s))
         if (validStatus) {
-          setStatusFilter(validStatus as CandidateStatus)
+          setStatusFilter(validStatus as CandidateStatus | 'all' | 'all_including_rejected')
         }
       }
     }
@@ -408,12 +412,23 @@ export function Candidates() {
     fetchBranches()
   }, [db])
 
-  // Filtered candidates
+  // Filtered candidates - UPDATED: excludes rejected by default
   const filteredCandidates = useMemo(() => {
     return candidates.filter(candidate => {
-      // Status filter
-      if (statusFilter !== 'all' && candidate.status !== statusFilter) {
-        return false
+      // Status filter with special handling for 'all' (excludes rejected) and 'all_including_rejected'
+      if (statusFilter === 'all') {
+        // 'all' now means "all active" - excludes rejected candidates
+        if (candidate.status === 'rejected') {
+          return false
+        }
+      } else if (statusFilter === 'all_including_rejected') {
+        // Show everything including rejected
+        // No status filtering needed
+      } else {
+        // Specific status filter
+        if (candidate.status !== statusFilter) {
+          return false
+        }
       }
 
       // Search filter
@@ -435,6 +450,11 @@ export function Candidates() {
       return true
     })
   }, [candidates, statusFilter, searchTerm])
+
+  // Count of rejected candidates (for showing in filter)
+  const rejectedCount = useMemo(() => {
+    return candidates.filter(c => c.status === 'rejected').length
+  }, [candidates])
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredCandidates.length / ITEMS_PER_PAGE)
@@ -1868,7 +1888,12 @@ export function Candidates() {
       <div className="candidates-header">
         <div className="header-title">
           <h1>Candidates</h1>
-          <span className="candidate-count">{filteredCandidates.length} candidates</span>
+          <span className="candidate-count">
+            {filteredCandidates.length} candidates
+            {statusFilter === 'all' && rejectedCount > 0 && (
+              <span className="rejected-note"> ({rejectedCount} rejected hidden)</span>
+            )}
+          </span>
         </div>
         <div className="header-actions">
           <Button variant="outline" onClick={() => setShowBulkModal(true)}>
@@ -1904,12 +1929,12 @@ export function Candidates() {
           <div className="filter-item">
             <Select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as CandidateStatus | 'all')}
+              onChange={(e) => setStatusFilter(e.target.value as CandidateStatus | 'all' | 'all_including_rejected')}
               options={STATUS_OPTIONS}
             />
           </div>
         </div>
-        {(searchTerm || statusFilter !== 'all') && (
+        {(searchTerm || (statusFilter !== 'all')) && (
           <div className="active-filters">
             <span className="filter-label">Active filters:</span>
             {searchTerm && (
@@ -1920,7 +1945,7 @@ export function Candidates() {
             )}
             {statusFilter !== 'all' && (
               <span className="filter-tag">
-                Status: {statusFilter.replace(/_/g, ' ')}
+                Status: {statusFilter === 'all_including_rejected' ? 'All (incl. Rejected)' : statusFilter.replace(/_/g, ' ')}
                 <button onClick={() => setStatusFilter('all')}>×</button>
               </span>
             )}
@@ -2094,7 +2119,7 @@ export function Candidates() {
               <Select
                 value={newStatus}
                 onChange={(e) => setNewStatus(e.target.value as CandidateStatus)}
-                options={STATUS_OPTIONS.filter(o => o.value !== 'all')}
+                options={STATUS_OPTIONS.filter(o => o.value !== 'all' && o.value !== 'all_including_rejected')}
               />
             </div>
             <div className="modal-actions">

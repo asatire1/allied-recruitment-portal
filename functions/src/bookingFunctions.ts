@@ -6,6 +6,7 @@
 * P2.6: Submit booking
 *
 * Updated: Teams meeting integration for interviews
+* Updated: Automatic candidate status updates
 */
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
@@ -107,6 +108,52 @@ async function validateToken(token: string): Promise<FirebaseFirestore.DocumentS
   }
   
   return doc
+}
+
+// ============================================================================
+// UPDATE CANDIDATE STATUS HELPER
+// ============================================================================
+
+async function updateCandidateStatus(
+  candidateId: string, 
+  newStatus: string, 
+  reason: string
+): Promise<void> {
+  try {
+    const candidateRef = db.collection('candidates').doc(candidateId)
+    const candidateDoc = await candidateRef.get()
+    
+    if (!candidateDoc.exists) {
+      console.warn(`Candidate ${candidateId} not found for status update`)
+      return
+    }
+    
+    const previousStatus = candidateDoc.data()?.status || 'unknown'
+    
+    // Update candidate status
+    await candidateRef.update({
+      status: newStatus,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    })
+    
+    // Log activity
+    await db.collection('activityLog').add({
+      entityType: 'candidate',
+      entityId: candidateId,
+      action: 'status_changed',
+      description: `Status automatically changed from "${previousStatus.replace(/_/g, ' ')}" to "${newStatus.replace(/_/g, ' ')}" - ${reason}`,
+      previousValue: { status: previousStatus },
+      newValue: { status: newStatus },
+      userId: 'system',
+      userName: 'System (Automatic)',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    })
+    
+    console.log(`Candidate ${candidateId} status updated: ${previousStatus} → ${newStatus}`)
+  } catch (error) {
+    console.error(`Failed to update candidate status for ${candidateId}:`, error)
+    // Don't throw - status update failure should not block the main operation
+  }
 }
 
 // ============================================================================
@@ -316,7 +363,7 @@ export const getBookingTimeSlots = onCall<{ token: string; date: string }>(
 )
 
 // ============================================================================
-// P2.6: SUBMIT BOOKING (with Teams integration for interviews)
+// P2.6: SUBMIT BOOKING (with Teams integration and automatic status update)
 // ============================================================================
 
 export const submitBooking = onCall<{ token: string; date: string; time: string }>(
@@ -475,6 +522,16 @@ export const submitBooking = onCall<{ token: string; date: string; time: string 
     if (teamsMeetingResult?.success) {
       console.log(`Teams meeting URL: ${teamsMeetingResult.joinUrl}`)
     }
+    
+    // =========================================================================
+    // AUTOMATICALLY UPDATE CANDIDATE STATUS
+    // =========================================================================
+    const newStatus = linkData.type === 'interview' ? 'interview_scheduled' : 'trial_scheduled'
+    await updateCandidateStatus(
+      linkData.candidateId,
+      newStatus,
+      `Candidate booked ${linkData.type} via self-service booking`
+    )
     
     // =========================================================================
     // SEND EMAIL CONFIRMATION TO CANDIDATE

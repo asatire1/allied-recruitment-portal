@@ -7,6 +7,7 @@
 * P2.6: Submit booking
 *
 * Updated: Teams meeting integration for interviews
+* Updated: Automatic candidate status updates
 */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -97,6 +98,42 @@ async function validateToken(token) {
         throw new https_1.HttpsError('not-found', 'This booking link has already been used');
     }
     return doc;
+}
+// ============================================================================
+// UPDATE CANDIDATE STATUS HELPER
+// ============================================================================
+async function updateCandidateStatus(candidateId, newStatus, reason) {
+    try {
+        const candidateRef = db.collection('candidates').doc(candidateId);
+        const candidateDoc = await candidateRef.get();
+        if (!candidateDoc.exists) {
+            console.warn(`Candidate ${candidateId} not found for status update`);
+            return;
+        }
+        const previousStatus = candidateDoc.data()?.status || 'unknown';
+        // Update candidate status
+        await candidateRef.update({
+            status: newStatus,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        // Log activity
+        await db.collection('activityLog').add({
+            entityType: 'candidate',
+            entityId: candidateId,
+            action: 'status_changed',
+            description: `Status automatically changed from "${previousStatus.replace(/_/g, ' ')}" to "${newStatus.replace(/_/g, ' ')}" - ${reason}`,
+            previousValue: { status: previousStatus },
+            newValue: { status: newStatus },
+            userId: 'system',
+            userName: 'System (Automatic)',
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        console.log(`Candidate ${candidateId} status updated: ${previousStatus} → ${newStatus}`);
+    }
+    catch (error) {
+        console.error(`Failed to update candidate status for ${candidateId}:`, error);
+        // Don't throw - status update failure should not block the main operation
+    }
 }
 // ============================================================================
 // P2.2: GET BOOKING AVAILABILITY
@@ -269,7 +306,7 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({ cors: true, region: 'us-cent
     return { slots, date };
 });
 // ============================================================================
-// P2.6: SUBMIT BOOKING (with Teams integration for interviews)
+// P2.6: SUBMIT BOOKING (with Teams integration and automatic status update)
 // ============================================================================
 exports.submitBooking = (0, https_1.onCall)({
     cors: true,
@@ -393,6 +430,11 @@ exports.submitBooking = (0, https_1.onCall)({
     if (teamsMeetingResult?.success) {
         console.log(`Teams meeting URL: ${teamsMeetingResult.joinUrl}`);
     }
+    // =========================================================================
+    // AUTOMATICALLY UPDATE CANDIDATE STATUS
+    // =========================================================================
+    const newStatus = linkData.type === 'interview' ? 'interview_scheduled' : 'trial_scheduled';
+    await updateCandidateStatus(linkData.candidateId, newStatus, `Candidate booked ${linkData.type} via self-service booking`);
     // =========================================================================
     // SEND EMAIL CONFIRMATION TO CANDIDATE
     // =========================================================================

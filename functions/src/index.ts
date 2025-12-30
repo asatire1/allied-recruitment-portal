@@ -426,6 +426,57 @@ function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex')
 }
 
+// ============================================================================
+// AUTO STATUS UPDATE HELPER - Updates candidate status when invite sent
+// ============================================================================
+
+async function updateCandidateStatusOnInvite(
+  candidateId: string, 
+  inviteType: 'interview' | 'trial',
+  createdBy: string
+): Promise<void> {
+  try {
+    const db = admin.firestore()
+    const candidateRef = db.collection('candidates').doc(candidateId)
+    const candidateDoc = await candidateRef.get()
+    
+    if (!candidateDoc.exists) {
+      console.warn(`Candidate ${candidateId} not found for status update`)
+      return
+    }
+    
+    const previousStatus = candidateDoc.data()?.status || 'unknown'
+    
+    // Update candidate status to invite_sent
+    await candidateRef.update({
+      status: 'invite_sent',
+      inviteType: inviteType,
+      inviteSentAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    })
+    
+    // Log the automatic status change
+    await db.collection('activityLog').add({
+      entityType: 'candidate',
+      entityId: candidateId,
+      action: 'status_changed',
+      description: `Status automatically changed from "${previousStatus.replace(/_/g, ' ')}" to "invite sent" - ${inviteType} booking link created`,
+      previousValue: { status: previousStatus },
+      newValue: { status: 'invite_sent', inviteType },
+      userId: createdBy,
+      userName: 'System (Automatic)',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    })
+    
+    console.log(`Candidate ${candidateId} status updated to invite_sent (${inviteType})`)
+  } catch (error) {
+    // Non-blocking - log error but don't fail the booking link creation
+    console.error(`Failed to update candidate status for ${candidateId}:`, error)
+  }
+}
+
+// ============================================================================
+
 export const createBookingLink = onCall<CreateBookingLinkRequest>(
   { timeoutSeconds: 30, memory: '256MiB', enforceAppCheck: false },
   async (request) => {
@@ -464,6 +515,9 @@ export const createBookingLink = onCall<CreateBookingLinkRequest>(
       
       const docRef = await db.collection('bookingLinks').add(bookingLinkDoc)
       const url = `https://allied-booking.web.app/book/${token}`
+      
+      // Auto-update candidate status to 'invite_sent'
+      await updateCandidateStatusOnInvite(candidateId, type, request.auth.uid)
       
       return { success: true, id: docRef.id, url, expiresAt: expiresAt.toDate().toISOString(), duration }
     } catch (error) {
