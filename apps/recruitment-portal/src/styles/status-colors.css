@@ -1,0 +1,486 @@
+/* ============================================================================
+   STATUS BADGE COLORS - Shared across Candidates, Jobs, and Interviews pages
+   ============================================================================ */
+
+/* Base status badge styling */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-transform: capitalize;
+}
+
+/* Status dot indicator */
+.status-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ============================================================================
+   CANDIDATE STATUSES
+   ============================================================================ */
+
+/* New / Applied - Blue */
+.status-badge.status-new,
+.status-badge.status-applied,
+.status-badge[data-status="new"],
+.status-badge[data-status="applied"] {
+  background-color: #dbeafe;
+  color: #1d4ed8;
+}
+.status-badge.status-new::before,
+.status-badge.status-applied::before,
+.status-badge[data-status="new"]::before,
+.status-badge[data-status="applied"]::before {
+  background-color: #3b82f6;
+}
+
+/* Shortlisted - Indigo */
+.status-badge.status-shortlisted,
+.status-badge[data-status="shortlisted"] {
+  background-color: #e0e7ff;
+  color: #4338ca;
+}
+.status-badge.status-shortlisted::before,
+.status-badge[data-status="shortlisted"]::before {
+  background-color: #6366f1;
+}
+
+/* Screening - Purple */
+.status-badge.status-screening,
+.status-badge[data-status="screening"] {
+  background-color: #f3e8ff;
+  color: #7c3aed;
+}
+.status-badge.status-screening::before,
+.status-badge[data-status="screening"]::before {
+  background-color: #a855f7;
+}
+
+/* Invite Sent - Orange */
+.status-badge.status-invite_sent,
+.status-badge.status-invite-sent,
+.status-badge[data-status="invite_sent"],
+.status-badge[data-status="invite-sent"] {
+  background-color: #ffedd5;
+  color: #c2410c;
+}
+.status-badge.status-invite_sent::before,
+.status-badge.status-invite-sent::before,
+.status-badge[data-status="invite_sent"]::before,
+.status-badge[data-status="invite-sent"]::before {
+  background-color: #f97316;
+}
+
+/* Interview Scheduled - Cyan/Teal */
+.status-badge.status-interview_scheduled,
+.status-badge.status-interview-scheduled,
+.status-badge[data-status="interview_scheduled"],
+.status-badge[data-status="interview-scheduled"] {
+  background-color: #cffafe;
+  color: #0e7490;
+}
+.status-badge.status-interview_scheduled::before,
+.status-badge.status-interview-scheduled::before,
+.status-badge[data-status="interview_scheduled"]::before,
+.status-badge[data-status="interview-scheduled"]::before {
+  background-color: #06b6d4;
+}
+
+/* Interview Completed - Light Blue */
+.status-badge.status-interview_completed,
+.status-badge.status-interview-completed,
+.status-badge.status-interview_complete,
+.status-badge.status-interview-complete,
+.status-badge[data-status="interview_completed"],
+.status-badge[data-status="interview-completed"],
+.status-badge[data-status="interview_complete"],
+.status-badge[data-status="interview-complete"] {
+  background-color: #e0f2fe;
+  color: #0369a1;
+}
+.status-badge.status-interview_completed::before,
+.status-badge.status-interview-completed::before,
+.status-badge.status-interview_complete::before,
+.status-badge.status-interview-complete::before,
+.status-badge[data-status="interview_completed"]::before,
+.status-badge[data-status="interview-completed"]::before,
+.status-badge[data-status="interview_complete"]::before,
+.status-badge[data-status="interview-complete"]::before {
+  background-color: #0ea5e9;
+}
+
+/* Trial Scheduled - Purple */
+.status-badge.status-trial_scheduled,
+.status-badge.status-trial-scheduled,
+.status-badge[data-status="trial_scheduled"],
+.status-badge[data-status="trial-scheduled"] {
+  background-color: #ede9fe;
+  color: #6d28d9;
+}
+.status-badge.status-trial_scheduled::before,
+.status-badge.status-trial-scheduled::before,
+.status-badge[data-status="trial_scheduled"]::before,
+.status-badge[data-status="trial-scheduled"]::before {
+  background-color: #8b5cf6;
+}
+
+/* Trial Completed - Violet */
+.status-badge.status-trial_completed,
+.status-badge.status-trial-completed,
+.status-badge.status-trial_complete,
+.status-badge.status-trial-complete,
+.status-badge[data-status="trial_completed"],
+.status-badge[data-status="trial-completed"],
+.status-badge[data-status="trial_complete"],
+.status-badge[data-status="trial-complete"] {
+  background-color: #f3e8ff;
+  color: #7c3aed;
+}
+.status-badge.status-trial_completed::before,
+.status-badge.status-trial-completed::before,
+.status-badge.status-trial_complete::before,
+.status-badge.status-trial-complete::before,
+.status-badge[data-status="trial_completed"]::before,
+.status-badge[data-status="trial-completed"]::before,
+.status-badge[data-status="trial_complete"]::before,
+.status-badge[data-status="trial-complete"]::before {
+  background-color: #a78bfa;
+}
+
+/* Offered - Gold/Amber */
+.status-badge.status-offered,
+.status-badge.status-offer_sent,
+.status-badge.status-offer-sent,
+.status-badge[data-status="offered"],
+.status-badge[data-status="offer_sent"],
+.status-badge[data-status="offer-sent"] {
+  background-color: #fef3c7;
+  color: #b45309;
+}
+.status-badge.status-offered::before,
+.status-badge.status-offer_sent::before,
+.status-badge.status-offer-sent::before,
+.status-badge[data-status="offered"]::before,
+.status-badge[data-status="offer_sent"]::before,
+.status-badge[data-status="offer-sent"]::before {
+  background-color: #f59e0b;
+}
+
+/* Hired / Approved - Green */
+.status-badge.status-hired,
+.status-badge.status-accepted,
+.status-badge.status-approved,
+.status-badge[data-status="hired"],
+.status-badge[data-status="accepted"],
+.status-badge[data-status="approved"] {
+  background-color: #dcfce7;
+  color: #15803d;
+}
+.status-badge.status-hired::before,
+.status-badge.status-accepted::before,
+.status-badge.status-approved::before,
+.status-badge[data-status="hired"]::before,
+.status-badge[data-status="accepted"]::before,
+.status-badge[data-status="approved"]::before {
+  background-color: #22c55e;
+}
+
+/* Rejected - Red */
+.status-badge.status-rejected,
+.status-badge.status-declined,
+.status-badge[data-status="rejected"],
+.status-badge[data-status="declined"] {
+  background-color: #fee2e2;
+  color: #b91c1c;
+}
+.status-badge.status-rejected::before,
+.status-badge.status-declined::before,
+.status-badge[data-status="rejected"]::before,
+.status-badge[data-status="declined"]::before {
+  background-color: #ef4444;
+}
+
+/* Withdrawn - Gray */
+.status-badge.status-withdrawn,
+.status-badge[data-status="withdrawn"] {
+  background-color: #f3f4f6;
+  color: #4b5563;
+}
+.status-badge.status-withdrawn::before,
+.status-badge[data-status="withdrawn"]::before {
+  background-color: #9ca3af;
+}
+
+/* On Hold - Yellow */
+.status-badge.status-on_hold,
+.status-badge.status-on-hold,
+.status-badge.status-pending,
+.status-badge[data-status="on_hold"],
+.status-badge[data-status="on-hold"],
+.status-badge[data-status="pending"] {
+  background-color: #fef9c3;
+  color: #a16207;
+}
+.status-badge.status-on_hold::before,
+.status-badge.status-on-hold::before,
+.status-badge.status-pending::before,
+.status-badge[data-status="on_hold"]::before,
+.status-badge[data-status="on-hold"]::before,
+.status-badge[data-status="pending"]::before {
+  background-color: #eab308;
+}
+
+/* ============================================================================
+   JOB STATUSES
+   ============================================================================ */
+
+/* Draft - Gray */
+.status-badge.status-draft,
+.status-badge[data-status="draft"] {
+  background-color: #f3f4f6;
+  color: #4b5563;
+}
+.status-badge.status-draft::before,
+.status-badge[data-status="draft"]::before {
+  background-color: #9ca3af;
+}
+
+/* Open / Active - Green */
+.status-badge.status-open,
+.status-badge.status-active,
+.status-badge[data-status="open"],
+.status-badge[data-status="active"] {
+  background-color: #dcfce7;
+  color: #15803d;
+}
+.status-badge.status-open::before,
+.status-badge.status-active::before,
+.status-badge[data-status="open"]::before,
+.status-badge[data-status="active"]::before {
+  background-color: #22c55e;
+}
+
+/* Paused - Amber */
+.status-badge.status-paused,
+.status-badge[data-status="paused"] {
+  background-color: #fef3c7;
+  color: #b45309;
+}
+.status-badge.status-paused::before,
+.status-badge[data-status="paused"]::before {
+  background-color: #f59e0b;
+}
+
+/* Closed / Filled - Blue */
+.status-badge.status-closed,
+.status-badge.status-filled,
+.status-badge[data-status="closed"],
+.status-badge[data-status="filled"] {
+  background-color: #dbeafe;
+  color: #1d4ed8;
+}
+.status-badge.status-closed::before,
+.status-badge.status-filled::before,
+.status-badge[data-status="closed"]::before,
+.status-badge[data-status="filled"]::before {
+  background-color: #3b82f6;
+}
+
+/* Cancelled - Red */
+.status-badge.status-cancelled,
+.status-badge.status-canceled,
+.status-badge[data-status="cancelled"],
+.status-badge[data-status="canceled"] {
+  background-color: #fee2e2;
+  color: #b91c1c;
+}
+.status-badge.status-cancelled::before,
+.status-badge.status-canceled::before,
+.status-badge[data-status="cancelled"]::before,
+.status-badge[data-status="canceled"]::before {
+  background-color: #ef4444;
+}
+
+/* ============================================================================
+   INTERVIEW STATUSES
+   ============================================================================ */
+
+/* Scheduled - Cyan */
+.status-badge.status-scheduled,
+.status-badge[data-status="scheduled"] {
+  background-color: #cffafe;
+  color: #0e7490;
+}
+.status-badge.status-scheduled::before,
+.status-badge[data-status="scheduled"]::before {
+  background-color: #06b6d4;
+}
+
+/* Confirmed - Blue */
+.status-badge.status-confirmed,
+.status-badge[data-status="confirmed"] {
+  background-color: #dbeafe;
+  color: #1d4ed8;
+}
+.status-badge.status-confirmed::before,
+.status-badge[data-status="confirmed"]::before {
+  background-color: #3b82f6;
+}
+
+/* In Progress - Indigo */
+.status-badge.status-in_progress,
+.status-badge.status-in-progress,
+.status-badge[data-status="in_progress"],
+.status-badge[data-status="in-progress"] {
+  background-color: #e0e7ff;
+  color: #4338ca;
+}
+.status-badge.status-in_progress::before,
+.status-badge.status-in-progress::before,
+.status-badge[data-status="in_progress"]::before,
+.status-badge[data-status="in-progress"]::before {
+  background-color: #6366f1;
+}
+
+/* Completed - Green */
+.status-badge.status-completed,
+.status-badge[data-status="completed"] {
+  background-color: #dcfce7;
+  color: #15803d;
+}
+.status-badge.status-completed::before,
+.status-badge[data-status="completed"]::before {
+  background-color: #22c55e;
+}
+
+/* No Show - Red */
+.status-badge.status-no_show,
+.status-badge.status-no-show,
+.status-badge[data-status="no_show"],
+.status-badge[data-status="no-show"] {
+  background-color: #fee2e2;
+  color: #b91c1c;
+}
+.status-badge.status-no_show::before,
+.status-badge.status-no-show::before,
+.status-badge[data-status="no_show"]::before,
+.status-badge[data-status="no-show"]::before {
+  background-color: #ef4444;
+}
+
+/* Rescheduled - Purple */
+.status-badge.status-rescheduled,
+.status-badge[data-status="rescheduled"] {
+  background-color: #ede9fe;
+  color: #6d28d9;
+}
+.status-badge.status-rescheduled::before,
+.status-badge[data-status="rescheduled"]::before {
+  background-color: #8b5cf6;
+}
+
+/* ============================================================================
+   BOOKING LINK STATUSES
+   ============================================================================ */
+
+/* Used - Green */
+.status-badge.status-used,
+.status-badge[data-status="used"] {
+  background-color: #dcfce7;
+  color: #15803d;
+}
+.status-badge.status-used::before,
+.status-badge[data-status="used"]::before {
+  background-color: #22c55e;
+}
+
+/* Expired - Gray */
+.status-badge.status-expired,
+.status-badge[data-status="expired"] {
+  background-color: #f3f4f6;
+  color: #4b5563;
+}
+.status-badge.status-expired::before,
+.status-badge[data-status="expired"]::before {
+  background-color: #9ca3af;
+}
+
+/* ============================================================================
+   PRIORITY INDICATORS
+   ============================================================================ */
+
+.priority-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.priority-badge.priority-high,
+.priority-badge.priority-urgent {
+  background-color: #fee2e2;
+  color: #b91c1c;
+}
+
+.priority-badge.priority-medium {
+  background-color: #fef3c7;
+  color: #b45309;
+}
+
+.priority-badge.priority-low {
+  background-color: #dcfce7;
+  color: #15803d;
+}
+
+/* ============================================================================
+   TABLE ROW STYLING BY STATUS
+   ============================================================================ */
+
+/* Highlight rejected/withdrawn rows */
+tr.status-row-rejected,
+tr.status-row-withdrawn,
+.candidate-row.rejected,
+.candidate-row.withdrawn {
+  opacity: 0.6;
+  background-color: #fafafa;
+}
+
+tr.status-row-rejected:hover,
+tr.status-row-withdrawn:hover,
+.candidate-row.rejected:hover,
+.candidate-row.withdrawn:hover {
+  opacity: 0.8;
+}
+
+/* Highlight hired rows */
+tr.status-row-hired,
+.candidate-row.hired {
+  background-color: #f0fdf4;
+}
+
+/* Highlight new/urgent rows */
+tr.status-row-new,
+.candidate-row.new {
+  border-left: 3px solid #3b82f6;
+}
+
+/* ============================================================================
+   DARK MODE SUPPORT (optional)
+   ============================================================================ */
+
+@media (prefers-color-scheme: dark) {
+  /* Add dark mode variants if needed */
+}
