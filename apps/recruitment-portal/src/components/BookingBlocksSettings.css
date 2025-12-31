@@ -1,0 +1,278 @@
+.booking-blocks-settings {
+  max-width: 800px;
+}
+
+.booking-blocks-settings .settings-header {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.booking-blocks-settings .settings-header h2 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.booking-blocks-settings .settings-description {
+  margin: 0;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+/* Alerts */
+.booking-blocks-settings .alert {
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.booking-blocks-settings .alert-error {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.booking-blocks-settings .alert-success {
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+}
+
+/* Loading state */
+.booking-blocks-settings .loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+  gap: 16px;
+  color: #6b7280;
+}
+
+/* Settings sections */
+.booking-blocks-settings .settings-section {
+  margin-bottom: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.booking-blocks-settings .settings-section:last-of-type {
+  border-bottom: none;
+}
+
+.booking-blocks-settings .settings-section h3 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.booking-blocks-settings .section-description {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+/* Lunch Block Controls */
+.booking-blocks-settings .lunch-block-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.booking-blocks-settings .toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.booking-blocks-settings .toggle-label input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: #0d9488;
+}
+
+.booking-blocks-settings .toggle-text {
+  font-size: 14px;
+  color: #374151;
+  font-weight: 500;
+}
+
+.booking-blocks-settings .time-range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.booking-blocks-settings .time-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.booking-blocks-settings .time-input-group label {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.booking-blocks-settings .time-input-group input {
+  width: 120px;
+}
+
+.booking-blocks-settings .time-separator {
+  font-size: 14px;
+  color: #6b7280;
+  margin-top: 20px;
+}
+
+/* Quick add buttons */
+.booking-blocks-settings .quick-add-buttons {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+/* Add holiday form */
+.booking-blocks-settings .add-holiday-form {
+  margin-bottom: 20px;
+}
+
+.booking-blocks-settings .add-holiday-inputs {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.booking-blocks-settings .add-holiday-inputs input[type="date"] {
+  width: 160px;
+}
+
+.booking-blocks-settings .add-holiday-inputs input[type="text"] {
+  width: 200px;
+}
+
+/* Holidays list */
+.booking-blocks-settings .holidays-list {
+  margin-top: 16px;
+}
+
+.booking-blocks-settings .year-group {
+  margin-bottom: 20px;
+}
+
+.booking-blocks-settings .year-header {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.booking-blocks-settings .holidays-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.booking-blocks-settings .holiday-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+
+.booking-blocks-settings .holiday-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.booking-blocks-settings .holiday-date {
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+}
+
+.booking-blocks-settings .holiday-name {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.booking-blocks-settings .remove-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: #fee2e2;
+  color: #dc2626;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.booking-blocks-settings .remove-btn:hover {
+  background: #fecaca;
+}
+
+.booking-blocks-settings .no-holidays {
+  padding: 24px;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 14px;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+/* Settings actions */
+.booking-blocks-settings .settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 16px;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .booking-blocks-settings .add-holiday-inputs {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .booking-blocks-settings .add-holiday-inputs input[type="date"],
+  .booking-blocks-settings .add-holiday-inputs input[type="text"] {
+    width: 100%;
+  }
+  
+  .booking-blocks-settings .time-range-inputs {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .booking-blocks-settings .time-input-group input {
+    width: 100%;
+  }
+  
+  .booking-blocks-settings .time-separator {
+    margin-top: 0;
+    text-align: center;
+  }
+}

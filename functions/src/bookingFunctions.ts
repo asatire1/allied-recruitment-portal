@@ -7,6 +7,7 @@
 *
 * Updated: Teams meeting integration for interviews
 * Updated: Automatic candidate status updates
+* Updated: Bank holiday and lunch time blocking
 */
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
@@ -44,9 +45,19 @@ interface AvailabilitySettings {
   enabled: boolean
 }
 
+interface BookingBlocksSettings {
+  bankHolidays: string[] // Array of date strings in YYYY-MM-DD format
+  lunchBlock: {
+    enabled: boolean
+    start: string // HH:MM format
+    end: string   // HH:MM format
+  }
+}
+
 interface TimeSlot {
   time: string
   available: boolean
+  reason?: string // Optional reason why slot is unavailable
 }
 
 // ============================================================================
@@ -76,6 +87,84 @@ function getDefaultSettings(): AvailabilitySettings {
     minNoticeHours: 24,
     enabled: true
   }
+}
+
+// Default UK bank holidays for 2025 and 2026
+function getDefaultBankHolidays(): string[] {
+  return [
+    // 2025
+    '2025-01-01', // New Year's Day
+    '2025-04-18', // Good Friday
+    '2025-04-21', // Easter Monday
+    '2025-05-05', // Early May Bank Holiday
+    '2025-05-26', // Spring Bank Holiday
+    '2025-08-25', // Summer Bank Holiday
+    '2025-12-25', // Christmas Day
+    '2025-12-26', // Boxing Day
+    // 2026
+    '2026-01-01', // New Year's Day
+    '2026-04-03', // Good Friday
+    '2026-04-06', // Easter Monday
+    '2026-05-04', // Early May Bank Holiday
+    '2026-05-25', // Spring Bank Holiday
+    '2026-08-31', // Summer Bank Holiday
+    '2026-12-25', // Christmas Day
+    '2026-12-28', // Boxing Day (substitute)
+  ]
+}
+
+function getDefaultBookingBlocks(): BookingBlocksSettings {
+  return {
+    bankHolidays: getDefaultBankHolidays(),
+    lunchBlock: {
+      enabled: false,
+      start: '12:00',
+      end: '13:00'
+    }
+  }
+}
+
+// Check if a date is a bank holiday
+function isBankHoliday(dateStr: string, bankHolidays: string[]): boolean {
+  return bankHolidays.includes(dateStr)
+}
+
+// Check if a time slot falls within lunch block
+function isInLunchBlock(timeStr: string, duration: number, lunchBlock: { enabled: boolean; start: string; end: string }): boolean {
+  if (!lunchBlock.enabled) return false
+  
+  const [slotHours, slotMinutes] = timeStr.split(':').map(Number)
+  const [lunchStartHours, lunchStartMinutes] = lunchBlock.start.split(':').map(Number)
+  const [lunchEndHours, lunchEndMinutes] = lunchBlock.end.split(':').map(Number)
+  
+  const slotStartMinutes = slotHours * 60 + slotMinutes
+  const slotEndMinutes = slotStartMinutes + duration
+  const lunchStartTotalMinutes = lunchStartHours * 60 + lunchStartMinutes
+  const lunchEndTotalMinutes = lunchEndHours * 60 + lunchEndMinutes
+  
+  // Check if slot overlaps with lunch block
+  // Overlap occurs if slot starts before lunch ends AND slot ends after lunch starts
+  return slotStartMinutes < lunchEndTotalMinutes && slotEndMinutes > lunchStartTotalMinutes
+}
+
+async function getBookingBlocksSettings(): Promise<BookingBlocksSettings> {
+  try {
+    const blocksDoc = await db.collection('settings').doc('bookingBlocks').get()
+    if (blocksDoc.exists) {
+      const data = blocksDoc.data()
+      return {
+        bankHolidays: data?.bankHolidays || getDefaultBankHolidays(),
+        lunchBlock: {
+          enabled: data?.lunchBlock?.enabled ?? false,
+          start: data?.lunchBlock?.start || '12:00',
+          end: data?.lunchBlock?.end || '13:00'
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Failed to get booking blocks settings:', error)
+  }
+  return getDefaultBookingBlocks()
 }
 
 async function validateToken(token: string): Promise<FirebaseFirestore.DocumentSnapshot> {
@@ -194,8 +283,14 @@ export const getBookingAvailability = onCall<{ token: string }>(
       settings = getDefaultSettings()
     }
     
+    // Get booking blocks settings (bank holidays)
+    const blocksSettings = await getBookingBlocksSettings()
+    
     // Get fully booked dates (dates where all slots are taken)
     const fullyBookedDates: string[] = []
+    
+    // Add bank holidays to blocked dates
+    const blockedDates: string[] = [...blocksSettings.bankHolidays]
     
     // Query interviews in the booking window
     const now = new Date()
@@ -233,56 +328,92 @@ export const getBookingAvailability = onCall<{ token: string }>(
     }
     
     return {
-      settings,
-      fullyBookedDates
+      settings: {
+        schedule: settings.schedule,
+        advanceBookingDays: settings.advanceBookingDays,
+        minNoticeHours: settings.minNoticeHours,
+        slotDuration: settings.slotDuration
+      },
+      fullyBookedDates,
+      blockedDates, // Bank holidays and other blocked dates
+      lunchBlock: blocksSettings.lunchBlock // Send to client for display purposes
     }
   }
 )
 
 // ============================================================================
-// P2.3 & P2.4: GET TIME SLOTS FOR DATE
+// P2.3: GET TIME SLOTS FOR A DATE
 // ============================================================================
 
-export const getBookingTimeSlots = onCall<{ token: string; date: string }>(
+export const getBookingTimeSlots = onCall<{ token: string; date: string; type?: 'interview' | 'trial' }>(
   { cors: true, region: 'us-central1' },
   async (request) => {
-    const { token, date } = request.data
+    const { token, date, type } = request.data
     
     if (!token || !date) {
       throw new HttpsError('invalid-argument', 'Token and date are required')
     }
     
-    // Validate token and get booking link data
+    // Validate token
     const linkDoc = await validateToken(token)
     const linkData = linkDoc.data()!
-    
-    // Parse date
-    const selectedDate = new Date(date + 'T00:00:00')
-    if (isNaN(selectedDate.getTime())) {
-      throw new HttpsError('invalid-argument', 'Invalid date format')
-    }
+    const bookingType = type || linkData.type || 'interview'
     
     // Get availability settings
     let settings: AvailabilitySettings
     try {
       const settingsDoc = await db.collection('settings').doc('bookingAvailability').get()
-      settings = settingsDoc.exists ? settingsDoc.data() as AvailabilitySettings : getDefaultSettings()
-    } catch {
+      if (settingsDoc.exists) {
+        const data = settingsDoc.data()
+        settings = {
+          schedule: data?.schedule || getDefaultSettings().schedule,
+          slotDuration: data?.slotDuration || 30,
+          bufferTime: data?.bufferTime || 15,
+          advanceBookingDays: data?.advanceBookingDays || 14,
+          minNoticeHours: data?.minNoticeHours || 24,
+          enabled: data?.enabled !== false
+        }
+      } else {
+        settings = getDefaultSettings()
+      }
+    } catch (error) {
+      console.error('Failed to get settings:', error)
       settings = getDefaultSettings()
     }
     
+    // Get booking blocks settings
+    const blocksSettings = await getBookingBlocksSettings()
+    
+    // Check if date is a bank holiday
+    if (isBankHoliday(date, blocksSettings.bankHolidays)) {
+      return { 
+        slots: [], 
+        date,
+        blocked: true,
+        blockReason: 'Bank Holiday - No bookings available'
+      }
+    }
+    
+    // Get the selected date info
+    const selectedDate = new Date(date + 'T00:00:00')
+    const dayOfWeek = selectedDate.getDay()
+    const dayName = DAYS_FULL[dayOfWeek] as keyof WeeklySchedule
+    
     // Get day schedule
-    const dayName = DAYS_FULL[selectedDate.getDay()] as keyof WeeklySchedule
     const daySchedule = settings.schedule[dayName]
     
     if (!daySchedule?.enabled || !daySchedule.slots?.length) {
       return { slots: [], date }
     }
     
-    // Determine duration based on booking type
-    const duration = linkData.type === 'trial' ? 240 : (settings.slotDuration || 30)
+    // Determine slot duration based on booking type
+    // Interviews: 30 mins, Trials: 4 hours (240 mins)
+    const slotDuration = bookingType === 'trial' ? 240 : (settings.slotDuration || 30)
     const bufferTime = settings.bufferTime || 15
     const minNoticeHours = settings.minNoticeHours || 24
+    
+    // For trials, we use larger intervals between start times
+    const slotInterval = bookingType === 'trial' ? 60 : slotDuration
     
     // Get existing bookings for this date
     const dayStart = new Date(selectedDate)
@@ -290,68 +421,79 @@ export const getBookingTimeSlots = onCall<{ token: string; date: string }>(
     const dayEnd = new Date(selectedDate)
     dayEnd.setHours(23, 59, 59, 999)
     
-    const existingBookings: Array<{ startMinutes: number; endMinutes: number }> = []
-    
+    let existingBookings: admin.firestore.QuerySnapshot
     try {
-      const bookingsSnapshot = await db
+      existingBookings = await db
         .collection('interviews')
         .where('scheduledDate', '>=', admin.firestore.Timestamp.fromDate(dayStart))
         .where('scheduledDate', '<=', admin.firestore.Timestamp.fromDate(dayEnd))
         .where('status', 'in', ['scheduled', 'confirmed'])
         .get()
-      
-      bookingsSnapshot.docs.forEach(doc => {
-        const data = doc.data()
-        const bookingDate = data.scheduledDate?.toDate?.()
-        if (bookingDate) {
-          const startMinutes = bookingDate.getHours() * 60 + bookingDate.getMinutes()
-          const bookingDuration = data.duration || 30
-          existingBookings.push({
-            startMinutes,
-            endMinutes: startMinutes + bookingDuration
-          })
-        }
-      })
     } catch (error) {
       console.error('Failed to get existing bookings:', error)
+      existingBookings = { docs: [] } as any
     }
     
     // Generate time slots
     const slots: TimeSlot[] = []
     const now = new Date()
-    const minBookingTime = new Date(now.getTime() + minNoticeHours * 60 * 60 * 1000)
+    const minNoticeTime = new Date(now.getTime() + minNoticeHours * 60 * 60 * 1000)
     
-    // For trials, use duration-based intervals; for interviews use 30-min intervals
-    const slotInterval = duration >= 240 ? duration : 30
-    
-    for (const windowSlot of daySchedule.slots) {
-      const [startHour, startMin] = windowSlot.start.split(':').map(Number)
-      const [endHour, endMin] = windowSlot.end.split(':').map(Number)
+    for (const slot of daySchedule.slots) {
+      const [startHour, startMin] = slot.start.split(':').map(Number)
+      const [endHour, endMin] = slot.end.split(':').map(Number)
       
       let currentMinutes = startHour * 60 + startMin
       const endMinutes = endHour * 60 + endMin
       
-      while (currentMinutes + duration <= endMinutes) {
-        const hour = Math.floor(currentMinutes / 60)
-        const min = currentMinutes % 60
-        const timeStr = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`
+      while (currentMinutes + slotDuration <= endMinutes) {
+        const hours = Math.floor(currentMinutes / 60)
+        const mins = currentMinutes % 60
+        const timeStr = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`
         
-        // Create slot datetime for comparison
-        const slotDate = new Date(selectedDate)
-        slotDate.setHours(hour, min, 0, 0)
+        // Create slot start/end times
+        const slotStart = new Date(selectedDate)
+        slotStart.setHours(hours, mins, 0, 0)
+        const slotEnd = new Date(slotStart.getTime() + slotDuration * 60000)
         
-        // Check if slot meets minimum notice requirement
-        const meetsNotice = slotDate > minBookingTime
+        // Check minimum notice
+        const meetsNotice = slotStart >= minNoticeTime
         
         // Check for conflicts with existing bookings
-        const slotEndMinutes = currentMinutes + duration
-        const hasConflict = existingBookings.some(booking => {
-          return currentMinutes < booking.endMinutes && slotEndMinutes > booking.startMinutes
+        const hasConflict = existingBookings.docs.some(doc => {
+          const data = doc.data()
+          const existingStart = data.scheduledDate?.toDate?.()
+          if (!existingStart) return false
+          
+          const existingDuration = data.duration || 30
+          const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000)
+          
+          // Add buffer time to check
+          const bufferedSlotStart = new Date(slotStart.getTime() - bufferTime * 60000)
+          const bufferedSlotEnd = new Date(slotEnd.getTime() + bufferTime * 60000)
+          
+          return bufferedSlotStart < existingEnd && bufferedSlotEnd > existingStart
         })
+        
+        // Check if slot falls within lunch block
+        const inLunchBlock = isInLunchBlock(timeStr, slotDuration, blocksSettings.lunchBlock)
+        
+        // Determine availability and reason
+        let available = meetsNotice && !hasConflict && !inLunchBlock
+        let reason: string | undefined = undefined
+        
+        if (!meetsNotice) {
+          reason = 'Too short notice'
+        } else if (hasConflict) {
+          reason = 'Already booked'
+        } else if (inLunchBlock) {
+          reason = 'Lunch break'
+        }
         
         slots.push({
           time: timeStr,
-          available: meetsNotice && !hasConflict
+          available,
+          ...(reason && { reason })
         })
         
         currentMinutes += slotInterval + bufferTime
@@ -384,6 +526,22 @@ export const submitBooking = onCall<{ token: string; date: string; time: string 
     const linkDoc = await validateToken(token)
     const linkData = linkDoc.data()!
     
+    // Get booking blocks settings and validate
+    const blocksSettings = await getBookingBlocksSettings()
+    
+    // Check if date is a bank holiday
+    if (isBankHoliday(date, blocksSettings.bankHolidays)) {
+      throw new HttpsError('invalid-argument', 'Cannot book on a bank holiday')
+    }
+    
+    // Determine duration based on type
+    const duration = linkData.type === 'trial' ? 240 : 30
+    
+    // Check if time falls within lunch block
+    if (isInLunchBlock(time, duration, blocksSettings.lunchBlock)) {
+      throw new HttpsError('invalid-argument', 'Cannot book during lunch break')
+    }
+    
     // Parse date and time
     const [hours, minutes] = time.split(':').map(Number)
     const scheduledDate = new Date(date + 'T00:00:00')
@@ -399,8 +557,6 @@ export const submitBooking = onCall<{ token: string; date: string; time: string 
       throw new HttpsError('invalid-argument', 'Cannot book a time in the past')
     }
     
-    // Determine duration
-    const duration = linkData.type === 'trial' ? 240 : 30
     const endTime = new Date(scheduledDate.getTime() + duration * 60000)
     
     // Check for conflicts (double-booking prevention)
