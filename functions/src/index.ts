@@ -560,12 +560,27 @@ export const validateBookingToken = onCall<{ token: string }>(
         return { valid: false, error: 'This booking link has already been used' }
       }
       
+      // Get the correct slot duration from settings for interviews
+      let interviewDuration = 30 // default
+      if (data.type === 'interview') {
+        try {
+          const settingsDoc = await db.collection('settings').doc('interviewAvailability').get()
+          if (settingsDoc.exists) {
+            interviewDuration = settingsDoc.data()?.slotDuration || 30
+          }
+        } catch (settingsError) {
+          console.error('Failed to get slot duration from settings:', settingsError)
+        }
+      }
+      
+      const duration = data.duration || (data.type === 'interview' ? interviewDuration : 240)
+      
       return {
         valid: true,
         data: {
           id: doc.id, candidateId: data.candidateId, candidateName: data.candidateName,
           candidateEmail: data.candidateEmail, type: data.type,
-          duration: data.duration || (data.type === 'interview' ? 30 : 240),
+          duration,
           jobId: data.jobId, jobTitle: data.jobTitle, branchId: data.branchId,
           branchName: data.branchName || data.location, branchAddress: data.branchAddress,
           notes: data.notes, expiresAt: expiresAt.toISOString(),

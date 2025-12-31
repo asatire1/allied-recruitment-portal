@@ -1045,6 +1045,21 @@
   font-size: 14px;
 }
 
+/* Number input improvements */
+.availability-form-grid .form-group input[type="number"] {
+  width: 100%;
+  min-width: 80px;
+  -moz-appearance: textfield;
+}
+
+.availability-form-grid .form-group input[type="number"]::-webkit-outer-spin-button,
+.availability-form-grid .form-group input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: inner-spin-button;
+  opacity: 1;
+  height: 32px;
+  cursor: pointer;
+}
+
 .form-help {
   font-size: 12px;
   color: var(--color-gray-500);

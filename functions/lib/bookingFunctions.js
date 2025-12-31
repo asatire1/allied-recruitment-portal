@@ -221,7 +221,7 @@ exports.getBookingAvailability = (0, https_1.onCall)({ cors: true, region: 'us-c
     // Get availability settings
     let settings;
     try {
-        const settingsDoc = await db.collection('settings').doc('bookingAvailability').get();
+        const settingsDoc = await db.collection('settings').doc('interviewAvailability').get();
         if (settingsDoc.exists) {
             const data = settingsDoc.data();
             settings = {
@@ -306,7 +306,7 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({ cors: true, region: 'us-cent
     // Get availability settings
     let settings;
     try {
-        const settingsDoc = await db.collection('settings').doc('bookingAvailability').get();
+        const settingsDoc = await db.collection('settings').doc('interviewAvailability').get();
         if (settingsDoc.exists) {
             const data = settingsDoc.data();
             settings = {
@@ -445,12 +445,23 @@ exports.submitBooking = (0, https_1.onCall)({
     const linkData = linkDoc.data();
     // Get booking blocks settings and validate
     const blocksSettings = await getBookingBlocksSettings();
+    // Get availability settings for slot duration
+    let slotDuration = 30; // default
+    try {
+        const settingsDoc = await db.collection('settings').doc('interviewAvailability').get();
+        if (settingsDoc.exists) {
+            slotDuration = settingsDoc.data()?.slotDuration || 30;
+        }
+    }
+    catch (error) {
+        console.error('Failed to get slot duration from settings:', error);
+    }
     // Check if date is a bank holiday
     if (isBankHoliday(date, blocksSettings.bankHolidays)) {
         throw new https_1.HttpsError('invalid-argument', 'Cannot book on a bank holiday');
     }
-    // Determine duration based on type
-    const duration = linkData.type === 'trial' ? 240 : 30;
+    // Determine duration based on type (trials are always 4 hours, interviews use settings)
+    const duration = linkData.type === 'trial' ? 240 : slotDuration;
     // Check if time falls within lunch block
     if (isInLunchBlock(time, duration, blocksSettings.lunchBlock)) {
         throw new https_1.HttpsError('invalid-argument', 'Cannot book during lunch break');
