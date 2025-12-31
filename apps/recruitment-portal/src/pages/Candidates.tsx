@@ -1334,7 +1334,8 @@ export function Candidates() {
     }
 
     setBulkInviteProcessing(false)
-    clearSelection()
+    // Don't clear selection here - let user see results and click WhatsApp buttons
+    // Selection will be cleared when modal is closed
   }
 
   // Simple string hash function for token
@@ -1390,6 +1391,7 @@ export function Candidates() {
   const closeBulkInviteModal = () => {
     setShowBulkInviteModal(false)
     setBulkInviteResults([])
+    clearSelection() // Clear selection when modal closes
   }
 
   // ==========================================================================
@@ -2759,6 +2761,8 @@ export function Candidates() {
         onClose={closeBulkInviteModal}
         title={`Send ${bulkInviteType === 'interview' ? 'Interview' : 'Trial'} Invites`}
         size="lg"
+        closeOnOverlayClick={!bulkInviteProcessing && bulkInviteResults.length === 0}
+        closeOnEscape={!bulkInviteProcessing}
       >
         <div className="bulk-invite-modal">
           {!bulkInviteProcessing && bulkInviteResults.length === 0 && (
@@ -2868,6 +2872,25 @@ export function Candidates() {
               </div>
 
               <div className="modal-actions">
+                {bulkInviteResults.filter(r => r.success && r.candidatePhone).length > 0 && (
+                  <Button 
+                    variant="secondary" 
+                    onClick={() => {
+                      // Open WhatsApp for each successful result with a delay
+                      const successfulResults = bulkInviteResults.filter(r => r.success && r.candidatePhone && r.bookingUrl)
+                      successfulResults.forEach((result, index) => {
+                        setTimeout(() => {
+                          openWhatsApp(
+                            result.candidatePhone,
+                            getWhatsAppMessage(result.candidateName, result.bookingUrl!, bulkInviteType)
+                          )
+                        }, index * 500) // 500ms delay between each
+                      })
+                    }}
+                  >
+                    📱 Open All WhatsApp ({bulkInviteResults.filter(r => r.success && r.candidatePhone).length})
+                  </Button>
+                )}
                 <Button variant="primary" onClick={closeBulkInviteModal}>
                   Done
                 </Button>
