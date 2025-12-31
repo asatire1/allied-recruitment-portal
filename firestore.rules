@@ -274,25 +274,22 @@ service cloud.firestore {
     // BOOKING LINKS COLLECTION (R6.3-R6.11)
     // ============================================================
     match /bookingLinks/{linkId} {
-      // Only recruiters can read booking links
-      allow read: if isRecruiterOrAdmin();
+      // Public can read booking links (needed for booking page token validation)
+      // Recruiters can read all booking links
+      allow read: if true;
       
-      // Only recruiters can create booking links
+      // Recruiters can create booking links
       allow create: if isRecruiterOrAdmin() 
-        && isValidBookingLinkData()
-        && request.resource.data.status == 'active'
-        && isValidTimestamp('createdAt');
+        && isValidBookingLinkData();
       
       // Recruiters can update status (revoke, mark used)
-      // Cloud Functions can update usage (via admin SDK)
+      // Public can update useCount when booking (via self-service)
       allow update: if isRecruiterOrAdmin() 
-        && isUnchanged('tokenHash')
-        && isUnchanged('candidateId')
-        && isUnchanged('createdAt')
-        && isUnchanged('createdBy');
+        || isValidBookingLinkUpdate();
       
       allow delete: if isSuperAdmin();
       
+      // Validation for creating booking links (relaxed for bulk invites)
       function isValidBookingLinkData() {
         let data = request.resource.data;
         return data.candidateId is string
@@ -300,11 +297,16 @@ service cloud.firestore {
           && data.tokenHash is string
           && data.type in ['interview', 'trial']
           && data.status in ['active', 'used', 'expired', 'revoked']
-          && data.expiresAt is timestamp
           && data.maxUses is number
-          && data.maxUses >= 1
-          && data.duration is number
-          && data.duration > 0;
+          && data.maxUses >= 1;
+        // Note: duration and expiresAt are optional for flexibility
+      }
+      
+      // Allow public to mark booking link as used
+      function isValidBookingLinkUpdate() {
+        let allowedFields = ['useCount', 'status', 'updatedAt', 'usedAt'];
+        let changedFields = request.resource.data.diff(resource.data).affectedKeys();
+        return changedFields.hasOnly(allowedFields);
       }
     }
     
