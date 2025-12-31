@@ -1,19 +1,20 @@
 import { useEffect, useState } from 'react'
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
-import { 
+import {
   getFirebaseDb,
   PLACEHOLDER_DEFINITIONS,
   type PlaceholderDefinition,
   DEFAULT_INTERVIEW_AVAILABILITY,
   DEFAULT_TRIAL_AVAILABILITY,
 } from '@allied/shared-lib'
-import type { 
+import type {
   AvailabilitySlot,
   InterviewAvailabilitySettings,
-  TrialAvailabilitySettings 
+  TrialAvailabilitySettings
 } from '@allied/shared-lib'
 import { Card, Button, Input, Spinner, Modal, Select, Textarea } from '@allied/shared-ui'
 import { useAuth } from '../contexts/AuthContext'
+import { BookingBlocksSettings } from '../components/BookingBlocksSettings'
 import './Settings.css'
 
 // ============================================================================
@@ -94,6 +95,7 @@ const SETTINGS_TABS: SettingsTab[] = [
   { id: 'job-titles', label: 'Job Titles', icon: '💼' },
   { id: 'interview-availability', label: 'Interview Availability', icon: '📅' },
   { id: 'trial-availability', label: 'Trial Availability', icon: '🏥' },
+  { id: 'booking-blocks', label: 'Booking Restrictions', icon: '🚫' },
   { id: 'whatsapp-templates', label: 'WhatsApp Templates', icon: '💬' },
   { id: 'general', label: 'General', icon: '⚙️' },
 ]
@@ -271,8 +273,8 @@ const DEFAULT_JOB_CATEGORIES = [
 ]
 
 const DEFAULT_JOB_TITLES = [
-  { 
-    title: 'Pharmacist', 
+  {
+    title: 'Pharmacist',
     category: 'clinical',
     descriptionTemplate: `We are looking for a qualified Pharmacist to join our team.
 
@@ -289,8 +291,8 @@ Requirements:
 • Strong communication and customer service skills
 • Attention to detail and accuracy`
   },
-  { 
-    title: 'Pharmacy Technician', 
+  {
+    title: 'Pharmacy Technician',
     category: 'clinical',
     descriptionTemplate: `We are seeking a Pharmacy Technician to support our pharmacy team.
 
@@ -307,8 +309,8 @@ Requirements:
 • Good organisational skills
 • Experience in community pharmacy preferred`
   },
-  { 
-    title: 'Dispenser', 
+  {
+    title: 'Dispenser',
     category: 'dispensary',
     descriptionTemplate: `We are looking for a Dispenser to join our busy dispensary team.
 
@@ -325,8 +327,8 @@ Requirements:
 • Good communication skills
 • Ability to work under pressure`
   },
-  { 
-    title: 'Dispensary Assistant', 
+  {
+    title: 'Dispensary Assistant',
     category: 'dispensary',
     descriptionTemplate: `Join our team as a Dispensary Assistant.
 
@@ -343,8 +345,8 @@ Requirements:
 • Willingness to learn
 • Team player attitude`
   },
-  { 
-    title: 'Counter Assistant', 
+  {
+    title: 'Counter Assistant',
     category: 'retail',
     descriptionTemplate: `We are recruiting a Counter Assistant for our pharmacy.
 
@@ -361,8 +363,8 @@ Requirements:
 • Good communication skills
 • Flexible and reliable`
   },
-  { 
-    title: 'Healthcare Assistant', 
+  {
+    title: 'Healthcare Assistant',
     category: 'retail',
     descriptionTemplate: `Join us as a Healthcare Assistant.
 
@@ -379,8 +381,8 @@ Requirements:
 • Willingness to undertake training
 • Friendly and approachable manner`
   },
-  { 
-    title: 'Branch Manager', 
+  {
+    title: 'Branch Manager',
     category: 'management',
     descriptionTemplate: `We are seeking an experienced Branch Manager to lead our pharmacy.
 
@@ -398,8 +400,8 @@ Requirements:
 • Pharmacy experience preferred
 • Excellent organisational abilities`
   },
-  { 
-    title: 'Area Manager', 
+  {
+    title: 'Area Manager',
     category: 'management',
     descriptionTemplate: `We are looking for an Area Manager to oversee multiple pharmacy branches.
 
@@ -417,8 +419,8 @@ Requirements:
 • Full UK driving licence
 • Pharmacy sector experience preferred`
   },
-  { 
-    title: 'Delivery Driver', 
+  {
+    title: 'Delivery Driver',
     category: 'support',
     descriptionTemplate: `Join our team as a Delivery Driver.
 
@@ -436,8 +438,8 @@ Requirements:
 • Reliable and punctual
 • Customer-focused attitude`
   },
-  { 
-    title: 'Store Assistant', 
+  {
+    title: 'Store Assistant',
     category: 'support',
     descriptionTemplate: `We are recruiting a Store Assistant to join our team.
 
@@ -535,10 +537,10 @@ export function Settings() {
   const [savingTemplate, setSavingTemplate] = useState(false)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<WhatsAppTemplate | null>(null)
-  const [templateForm, setTemplateForm] = useState({ 
-    name: '', 
-    category: 'general' as TemplateCategory, 
-    content: '' 
+  const [templateForm, setTemplateForm] = useState({
+    name: '',
+    category: 'general' as TemplateCategory,
+    content: ''
   })
   const [templateFormError, setTemplateFormError] = useState('')
   const [showDeleteTemplateModal, setShowDeleteTemplateModal] = useState(false)
@@ -943,8 +945,8 @@ export function Settings() {
     }
 
     // Check for duplicate short codes
-    const isDuplicate = entities.some(e => 
-      e.shortCode.toLowerCase() === entityForm.shortCode.toLowerCase() && 
+    const isDuplicate = entities.some(e =>
+      e.shortCode.toLowerCase() === entityForm.shortCode.toLowerCase() &&
       e.id !== editingEntity?.id
     )
     if (isDuplicate) {
@@ -978,8 +980,8 @@ export function Settings() {
           updatedAt: serverTimestamp(),
         })
 
-        setEntities(prev => prev.map(e => 
-          e.id === editingEntity.id 
+        setEntities(prev => prev.map(e =>
+          e.id === editingEntity.id
             ? { ...e, name: entityForm.name.trim(), shortCode: entityForm.shortCode.toLowerCase().trim(), isDefault: entityForm.isDefault }
             : entityForm.isDefault ? { ...e, isDefault: false } : e
         ))
@@ -1014,7 +1016,7 @@ export function Settings() {
         }
 
         setEntities(prev => {
-          const updated = entityForm.isDefault 
+          const updated = entityForm.isDefault
             ? prev.map(e => ({ ...e, isDefault: false }))
             : prev
           return [...updated, newEntity].sort((a, b) => {
@@ -1068,7 +1070,7 @@ export function Settings() {
     try {
       const docRef = doc(db, 'entities', entity.id)
       await updateDoc(docRef, { isActive: !entity.isActive })
-      setEntities(prev => prev.map(e => 
+      setEntities(prev => prev.map(e =>
         e.id === entity.id ? { ...e, isActive: !e.isActive } : e
       ))
     } catch (err) {
@@ -1128,8 +1130,8 @@ export function Settings() {
 
   const handleEditJobTitle = (jobTitle: JobTitle) => {
     setEditingJobTitle(jobTitle)
-    setJobTitleForm({ 
-      title: jobTitle.title, 
+    setJobTitleForm({
+      title: jobTitle.title,
       category: jobTitle.category,
       descriptionTemplate: jobTitle.descriptionTemplate || ''
     })
@@ -1145,7 +1147,7 @@ export function Settings() {
 
     // Check for duplicates
     const duplicate = jobTitles.find(
-      jt => jt.title.toLowerCase() === jobTitleForm.title.trim().toLowerCase() && 
+      jt => jt.title.toLowerCase() === jobTitleForm.title.trim().toLowerCase() &&
            jt.id !== editingJobTitle?.id
     )
     if (duplicate) {
@@ -1164,11 +1166,11 @@ export function Settings() {
           descriptionTemplate: jobTitleForm.descriptionTemplate.trim(),
           updatedAt: serverTimestamp(),
         })
-        setJobTitles(prev => prev.map(jt => 
-          jt.id === editingJobTitle.id 
-            ? { 
-                ...jt, 
-                title: jobTitleForm.title.trim(), 
+        setJobTitles(prev => prev.map(jt =>
+          jt.id === editingJobTitle.id
+            ? {
+                ...jt,
+                title: jobTitleForm.title.trim(),
                 category: jobTitleForm.category,
                 descriptionTemplate: jobTitleForm.descriptionTemplate.trim()
               }
@@ -1209,7 +1211,7 @@ export function Settings() {
         isActive: !jobTitle.isActive,
         updatedAt: serverTimestamp(),
       })
-      setJobTitles(prev => prev.map(jt => 
+      setJobTitles(prev => prev.map(jt =>
         jt.id === jobTitle.id ? { ...jt, isActive: !jt.isActive } : jt
       ))
     } catch (err) {
@@ -1251,8 +1253,8 @@ export function Settings() {
 
   const handleEditJobCategory = (category: JobCategory) => {
     setEditingJobCategory(category)
-    setJobCategoryForm({ 
-      value: category.value, 
+    setJobCategoryForm({
+      value: category.value,
       label: category.label,
       color: category.color
     })
@@ -1267,13 +1269,13 @@ export function Settings() {
     }
 
     // Generate value from label if not set
-    const value = jobCategoryForm.value.trim() || 
+    const value = jobCategoryForm.value.trim() ||
       jobCategoryForm.label.trim().toLowerCase().replace(/[^a-z0-9]/g, '-')
 
     // Check for duplicates
     const duplicate = jobCategories.find(
-      cat => (cat.value.toLowerCase() === value.toLowerCase() || 
-              cat.label.toLowerCase() === jobCategoryForm.label.trim().toLowerCase()) && 
+      cat => (cat.value.toLowerCase() === value.toLowerCase() ||
+              cat.label.toLowerCase() === jobCategoryForm.label.trim().toLowerCase()) &&
              cat.id !== editingJobCategory?.id
     )
     if (duplicate) {
@@ -1291,10 +1293,10 @@ export function Settings() {
           color: jobCategoryForm.color,
           updatedAt: serverTimestamp(),
         })
-        setJobCategories(prev => prev.map(cat => 
-          cat.id === editingJobCategory.id 
-            ? { 
-                ...cat, 
+        setJobCategories(prev => prev.map(cat =>
+          cat.id === editingJobCategory.id
+            ? {
+                ...cat,
                 label: jobCategoryForm.label.trim(),
                 color: jobCategoryForm.color
               }
@@ -1338,7 +1340,7 @@ export function Settings() {
         isActive: !category.isActive,
         updatedAt: serverTimestamp(),
       })
-      setJobCategories(prev => prev.map(cat => 
+      setJobCategories(prev => prev.map(cat =>
         cat.id === category.id ? { ...cat, isActive: !cat.isActive } : cat
       ))
     } catch (err) {
@@ -1386,10 +1388,10 @@ export function Settings() {
 
   const handleEditLocation = (location: Location) => {
     setEditingLocation(location)
-    setLocationForm({ 
-      name: location.name, 
-      address: location.address || '', 
-      city: location.city || '', 
+    setLocationForm({
+      name: location.name,
+      address: location.address || '',
+      city: location.city || '',
       postcode: location.postcode || '',
       region: location.region || ''
     })
@@ -1405,7 +1407,7 @@ export function Settings() {
 
     // Check for duplicates
     const duplicate = locations.find(
-      loc => loc.name.toLowerCase() === locationForm.name.trim().toLowerCase() && 
+      loc => loc.name.toLowerCase() === locationForm.name.trim().toLowerCase() &&
              loc.id !== editingLocation?.id
     )
     if (duplicate) {
@@ -1426,10 +1428,10 @@ export function Settings() {
           region: locationForm.region,
           updatedAt: serverTimestamp(),
         })
-        setLocations(prev => prev.map(loc => 
-          loc.id === editingLocation.id 
-            ? { 
-                ...loc, 
+        setLocations(prev => prev.map(loc =>
+          loc.id === editingLocation.id
+            ? {
+                ...loc,
                 name: locationForm.name.trim(),
                 address: locationForm.address.trim(),
                 city: locationForm.city.trim(),
@@ -1477,7 +1479,7 @@ export function Settings() {
         isActive: !location.isActive,
         updatedAt: serverTimestamp(),
       })
-      setLocations(prev => prev.map(loc => 
+      setLocations(prev => prev.map(loc =>
         loc.id === location.id ? { ...loc, isActive: !loc.isActive } : loc
       ))
     } catch (err) {
@@ -1519,10 +1521,10 @@ export function Settings() {
 
   const handleEditTemplate = (template: WhatsAppTemplate) => {
     setEditingTemplate(template)
-    setTemplateForm({ 
-      name: template.name, 
-      category: template.category, 
-      content: template.content 
+    setTemplateForm({
+      name: template.name,
+      category: template.category,
+      content: template.content
     })
     setTemplateFormError('')
     setShowTemplateModal(true)
@@ -1540,7 +1542,7 @@ export function Settings() {
 
     // Check for duplicates
     const duplicate = templates.find(
-      t => t.name.toLowerCase() === templateForm.name.trim().toLowerCase() && 
+      t => t.name.toLowerCase() === templateForm.name.trim().toLowerCase() &&
            t.id !== editingTemplate?.id
     )
     if (duplicate) {
@@ -1561,10 +1563,10 @@ export function Settings() {
           placeholders,
           updatedAt: serverTimestamp(),
         })
-        setTemplates(prev => prev.map(t => 
-          t.id === editingTemplate.id 
-            ? { 
-                ...t, 
+        setTemplates(prev => prev.map(t =>
+          t.id === editingTemplate.id
+            ? {
+                ...t,
                 name: templateForm.name.trim(),
                 category: templateForm.category,
                 content: templateForm.content.trim(),
@@ -1618,7 +1620,7 @@ export function Settings() {
         active: !template.active,
         updatedAt: serverTimestamp(),
       })
-      setTemplates(prev => prev.map(t => 
+      setTemplates(prev => prev.map(t =>
         t.id === template.id ? { ...t, active: !t.active } : t
       ))
     } catch (err) {
@@ -1860,7 +1862,7 @@ export function Settings() {
   // Filter templates by category and search
   const filteredTemplates = templates.filter(t => {
     const matchesCategory = templateCategoryFilter === 'all' || t.category === templateCategoryFilter
-    const matchesSearch = !templateSearch || 
+    const matchesSearch = !templateSearch ||
       t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
       t.content.toLowerCase().includes(templateSearch.toLowerCase())
     return matchesCategory && matchesSearch
@@ -1880,6 +1882,12 @@ export function Settings() {
   // RENDER TABS
   // ============================================================================
 
+  const renderBookingBlocksTab = () => (
+    <div className="settings-section">
+      <BookingBlocksSettings />
+    </div>
+  )
+
   const renderInterviewAvailabilityTab = () => (
     <div className="settings-section">
       <div className="settings-section-header">
@@ -1887,8 +1895,8 @@ export function Settings() {
           <h2>Interview Availability</h2>
           <p>Configure when candidates can book interviews (typically 30-minute slots)</p>
         </div>
-        <Button 
-          variant="primary" 
+        <Button
+          variant="primary"
           onClick={handleSaveInterviewAvailability}
           disabled={savingInterviewAvailability}
         >
@@ -1971,8 +1979,8 @@ export function Settings() {
             <p className="card-description">Set which days and times are available for interviews</p>
             <div className="schedule-grid">
               {interviewAvailabilityForm.slots.map(slot => (
-                <div 
-                  key={slot.dayOfWeek} 
+                <div
+                  key={slot.dayOfWeek}
                   className={`schedule-day ${slot.enabled ? 'enabled' : 'disabled'}`}
                 >
                   <div className="day-header">
@@ -2025,7 +2033,7 @@ export function Settings() {
                 {interviewBlockedDates.map(date => (
                   <div key={date} className="blocked-date-item">
                     <span>{new Date(date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                    <button 
+                    <button
                       className="remove-date-btn"
                       onClick={() => handleRemoveInterviewBlockedDate(date)}
                       title="Remove"
@@ -2049,8 +2057,8 @@ export function Settings() {
           <h2>Trial Availability</h2>
           <p>Configure when candidates can book trial shifts (4-hour blocks)</p>
         </div>
-        <Button 
-          variant="primary" 
+        <Button
+          variant="primary"
           onClick={handleSaveTrialAvailability}
           disabled={savingTrialAvailability}
         >
@@ -2137,8 +2145,8 @@ export function Settings() {
             <p className="card-description">Set which days and times are available for 4-hour trial shifts</p>
             <div className="schedule-grid">
               {trialAvailabilityForm.slots.map(slot => (
-                <div 
-                  key={slot.dayOfWeek} 
+                <div
+                  key={slot.dayOfWeek}
                   className={`schedule-day ${slot.enabled ? 'enabled' : 'disabled'}`}
                 >
                   <div className="day-header">
@@ -2173,7 +2181,7 @@ export function Settings() {
                         const [endH, endM] = slot.endTime.split(':').map(Number)
                         const totalMinutes = (endH * 60 + endM) - (startH * 60 + startM)
                         const possibleSlots = Math.floor(totalMinutes / (240 + trialAvailabilityForm.bufferTime))
-                        return possibleSlots > 0 
+                        return possibleSlots > 0
                           ? `${possibleSlots} possible trial slot${possibleSlots !== 1 ? 's' : ''}`
                           : 'Not enough time for trials'
                       })()}
@@ -2204,7 +2212,7 @@ export function Settings() {
                 {trialBlockedDates.map(date => (
                   <div key={date} className="blocked-date-item">
                     <span>{new Date(date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                    <button 
+                    <button
                       className="remove-date-btn"
                       onClick={() => handleRemoveTrialBlockedDate(date)}
                       title="Remove"
@@ -2297,10 +2305,10 @@ export function Settings() {
                           className="edit-btn"
                           onClick={() => {
                             setEditingEntity(entity)
-                            setEntityForm({ 
-                              name: entity.name, 
+                            setEntityForm({
+                              name: entity.name,
                               shortCode: entity.shortCode,
-                              isDefault: entity.isDefault 
+                              isDefault: entity.isDefault
                             })
                             setEntityFormError('')
                             setShowEntityModal(true)
@@ -2389,8 +2397,8 @@ export function Settings() {
             return (
               <Card key={category.value} className="job-category-card">
                 <div className="category-header">
-                  <span 
-                    className="category-dot" 
+                  <span
+                    className="category-dot"
                     style={{ backgroundColor: category.color }}
                   />
                   <h3>{category.label}</h3>
@@ -2402,8 +2410,8 @@ export function Settings() {
                     <p className="no-titles">No job titles in this category</p>
                   ) : (
                     titles.map(jt => (
-                      <div 
-                        key={jt.id} 
+                      <div
+                        key={jt.id}
                         className={`job-title-item ${!jt.isActive ? 'inactive' : ''}`}
                       >
                         <div className="job-title-info">
@@ -2595,7 +2603,7 @@ export function Settings() {
             {filteredTemplates.length === 0 ? (
               <Card className="empty-templates">
                 <p>
-                  {templates.length === 0 
+                  {templates.length === 0
                     ? 'No templates yet. Create your first template.'
                     : templateSearch
                     ? 'No templates match your search.'
@@ -2610,7 +2618,7 @@ export function Settings() {
                   <Card key={template.id} className={`template-card ${!template.active ? 'inactive' : ''}`}>
                     <div className="template-header">
                       <div className="template-title-row">
-                        <span 
+                        <span
                           className="template-category-badge"
                           style={{ backgroundColor: `${category?.color}20`, color: category?.color }}
                         >
@@ -2657,12 +2665,12 @@ export function Settings() {
                         </button>
                       </div>
                     </div>
-                    <div 
+                    <div
                       className="template-content-preview"
                       onClick={() => handlePreviewTemplate(template)}
                     >
-                      {template.content.length > 200 
-                        ? template.content.substring(0, 200) + '...' 
+                      {template.content.length > 200
+                        ? template.content.substring(0, 200) + '...'
                         : template.content
                       }
                     </div>
@@ -2682,7 +2690,7 @@ export function Settings() {
           {/* Summary */}
           {templates.length > 0 && (
             <div className="templates-summary">
-              {filteredTemplates.length === templates.length 
+              {filteredTemplates.length === templates.length
                 ? `${templates.length} template${templates.length !== 1 ? 's' : ''}`
                 : `Showing ${filteredTemplates.length} of ${templates.length} templates`
               } • {templates.filter(t => t.active).length} active
@@ -2741,6 +2749,7 @@ export function Settings() {
           {activeTab === 'job-titles' && renderJobTitlesTab()}
           {activeTab === 'interview-availability' && renderInterviewAvailabilityTab()}
           {activeTab === 'trial-availability' && renderTrialAvailabilityTab()}
+          {activeTab === 'booking-blocks' && renderBookingBlocksTab()}
           {activeTab === 'whatsapp-templates' && renderWhatsAppTemplatesTab()}
           {activeTab === 'locations' && renderLocationsTab()}
           {activeTab === 'general' && renderGeneralTab()}
@@ -2827,9 +2836,9 @@ export function Settings() {
             <Button variant="secondary" onClick={() => setShowDeleteEntityModal(false)}>
               Cancel
             </Button>
-            <Button 
-              variant="danger" 
-              onClick={handleDeleteEntity} 
+            <Button
+              variant="danger"
+              onClick={handleDeleteEntity}
               disabled={deletingEntityLoading || deletingEntity?.isDefault}
             >
               {deletingEntityLoading ? 'Deleting...' : 'Delete'}
@@ -2868,7 +2877,7 @@ export function Settings() {
                   type="button"
                   className={`category-option ${jobTitleForm.category === cat.value ? 'selected' : ''}`}
                   onClick={() => setJobTitleForm(prev => ({ ...prev, category: cat.value }))}
-                  style={{ 
+                  style={{
                     '--cat-color': cat.color,
                     borderColor: jobTitleForm.category === cat.value ? cat.color : undefined,
                     backgroundColor: jobTitleForm.category === cat.value ? `${cat.color}15` : undefined,
@@ -2923,9 +2932,9 @@ export function Settings() {
             <Button variant="secondary" onClick={() => setShowDeleteJobTitleModal(false)}>
               Cancel
             </Button>
-            <Button 
-              variant="danger" 
-              onClick={handleDeleteJobTitle} 
+            <Button
+              variant="danger"
+              onClick={handleDeleteJobTitle}
               disabled={deletingJobTitleLoading}
             >
               {deletingJobTitleLoading ? 'Deleting...' : 'Delete'}
@@ -3001,9 +3010,9 @@ export function Settings() {
             <Button variant="secondary" onClick={() => setShowDeleteJobCategoryModal(false)}>
               Cancel
             </Button>
-            <Button 
-              variant="danger" 
-              onClick={handleDeleteJobCategory} 
+            <Button
+              variant="danger"
+              onClick={handleDeleteJobCategory}
               disabled={deletingJobCategoryLoading}
             >
               {deletingJobCategoryLoading ? 'Deleting...' : 'Delete'}
@@ -3104,9 +3113,9 @@ export function Settings() {
             <Button variant="secondary" onClick={() => setShowDeleteLocationModal(false)}>
               Cancel
             </Button>
-            <Button 
-              variant="danger" 
-              onClick={handleDeleteLocation} 
+            <Button
+              variant="danger"
+              onClick={handleDeleteLocation}
               disabled={deletingLocationLoading}
             >
               {deletingLocationLoading ? 'Deleting...' : 'Delete'}
@@ -3140,9 +3149,9 @@ export function Settings() {
               <label>Category *</label>
               <Select
                 value={templateForm.category}
-                onChange={(e) => setTemplateForm(prev => ({ 
-                  ...prev, 
-                  category: e.target.value as TemplateCategory 
+                onChange={(e) => setTemplateForm(prev => ({
+                  ...prev,
+                  category: e.target.value as TemplateCategory
                 }))}
                 options={TEMPLATE_CATEGORIES.map(c => ({ value: c.value, label: c.label }))}
               />
@@ -3152,8 +3161,8 @@ export function Settings() {
           <div className="form-group">
             <div className="template-content-header">
               <label>Message Content *</label>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 className="placeholder-help-btn"
                 onClick={() => setShowPlaceholderHelp(!showPlaceholderHelp)}
               >
@@ -3235,9 +3244,9 @@ export function Settings() {
             <Button variant="secondary" onClick={() => setShowDeleteTemplateModal(false)}>
               Cancel
             </Button>
-            <Button 
-              variant="danger" 
-              onClick={handleDeleteTemplate} 
+            <Button
+              variant="danger"
+              onClick={handleDeleteTemplate}
               disabled={deletingTemplateLoading}
             >
               {deletingTemplateLoading ? 'Deleting...' : 'Delete'}
@@ -3256,11 +3265,11 @@ export function Settings() {
         {previewingTemplate && (
           <div className="template-preview-modal">
             <div className="preview-header">
-              <span 
+              <span
                 className="template-category-badge"
-                style={{ 
-                  backgroundColor: `${TEMPLATE_CATEGORIES.find(c => c.value === previewingTemplate.category)?.color}20`, 
-                  color: TEMPLATE_CATEGORIES.find(c => c.value === previewingTemplate.category)?.color 
+                style={{
+                  backgroundColor: `${TEMPLATE_CATEGORIES.find(c => c.value === previewingTemplate.category)?.color}20`,
+                  color: TEMPLATE_CATEGORIES.find(c => c.value === previewingTemplate.category)?.color
                 }}
               >
                 {TEMPLATE_CATEGORIES.find(c => c.value === previewingTemplate.category)?.label}
@@ -3296,8 +3305,8 @@ export function Settings() {
               <Button variant="secondary" onClick={() => setPreviewingTemplate(null)}>
                 Close
               </Button>
-              <Button 
-                variant="secondary" 
+              <Button
+                variant="secondary"
                 onClick={() => {
                   handleDuplicateTemplate(previewingTemplate)
                   setPreviewingTemplate(null)
@@ -3305,8 +3314,8 @@ export function Settings() {
               >
                 Duplicate
               </Button>
-              <Button 
-                variant="primary" 
+              <Button
+                variant="primary"
                 onClick={() => {
                   handleEditTemplate(previewingTemplate)
                   setPreviewingTemplate(null)
