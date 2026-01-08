@@ -236,8 +236,8 @@
 @media (prefers-color-scheme: dark) {
   /* Reserved for dark mode styles */
 }
-/* Add to your existing sidebar CSS */
 
+/* Sidebar logo */
 .sidebar-logo-img {
   height: 32px;
   width: auto;

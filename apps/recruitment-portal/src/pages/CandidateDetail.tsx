@@ -285,10 +285,247 @@ export function CandidateDetail() {
   const [jobs, setJobs] = useState<any[]>([])
   const [loadingJobs, setLoadingJobs] = useState(false)
   const [showJobAssignModal, setShowJobAssignModal] = useState(false)
+
+  // Schedule Interview/Trial Modal state
+  const [showScheduleModal, setShowScheduleModal] = useState(false)
+  const [scheduleType, setScheduleType] = useState<'interview' | 'trial'>('interview')
+  const [scheduleDate, setScheduleDate] = useState('')
+  const [scheduleTime, setScheduleTime] = useState('')
+  const [scheduleDuration, setScheduleDuration] = useState(30)
+  const [scheduleNotes, setScheduleNotes] = useState('')
+  const [sendScheduleConfirmation, setSendScheduleConfirmation] = useState(true)
+  const [scheduling, setScheduling] = useState(false)
+  const [scheduleError, setScheduleError] = useState<string | null>(null)
+  const [selectedBranchId, setSelectedBranchId] = useState('')
+  const [branches, setBranches] = useState<any[]>([])
+  const [loadingBranches, setLoadingBranches] = useState(false)
+  const [availableDates, setAvailableDates] = useState<Date[]>([])
+  const [selectedScheduleDate, setSelectedScheduleDate] = useState<Date | null>(null)
+  const [timeSlots, setTimeSlots] = useState<Array<{ time: string; available: boolean }>>([])
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('')
+  const [loadingAvailability, setLoadingAvailability] = useState(false)
+  const [loadingSlots, setLoadingSlots] = useState(false)
+  const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectedJobId, setSelectedJobId] = useState<string>('')
   const [assigningJob, setAssigningJob] = useState(false)
 
   const db = getFirebaseDb()
+
+  
+
+  // Fetch availability when schedule modal opens
+  useEffect(() => {
+    const fetchAvailability = async () => {
+      if (!showScheduleModal) return
+      
+      setLoadingAvailability(true)
+      try {
+        const functions = getFirebaseFunctions()
+        const getAvailability = httpsCallable(functions, 'getBookingAvailability')
+        
+        // Create a temporary token for internal scheduling
+        const result = await getAvailability({ token: '__internal__', type: scheduleType })
+        
+        if (result.data) {
+          // Generate available dates for next 14 days based on settings
+          const settings = result.data.settings || {}
+          const fullyBookedDates = result.data.fullyBookedDates || []
+          const dates: Date[] = []
+          const today = new Date()
+          today.setHours(0, 0, 0, 0)
+          
+          const schedule = settings.schedule || {
+            monday: { enabled: true }, tuesday: { enabled: true },
+            wednesday: { enabled: true }, thursday: { enabled: true },
+            friday: { enabled: true }, saturday: { enabled: false },
+            sunday: { enabled: false }
+          }
+          
+          const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+          
+          for (let i = 0; i < 30; i++) {
+            const date = new Date(today)
+            date.setDate(today.getDate() + i)
+            const dayName = dayNames[date.getDay()]
+            const daySchedule = schedule[dayName]
+            
+            if (daySchedule?.enabled) {
+              const dateStr = date.toISOString().split('T')[0]
+              if (!fullyBookedDates.includes(dateStr)) {
+                dates.push(new Date(date))
+              }
+            }
+          }
+          
+          setAvailableDates(dates)
+          setScheduleDuration(settings.slotDuration || (scheduleType === 'interview' ? 30 : 240))
+        }
+      } catch (err) {
+        console.error('Error fetching availability:', err)
+        // Fallback: enable all weekdays
+        const dates: Date[] = []
+        const today = new Date()
+        for (let i = 0; i < 30; i++) {
+          const date = new Date(today)
+          date.setDate(today.getDate() + i)
+          if (date.getDay() !== 0 && date.getDay() !== 6) {
+            dates.push(date)
+          }
+        }
+        setAvailableDates(dates)
+      } finally {
+        setLoadingAvailability(false)
+      }
+    }
+    
+    fetchAvailability()
+  }, [showScheduleModal, scheduleType])
+
+  // Fetch time slots when date is selected
+  useEffect(() => {
+    const fetchTimeSlots = async () => {
+      if (!selectedScheduleDate) {
+        setTimeSlots([])
+        return
+      }
+      
+      setLoadingSlots(true)
+      setSelectedTimeSlot('')
+      
+      try {
+        const functions = getFirebaseFunctions()
+        const getSlots = httpsCallable(functions, 'getBookingTimeSlots')
+        
+        const result = await getSlots({
+          token: '__internal__',
+          date: selectedScheduleDate.toISOString().split('T')[0],
+          type: scheduleType
+        })
+        
+        if (result.data?.slots) {
+          setTimeSlots(result.data.slots)
+        }
+      } catch (err) {
+        console.error('Error fetching time slots:', err)
+        // Generate fallback slots
+        const slots = []
+        for (let h = 9; h < 17; h++) {
+          slots.push({ time: h.toString().padStart(2, '0') + ':00', available: true })
+          slots.push({ time: h.toString().padStart(2, '0') + ':30', available: true })
+        }
+        setTimeSlots(slots)
+      } finally {
+        setLoadingSlots(false)
+      }
+    }
+    
+    fetchTimeSlots()
+  }, [selectedScheduleDate, scheduleType])
+
+  // Load branches for direct scheduling
+  useEffect(() => {
+    const fetchBranches = async () => {
+      if (!showScheduleModal) return
+      setLoadingBranches(true)
+      try {
+        const branchesRef = collection(db, 'branches')
+        const snapshot = await getDocs(branchesRef)
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter((b) => b.isActive !== false)
+        setBranches(data)
+      } catch (err) {
+        console.error('Error fetching branches:', err)
+      } finally {
+        setLoadingBranches(false)
+      }
+    }
+    fetchBranches()
+  }, [db, showScheduleModal])
+
+  // Open schedule modal
+  const openScheduleModal = (type: 'interview' | 'trial') => {
+    setScheduleType(type)
+    setScheduleDate('')
+    setScheduleTime('')
+    setScheduleDuration(type === 'interview' ? 30 : 240)
+    setScheduleNotes('')
+    setSendScheduleConfirmation(true)
+    setScheduleError(null)
+    setSelectedBranchId(candidate?.branchId || '')
+    setSelectedScheduleDate(null)
+    setSelectedTimeSlot('')
+    setTimeSlots([])
+    setCurrentMonth(new Date())
+    setShowScheduleModal(true)
+  }
+
+  // Handle direct scheduling
+  const handleDirectSchedule = async () => {
+    if (!candidate || !selectedScheduleDate || !selectedTimeSlot) {
+      setScheduleError('Please select a date and time')
+      return
+    }
+    if (scheduleType === 'trial' && !selectedBranchId) {
+      setScheduleError('Please select a branch for the trial')
+      return
+    }
+    setScheduling(true)
+    setScheduleError(null)
+    try {
+      const functions = getFirebaseFunctions()
+      const scheduleDirectInterview = httpsCallable(functions, 'scheduleDirectInterview')
+      const selectedBranch = branches.find(b => b.id === selectedBranchId)
+      const result = await scheduleDirectInterview({
+        candidateId: candidate.id,
+        candidateName: `${candidate.firstName} ${candidate.lastName}`,
+        candidateEmail: candidate.email || undefined,
+        candidatePhone: candidate.phone || undefined,
+        type: scheduleType,
+        date: selectedScheduleDate.toISOString().split('T')[0],
+        time: selectedTimeSlot,
+        duration: scheduleDuration,
+        jobId: candidate.jobId || undefined,
+        jobTitle: candidate.jobTitle || undefined,
+        branchId: selectedBranchId || candidate.branchId || undefined,
+        branchName: selectedBranch?.name || candidate.branchName || undefined,
+        branchAddress: selectedBranch?.address || undefined,
+        notes: scheduleNotes || undefined,
+        sendConfirmation: sendScheduleConfirmation,
+      })
+      if (result.data.success) {
+        setCandidate(prev => prev ? { ...prev, status: result.data.newStatus } : null)
+        const interviewsRef = collection(db, 'interviews')
+        const q = query(interviewsRef, where('candidateId', '==', candidate.id), orderBy('scheduledDate', 'desc'))
+        const snapshot = await getDocs(q)
+        setCandidateInterviews(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
+        setShowScheduleModal(false)
+        alert((scheduleType === 'interview' ? 'Interview' : 'Trial') + ' scheduled successfully!' + (result.data.teamsJoinUrl ? ' Teams meeting created.' : ''))
+      }
+    } catch (err) {
+      console.error('Error scheduling:', err)
+      setScheduleError(err instanceof Error ? err.message : 'Failed to schedule. Please try again.')
+    } finally {
+      setScheduling(false)
+    }
+  }
+
+  // Load branches for direct scheduling
+  useEffect(() => {
+    const fetchBranches = async () => {
+      if (!showScheduleModal) return
+      setLoadingBranches(true)
+      try {
+        const branchesRef = collection(db, 'branches')
+        const snapshot = await getDocs(branchesRef)
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter((b) => b.isActive !== false)
+        setBranches(data)
+      } catch (err) {
+        console.error('Error fetching branches:', err)
+      } finally {
+        setLoadingBranches(false)
+      }
+    }
+    fetchBranches()
+  }, [db, showScheduleModal])
   const storage = getFirebaseStorage()
 
   // Log activity to Firestore
@@ -1905,10 +2142,10 @@ export function CandidateDetail() {
               }}>
                 Change Status
               </Button>
-              <Button variant="outline" fullWidth>
+              <Button variant="outline" fullWidth onClick={() => openScheduleModal('interview')}>
                 Schedule Interview
               </Button>
-              <Button variant="outline" fullWidth>
+              <Button variant="outline" fullWidth onClick={() => openScheduleModal('trial')}>
                 Schedule Trial
               </Button>
               <Button variant="outline" fullWidth onClick={openWhatsAppModal}>
@@ -2734,6 +2971,168 @@ export function CandidateDetail() {
               disabled={!messageContent || !candidate?.phone}
             >
               💬 Send via WhatsApp
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      
+      {/* Direct Scheduling Modal */}
+      <Modal
+        isOpen={showScheduleModal}
+        onClose={() => setShowScheduleModal(false)}
+        title={`Schedule ${scheduleType === 'interview' ? 'Interview' : 'Trial'}`}
+        size="lg"
+      >
+        <div className="schedule-modal" style={{ minHeight: '500px' }}>
+          <div style={{ marginBottom: '16px', padding: '12px', background: '#f5f5f5', borderRadius: '8px' }}>
+            <p style={{ margin: '4px 0' }}><strong>Candidate:</strong> {candidate?.firstName} {candidate?.lastName}</p>
+            {candidate?.email && <p style={{ margin: '4px 0' }}><strong>Email:</strong> {candidate.email}</p>}
+            {candidate?.jobTitle && <p style={{ margin: '4px 0' }}><strong>Position:</strong> {candidate.jobTitle}</p>}
+          </div>
+
+          {scheduleError && <div style={{ padding: '12px', background: '#fee', color: '#c00', borderRadius: '8px', marginBottom: '16px' }}>{scheduleError}</div>}
+
+          {loadingAvailability ? (
+            <div style={{ textAlign: 'center', padding: '40px' }}>
+              <Spinner size="md" />
+              <p>Loading availability...</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+              {/* Calendar */}
+              <div style={{ flex: '1', minWidth: '280px' }}>
+                <h4 style={{ marginBottom: '12px' }}>Select a Date</h4>
+                <div style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))} style={{ padding: '8px', cursor: 'pointer', border: '1px solid #ddd', borderRadius: '4px', background: 'white' }}>&lt;</button>
+                    <strong>{currentMonth.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</strong>
+                    <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))} style={{ padding: '8px', cursor: 'pointer', border: '1px solid #ddd', borderRadius: '4px', background: 'white' }}>&gt;</button>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center' }}>
+                    {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+                      <div key={i} style={{ padding: '8px', fontWeight: 'bold', color: '#666' }}>{d}</div>
+                    ))}
+                    {(() => {
+                      const firstDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1)
+                      const lastDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0)
+                      const days = []
+                      for (let i = 0; i < firstDay.getDay(); i++) {
+                        days.push(<div key={'empty-' + i} />)
+                      }
+                      for (let d = 1; d <= lastDay.getDate(); d++) {
+                        const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), d)
+                        const isAvailable = availableDates.some(ad => ad.toDateString() === date.toDateString())
+                        const isSelected = selectedScheduleDate?.toDateString() === date.toDateString()
+                        const isPast = date < new Date(new Date().setHours(0, 0, 0, 0))
+                        days.push(
+                          <button
+                            key={d}
+                            onClick={() => isAvailable && !isPast && setSelectedScheduleDate(date)}
+                            disabled={!isAvailable || isPast}
+                            style={{
+                              padding: '8px',
+                              border: isSelected ? '2px solid #0d9488' : '1px solid transparent',
+                              borderRadius: '4px',
+                              background: isSelected ? '#0d9488' : isAvailable && !isPast ? '#e6fffa' : '#f5f5f5',
+                              color: isSelected ? 'white' : isAvailable && !isPast ? '#0d9488' : '#999',
+                              cursor: isAvailable && !isPast ? 'pointer' : 'not-allowed',
+                              fontWeight: isSelected ? 'bold' : 'normal'
+                            }}
+                          >
+                            {d}
+                          </button>
+                        )
+                      }
+                      return days
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              {/* Time Slots */}
+              <div style={{ flex: '1', minWidth: '200px' }}>
+                <h4 style={{ marginBottom: '12px' }}>
+                  {selectedScheduleDate ? `Available Times - ${selectedScheduleDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}` : 'Select a date first'}
+                </h4>
+                {loadingSlots ? (
+                  <div style={{ textAlign: 'center', padding: '20px' }}><Spinner size="sm" /></div>
+                ) : selectedScheduleDate ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto' }}>
+                    {timeSlots.filter(s => s.available).length === 0 ? (
+                      <p style={{ color: '#666' }}>No available slots for this date</p>
+                    ) : (
+                      timeSlots.filter(s => s.available).map(slot => (
+                        <button
+                          key={slot.time}
+                          onClick={() => setSelectedTimeSlot(slot.time)}
+                          style={{
+                            padding: '12px 16px',
+                            border: selectedTimeSlot === slot.time ? '2px solid #0d9488' : '1px solid #ddd',
+                            borderRadius: '6px',
+                            background: selectedTimeSlot === slot.time ? '#0d9488' : 'white',
+                            color: selectedTimeSlot === slot.time ? 'white' : '#333',
+                            cursor: 'pointer',
+                            textAlign: 'left'
+                          }}
+                        >
+                          {slot.time} - {(() => {
+                            const [h, m] = slot.time.split(':').map(Number)
+                            const endMinutes = h * 60 + m + scheduleDuration
+                            return Math.floor(endMinutes / 60).toString().padStart(2, '0') + ':' + (endMinutes % 60).toString().padStart(2, '0')
+                          })()}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                ) : (
+                  <p style={{ color: '#666', padding: '20px', background: '#f9f9f9', borderRadius: '8px' }}>Please select a date from the calendar</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Additional Options */}
+          {selectedScheduleDate && selectedTimeSlot && (
+            <div style={{ marginTop: '24px', padding: '16px', background: '#f9f9f9', borderRadius: '8px' }}>
+              <div style={{ marginBottom: '16px' }}>
+                <p style={{ margin: '0 0 8px 0' }}><strong>Duration:</strong> {scheduleDuration} minutes</p>
+              </div>
+              
+              {scheduleType === 'trial' && (
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '4px', fontWeight: 500 }}>Branch *</label>
+                  <select value={selectedBranchId} onChange={(e) => setSelectedBranchId(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}>
+                    <option value="">Select a branch...</option>
+                    {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+                  </select>
+                </div>
+              )}
+              
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '4px', fontWeight: 500 }}>Notes (optional)</label>
+                <textarea value={scheduleNotes} onChange={(e) => setScheduleNotes(e.target.value)} placeholder="Any additional notes..." rows={2} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }} />
+              </div>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input type="checkbox" id="sendConfirmation" checked={sendScheduleConfirmation} onChange={(e) => setSendScheduleConfirmation(e.target.checked)} />
+                <label htmlFor="sendConfirmation">Send confirmation email to candidate</label>
+              </div>
+              
+              {scheduleType === 'interview' && (
+                <p style={{ fontSize: '14px', color: '#666', margin: '12px 0 0 0' }}>📅 A Microsoft Teams meeting will be created and added to your calendar</p>
+              )}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
+            <Button variant="outline" onClick={() => setShowScheduleModal(false)} disabled={scheduling}>Cancel</Button>
+            <Button 
+              variant="primary" 
+              onClick={handleDirectSchedule} 
+              disabled={scheduling || !selectedScheduleDate || !selectedTimeSlot || (scheduleType === 'trial' && !selectedBranchId)}
+            >
+              {scheduling ? 'Scheduling...' : `Schedule ${scheduleType === 'interview' ? 'Interview' : 'Trial'}`}
             </Button>
           </div>
         </div>

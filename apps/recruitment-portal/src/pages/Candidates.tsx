@@ -32,7 +32,6 @@ import { getStatusLabel, getStatusClass } from '../utils/statusUtils'
 const STATUS_OPTIONS: { value: CandidateStatus | 'all'; label: string }[] = [
   { value: 'all', label: 'All Statuses' },
   { value: 'new', label: 'New' },
-  { value: 'screening', label: 'Screening' },
   { value: 'invite_sent', label: 'Invite Sent' },
   { value: 'interview_scheduled', label: 'Interview Scheduled' },
   { value: 'interview_complete', label: 'Interview Complete' },
@@ -196,6 +195,7 @@ export function Candidates() {
   // Filters - initialize from URL params
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<CandidateStatus | 'all' | 'all_including_rejected'>('all')
+  const [jobFilter, setJobFilter] = useState<string>('all')
   
   // Selected candidate for status change
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null)
@@ -230,6 +230,9 @@ export function Candidates() {
 
   // Job titles from settings
   const [jobTitles, setJobTitles] = useState<Array<{ id: string; title: string; category: string; isActive: boolean }>>([])
+  const [activeJobs, setActiveJobs] = useState<Array<{ id: string; title: string; branchId: string; branchName: string }>>([])
+  const [selectedJobId, setSelectedJobId] = useState<string>('')
+
   const [loadingJobTitles, setLoadingJobTitles] = useState(true)
 
   // Locations from settings
@@ -267,6 +270,30 @@ export function Candidates() {
   }>>([])
 
   const db = getFirebaseDb()
+
+  // Load active jobs with branch info
+  useEffect(() => {
+    const loadActiveJobs = async () => {
+      try {
+        const jobsRef = collection(db, 'jobs')
+        const snapshot = await getDocs(jobsRef)
+        const jobs = snapshot.docs
+          .map(doc => ({
+            id: doc.id,
+            title: doc.data().title || '',
+            branchId: doc.data().branchId || '',
+            branchName: doc.data().branchName || '',
+            isActive: doc.data().isActive
+          }))
+          .filter(j => j.isActive !== false)
+          .sort((a, b) => (a.title + ' - ' + a.branchName).localeCompare(b.title + ' - ' + b.branchName))
+        setActiveJobs(jobs)
+      } catch (err) {
+        console.error('Error loading jobs:', err)
+      }
+    }
+    loadActiveJobs()
+  }, [db])
   const storage = getFirebaseStorage()
   const functions = getFirebaseFunctions()
 
@@ -417,17 +444,19 @@ export function Candidates() {
   }, [db])
 
   // Status priority for sorting (lower number = higher priority)
+  // Status priority for sorting: new at top, then invite_sent, interview_scheduled, then rest
   const STATUS_PRIORITY: Record<string, number> = {
     'new': 1,
-    'screening': 2,
-    'invite_sent': 3,
-    'interview_scheduled': 4,
+    'invite_sent': 2,
+    'screening': 2, // Map screening to same priority as invite_sent
+    'interview_scheduled': 3,
+    'interview_complete': 4,
     'trial_scheduled': 5,
-    'interview_complete': 6,
-    'trial_complete': 7,
-    'approved': 8,
-    'offered': 9,
-    'hired': 10,
+    'trial_complete': 6,
+    'approved': 7,
+    'offered': 8,
+    'hired': 9,
+    'shortlisted': 10,
     'on_hold': 11,
     'withdrawn': 12,
     'rejected': 13,
@@ -448,6 +477,13 @@ export function Candidates() {
       } else {
         // Specific status filter
         if (candidate.status !== statusFilter) {
+          return false
+        }
+      }
+
+      // Job filter
+      if (jobFilter !== 'all') {
+        if (candidate.jobId !== jobFilter) {
           return false
         }
       }
@@ -485,7 +521,7 @@ export function Candidates() {
       const dateB = b.createdAt?.toDate?.()?.getTime() || 0
       return dateB - dateA
     })
-  }, [candidates, statusFilter, searchTerm])
+  }, [candidates, statusFilter, searchTerm, jobFilter])
 
   // Count of rejected candidates (for showing in filter)
   const rejectedCount = useMemo(() => {
@@ -607,8 +643,8 @@ export function Candidates() {
       errors.postcode = 'Please enter a valid UK postcode'
     }
 
-    if (!addForm.jobTitle.trim()) {
-      errors.jobTitle = 'Job title is required - candidates must be assigned to a job'
+    if (!selectedJobId) {
+      errors.jobTitle = 'Please select a job posting'
     }
 
     if (!addForm.location.trim()) {
@@ -625,6 +661,25 @@ export function Candidates() {
     // Clear error when user starts typing
     if (formErrors[field as keyof FormErrors]) {
       setFormErrors(prev => ({ ...prev, [field]: undefined }))
+    }
+  }
+
+  // Handle job selection - auto-fill title and branch
+  const handleJobSelect = (jobId: string) => {
+    setSelectedJobId(jobId)
+    const job = activeJobs.find(j => j.id === jobId)
+    if (job) {
+      setAddForm(prev => ({
+        ...prev,
+        jobTitle: job.title,
+        location: job.branchName
+      }))
+    } else {
+      setAddForm(prev => ({
+        ...prev,
+        jobTitle: '',
+        location: ''
+      }))
     }
   }
 
@@ -890,7 +945,7 @@ export function Candidates() {
       // Create application record for the new application
       const newApplicationRecord = {
         candidateId: '', // Will be set after we get the new doc ID
-        jobId: addForm.jobTitle, // Using job title as ID for now
+        jobId: selectedJobId,
         jobTitle: addForm.jobTitle.trim(),
         branchId: selectedBranch?.id || '',
         branchName: addForm.location,
@@ -908,7 +963,7 @@ export function Candidates() {
         address: addForm.address.trim(),
         postcode: addForm.postcode ? formatPostcode(addForm.postcode) : '',
         source: addForm.source,
-        jobId: addForm.jobTitle, // Using job title as ID for now
+        jobId: selectedJobId,
         jobTitle: addForm.jobTitle.trim(),
         branchId: selectedBranch?.id || '',
         branchName: addForm.location,
@@ -2174,6 +2229,19 @@ export function Candidates() {
               options={STATUS_OPTIONS}
             />
           </div>
+          <div className="filter-item">
+            <Select
+              value={jobFilter}
+              onChange={(e) => setJobFilter(e.target.value)}
+              options={[
+                { value: 'all', label: 'All Jobs' },
+                ...activeJobs.map(job => ({
+                  value: job.id,
+                  label: job.title + (job.branchName ? ' - ' + job.branchName : '')
+                }))
+              ]}
+            />
+          </div>
         </div>
         {(searchTerm || statusFilter !== 'all') && (
           <div className="active-filters">
@@ -2190,9 +2258,15 @@ export function Candidates() {
                 <button onClick={() => setStatusFilter('all')}>×</button>
               </span>
             )}
+            {jobFilter !== 'all' && (
+              <span className="filter-tag">
+                Job: {activeJobs.find(j => j.id === jobFilter)?.title || jobFilter}
+                <button onClick={() => setJobFilter('all')}>×</button>
+              </span>
+            )}
             <button 
               className="clear-all-filters"
-              onClick={() => { setSearchTerm(''); setStatusFilter('all'); }}
+              onClick={() => { setSearchTerm(''); setStatusFilter('all'); setJobFilter('all'); }}
             >
               Clear all
             </button>
@@ -2633,34 +2707,38 @@ export function Candidates() {
           </div>
 
           <div className="form-group">
-            <label htmlFor="jobTitle">Job Title / Position Applied For *</label>
+            <label htmlFor="jobPosting">Job Posting *</label>
             <Select
-              id="jobTitle"
-              value={addForm.jobTitle}
-              onChange={(e) => handleFormChange('jobTitle', e.target.value)}
+              id="jobPosting"
+              value={selectedJobId}
+              onChange={(e) => handleJobSelect(e.target.value)}
               options={[
-                { value: '', label: 'Select job title...' },
-                ...jobTitles.map(jt => ({ value: jt.title, label: jt.title }))
+                { value: '', label: 'Select job posting...' },
+                ...activeJobs.map(job => ({ 
+                  value: job.id, 
+                  label: job.title + (job.branchName ? ' - ' + job.branchName : '')
+                }))
               ]}
             />
             {formErrors.jobTitle && (
               <span className="field-error">{formErrors.jobTitle}</span>
             )}
-            {jobTitles.length === 0 && !loadingJobTitles && (
+            {activeJobs.length === 0 && (
               <p className="field-hint">
-                No job titles configured. <a href="/settings" target="_blank">Add job titles in Settings</a>
+                No active job postings. <a href="/jobs" target="_blank">Create a job posting first</a>
               </p>
             )}
           </div>
 
           <div className="form-group">
-            <label htmlFor="location">Branch *</label>
+            <label htmlFor="location">Branch</label>
             <Select
               id="location"
               value={addForm.location}
+              disabled={!!selectedJobId}
               onChange={(e) => handleFormChange('location', e.target.value)}
               options={[
-                { value: '', label: 'Select branch...' },
+                { value: '', label: selectedJobId ? '(Auto-filled from job)' : 'Select branch...' },
                 ...locations.map(loc => ({ value: loc.name, label: loc.name }))
               ]}
             />

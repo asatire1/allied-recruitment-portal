@@ -565,15 +565,20 @@ export const validateBookingToken = onCall<{ token: string }>(
       if (data.type === 'interview') {
         try {
           const settingsDoc = await db.collection('settings').doc('interviewAvailability').get()
+          console.log('Settings doc exists:', settingsDoc.exists)
           if (settingsDoc.exists) {
-            interviewDuration = settingsDoc.data()?.slotDuration || 30
+            const settingsData = settingsDoc.data()
+            console.log('Settings data:', JSON.stringify(settingsData))
+            interviewDuration = settingsData?.slotDuration || 30
+            console.log('Interview duration from settings:', interviewDuration)
           }
         } catch (settingsError) {
           console.error('Failed to get slot duration from settings:', settingsError)
         }
       }
       
-      const duration = data.duration || (data.type === 'interview' ? interviewDuration : 240)
+      const duration = data.type === 'interview' ? interviewDuration : (data.duration || 240)
+      console.log('Final duration:', duration, 'data.duration:', data.duration, 'type:', data.type)
       
       return {
         valid: true,

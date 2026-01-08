@@ -10,9 +10,8 @@
 
 export const CANDIDATE_STATUSES = [
   { value: 'new', label: 'New', color: '#3b82f6' },
-  { value: 'screening', label: 'Screening', color: '#a855f7' },
-  { value: 'shortlisted', label: 'Shortlisted', color: '#6366f1' },
   { value: 'invite_sent', label: 'Invite Sent', color: '#f97316' },
+  { value: 'shortlisted', label: 'Shortlisted', color: '#6366f1' },
   { value: 'interview_scheduled', label: 'Interview Scheduled', color: '#06b6d4' },
   { value: 'interview_complete', label: 'Interview Complete', color: '#0ea5e9' },
   { value: 'interview_completed', label: 'Interview Completed', color: '#0ea5e9' },
@@ -25,6 +24,8 @@ export const CANDIDATE_STATUSES = [
   { value: 'rejected', label: 'Rejected', color: '#ef4444' },
   { value: 'withdrawn', label: 'Withdrawn', color: '#9ca3af' },
   { value: 'on_hold', label: 'On Hold', color: '#eab308' },
+  // Legacy - keep for backward compatibility but map to invite_sent
+  { value: 'screening', label: 'Invite Sent', color: '#f97316' },
 ] as const
 
 export type CandidateStatus = typeof CANDIDATE_STATUSES[number]['value']

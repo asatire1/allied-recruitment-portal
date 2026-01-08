@@ -14,10 +14,11 @@ import {
   query, 
   orderBy,
   where,
-  serverTimestamp
+  serverTimestamp,
+  setDoc
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
-import { getFirebaseDb, getFirebaseFunctions } from '@allied/shared-lib'
+import { getFirebaseDb, getFirebaseFunctions, COLLECTIONS } from '@allied/shared-lib'
 // useEntities hook removed - using hardcoded values
 import type { User, UserRole, EntityType, Branch } from '@allied/shared-lib'
 import { Card, Button, Input, Spinner, Modal, Badge } from '@allied/shared-ui'
@@ -220,49 +221,71 @@ export function UserManagement() {
       setSaving(true)
       setError(null)
       
-      // Validate password
-      if (!formData.password || formData.password.length < 6) {
-        setError('Password must be at least 6 characters')
-        return
-      }
-      
       // Check if email already exists locally
       const existingUser = users.find(u => u.email.toLowerCase() === formData.email.toLowerCase())
       if (existingUser) {
         setError('A user with this email already exists')
         return
       }
-      
-      // Call Cloud Function to create user with password
-      const functions = getFirebaseFunctions()
-      const createUserFn = httpsCallable<{
-        email: string
-        password: string
-        displayName: string
-        phone?: string
-        role: string
-        entities?: string[]
-        branchIds?: string[]
-        emailNotifications?: boolean
-        pushNotifications?: boolean
-      }, { success: boolean; uid: string; message: string }>(functions, 'createUserWithPassword')
-      
-      const result = await createUserFn({
-        email: formData.email.toLowerCase(),
-        password: formData.password,
-        displayName: formData.displayName,
-        phone: formData.phone || undefined,
-        role: formData.role,
-        entities: formData.entities,
-        branchIds: formData.branchIds,
-        emailNotifications: formData.emailNotifications,
-        pushNotifications: formData.pushNotifications,
-      })
-      
-      if (result.data.success) {
+
+      // If password is provided, create user with password via Cloud Function
+      if (formData.password && formData.password.length >= 6) {
+        // Call Cloud Function to create user with password
+        const functions = getFirebaseFunctions()
+        const createUserFn = httpsCallable<{
+          email: string
+          password: string
+          displayName: string
+          phone?: string
+          role: string
+          entities?: string[]
+          branchIds?: string[]
+          emailNotifications?: boolean
+          pushNotifications?: boolean
+        }, { success: boolean; uid: string; message: string }>(functions, 'createUserWithPassword')
+        
+        const result = await createUserFn({
+          email: formData.email.toLowerCase(),
+          password: formData.password,
+          displayName: formData.displayName,
+          phone: formData.phone || undefined,
+          role: formData.role,
+          entities: formData.entities,
+          branchIds: formData.branchIds,
+          emailNotifications: formData.emailNotifications,
+          pushNotifications: formData.pushNotifications,
+        })
+        
+        if (result.data.success) {
+          setShowInviteModal(false)
+          setFormData(EMPTY_FORM)
+          setSuccess(`User ${formData.displayName} created successfully. They can log in with email/password or Microsoft.`)
+          await loadData()
+        }
+      } else {
+        // No password - create Firestore document only for Microsoft SSO
+        // Generate a temporary document ID (will be replaced when they sign in with Microsoft)
+        const db = getFirebaseDb()
+        const tempId = `pending_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        
+        await setDoc(doc(db, COLLECTIONS.USERS, tempId), {
+          email: formData.email.toLowerCase(),
+          displayName: formData.displayName,
+          phone: formData.phone || null,
+          role: formData.role,
+          entities: formData.entities || [],
+          branchIds: formData.branchIds || [],
+          emailNotifications: formData.emailNotifications ?? true,
+          pushNotifications: formData.pushNotifications ?? false,
+          active: true,
+          microsoftOnly: true, // Flag to indicate this user should use Microsoft SSO
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        })
+        
         setShowInviteModal(false)
         setFormData(EMPTY_FORM)
-        setSuccess(`User ${formData.displayName} created successfully. They can now log in with their email and password.`)
+        setSuccess(`User ${formData.displayName} created successfully. They can now sign in with their Microsoft account.`)
         await loadData()
       }
     } catch (err: any) {
@@ -820,24 +843,29 @@ function UserForm({
             type="email"
             value={formData.email}
             onChange={(e) => handleChange('email', e.target.value)}
-            placeholder="user@example.com"
+            placeholder="user@alliedpharmacies.com"
             required
             disabled={!isNew}
           />
+          {isNew && (
+            <p className="field-hint">Must be a company email (e.g., @alliedpharmacies.com)</p>
+          )}
         </div>
         
         {isNew && (
           <div className="form-group">
-            <label>Password *</label>
+            <label>Password (Optional)</label>
             <Input
               type="password"
               value={formData.password}
               onChange={(e) => handleChange('password', e.target.value)}
-              placeholder="Min 6 characters"
-              required
+              placeholder="Leave blank for Microsoft sign-in only"
               minLength={6}
             />
-            <p className="field-hint">User can change this after logging in</p>
+            <p className="field-hint">
+              💡 Leave blank if user will sign in with Microsoft. 
+              Set a password only if they need email/password login too.
+            </p>
           </div>
         )}
         
@@ -879,6 +907,18 @@ function UserForm({
         <div className="form-group full-width">
           <label>Entity Access</label>
           <div className="entity-checkboxes">
+            <label className="checkbox-label all-entities">
+              <input
+                type="checkbox"
+                checked={!formData.entities || formData.entities.length === 0}
+                onChange={() => {
+                  if (formData.entities && formData.entities.length > 0) {
+                    handleChange('entities', [])
+                  }
+                }}
+              />
+              <strong>All Entities</strong>
+            </label>
             {(entityOptions || [
               { value: 'allied', label: 'Allied Pharmacies' },
               { value: 'sharief', label: 'Sharief Healthcare' },
@@ -889,13 +929,14 @@ function UserForm({
                   type="checkbox"
                   checked={formData.entities?.includes(entity.value as EntityType) || false}
                   onChange={() => handleEntityToggle(entity.value as EntityType)}
+                  disabled={!formData.entities || formData.entities.length === 0}
                 />
                 {entity.label}
               </label>
             ))}
           </div>
           <p className="field-hint">
-            Leave empty to grant access to all entities
+            Select "All Entities" for full access, or choose specific entities
           </p>
         </div>
 

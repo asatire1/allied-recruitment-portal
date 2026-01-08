@@ -22,6 +22,7 @@ import './JobDetail.css'
 
 const STATUS_COLORS: Record<CandidateStatus, string> = {
   new: 'info',
+  invite_sent: 'warning',
   screening: 'warning',
   interview_scheduled: 'info',
   interview_complete: 'info',
@@ -41,9 +42,10 @@ const JOB_STATUS_COLORS: Record<JobStatus, string> = {
   closed: 'danger',
 }
 
-const PIPELINE_STAGES: { status: CandidateStatus; label: string }[] = [
+const PIPELINE_STAGES: { status: CandidateStatus | 'all'; label: string }[] = [
+  { status: 'all', label: 'All' },
   { status: 'new', label: 'New' },
-  { status: 'screening', label: 'Screening' },
+  { status: 'invite_sent', label: 'Invite Sent' },
   { status: 'interview_scheduled', label: 'Interview' },
   { status: 'trial_scheduled', label: 'Trial' },
   { status: 'approved', label: 'Approved' },
@@ -174,12 +176,25 @@ export function JobDetail() {
         const q3 = query(candidatesRef, where('jobTitle', '==', jobData.title))
         const snap3 = await getDocs(q3)
         
-        // Combine and deduplicate results
+        // Combine and deduplicate results, filtering by branch for legacy data
         const allDocs = [...snap1.docs, ...snap2.docs, ...snap3.docs]
         const uniqueCandidates = new Map<string, Candidate>()
         allDocs.forEach(doc => {
           if (!uniqueCandidates.has(doc.id)) {
-            uniqueCandidates.set(doc.id, { id: doc.id, ...doc.data() } as Candidate)
+            const candidateData = { id: doc.id, ...doc.data() } as Candidate
+            
+            // If candidate has correct jobId (matches job document ID), include them
+            if (candidateData.jobId === jobId || candidateData.assignedJobId === jobId) {
+              uniqueCandidates.set(doc.id, candidateData)
+            } 
+            // For legacy data (matched by title only), check if branch also matches
+            else {
+              const candidateBranch = (candidateData.branchName || candidateData.location || '').toLowerCase().trim()
+              const jobBranch = (jobData.branchName || '').toLowerCase().trim()
+              if (candidateBranch === jobBranch) {
+                uniqueCandidates.set(doc.id, candidateData)
+              }
+            }
           }
         })
         
@@ -197,20 +212,22 @@ export function JobDetail() {
 
   // Group candidates by status for pipeline view
   const candidatesByStatus = PIPELINE_STAGES.reduce((acc, stage) => {
-    acc[stage.status] = candidates.filter(c => {
-      if (stage.status === 'interview_scheduled') {
-        return c.status === 'interview_scheduled' || c.status === 'interview_complete'
-      }
-      if (stage.status === 'trial_scheduled') {
-        return c.status === 'trial_scheduled' || c.status === 'trial_complete'
-      }
-      if (stage.status === 'approved') {
-        return c.status === 'approved' || c.status === 'offer_made'
-      }
-      return c.status === stage.status
-    })
+    if (stage.status === 'all') {
+      acc['all'] = candidates
+    } else if (stage.status === 'invite_sent') {
+      // Include both invite_sent and legacy screening status
+      acc[stage.status] = candidates.filter(c => c.status === 'invite_sent' || c.status === 'screening')
+    } else if (stage.status === 'interview_scheduled') {
+      acc[stage.status] = candidates.filter(c => c.status === 'interview_scheduled' || c.status === 'interview_complete')
+    } else if (stage.status === 'trial_scheduled') {
+      acc[stage.status] = candidates.filter(c => c.status === 'trial_scheduled' || c.status === 'trial_complete')
+    } else if (stage.status === 'approved') {
+      acc[stage.status] = candidates.filter(c => c.status === 'approved' || c.status === 'offer_made')
+    } else {
+      acc[stage.status] = candidates.filter(c => c.status === stage.status)
+    }
     return acc
-  }, {} as Record<CandidateStatus, Candidate[]>)
+  }, {} as Record<CandidateStatus | 'all', Candidate[]>)
 
   // Filter candidates by selected status
   const filteredCandidates = statusFilter === 'all' 
@@ -373,7 +390,7 @@ export function JobDetail() {
                   options={[
                     { value: 'all', label: 'All Statuses' },
                     { value: 'new', label: 'New' },
-                    { value: 'screening', label: 'Screening' },
+                    { value: 'invite_sent', label: 'Invite Sent' },
                     { value: 'interview_scheduled', label: 'Interview Scheduled' },
                     { value: 'interview_complete', label: 'Interview Complete' },
                     { value: 'trial_scheduled', label: 'Trial Scheduled' },

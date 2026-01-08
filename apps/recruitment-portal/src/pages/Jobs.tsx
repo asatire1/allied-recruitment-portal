@@ -1066,17 +1066,33 @@ export function Jobs() {
         </Button>
       </div>
 
-      {/* Stats */}
+      {/* Stats - Clickable Filters */}
       <div className="jobs-stats">
-        <Card className="stat-card">
+        <Card 
+          className={`stat-card clickable ${statusFilter === 'all' ? 'active' : ''}`}
+          onClick={() => setStatusFilter('all')}
+        >
+          <span className="stat-value">{jobs.length}</span>
+          <span className="stat-label">All Jobs</span>
+        </Card>
+        <Card 
+          className={`stat-card clickable ${statusFilter === 'active' ? 'active' : ''}`}
+          onClick={() => setStatusFilter('active')}
+        >
           <span className="stat-value">{jobs.filter(j => j.status === 'active').length}</span>
           <span className="stat-label">Active Jobs</span>
         </Card>
-        <Card className="stat-card">
+        <Card 
+          className={`stat-card clickable ${statusFilter === 'draft' ? 'active' : ''}`}
+          onClick={() => setStatusFilter('draft')}
+        >
           <span className="stat-value">{jobs.filter(j => j.status === 'draft').length}</span>
           <span className="stat-label">Drafts</span>
         </Card>
-        <Card className="stat-card">
+        <Card 
+          className={`stat-card clickable ${statusFilter === 'closed' ? 'active' : ''}`}
+          onClick={() => setStatusFilter('closed')}
+        >
           <span className="stat-value">{jobs.filter(j => j.status === 'closed').length}</span>
           <span className="stat-label">Closed</span>
         </Card>

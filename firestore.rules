@@ -88,8 +88,9 @@ service cloud.firestore {
     // ============================================================
     // USERS COLLECTION
     match /users/{userId} {
+      // Super admins can read all users (for user management)
       // Users can read their own document (needed for login)
-      allow read: if request.auth != null && request.auth.uid == userId;
+      allow read: if isSuperAdmin() || (request.auth != null && request.auth.uid == userId);
       
       // Only super admins can create users
       allow create: if isSuperAdmin();
