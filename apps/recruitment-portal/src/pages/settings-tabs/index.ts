@@ -3,3 +3,4 @@
 
 export { WhatsAppTemplatesTab } from './WhatsAppTemplatesTab'
 export { EntitiesTab } from './EntitiesTab'
+export { JobTitlesTab } from './JobTitlesTab'
