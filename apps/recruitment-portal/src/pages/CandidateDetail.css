@@ -1115,3 +1115,255 @@ button[data-variant="danger"] {
   font-size: 13px;
   font-weight: 500;
 }
+
+/* ============================================================================
+   FEEDBACK TABS - Multiple Feedbacks
+   ============================================================================ */
+
+.feedback-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--ios-separator);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.feedback-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 16px;
+  background: var(--ios-bg-secondary);
+  border: 1px solid var(--ios-separator);
+  border-radius: var(--ios-radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.feedback-tab:hover {
+  background: var(--ios-bg-tertiary);
+  border-color: var(--ios-teal);
+}
+
+.feedback-tab.active {
+  background: rgba(13, 79, 92, 0.1);
+  border-color: var(--ios-teal);
+  box-shadow: 0 0 0 2px rgba(13, 79, 92, 0.15);
+}
+
+.feedback-tab .tab-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ios-label);
+}
+
+.feedback-tab .tab-date {
+  font-size: 11px;
+  color: var(--ios-tertiary-label);
+}
+
+.feedback-tab .tab-rating {
+  font-size: 12px;
+  color: var(--ios-secondary-label);
+}
+
+.feedback-tab.add-new {
+  background: var(--ios-bg-primary);
+  border-style: dashed;
+  border-color: var(--ios-teal);
+}
+
+.feedback-tab.add-new:hover {
+  background: rgba(13, 79, 92, 0.05);
+}
+
+.feedback-tab.add-new.active {
+  background: rgba(13, 79, 92, 0.1);
+  border-style: solid;
+}
+
+.feedback-tab .tab-icon {
+  font-size: 18px;
+  font-weight: 300;
+  color: var(--ios-teal);
+  line-height: 1;
+}
+
+.viewing-feedback-info {
+  padding: 12px 16px;
+  background: rgba(0, 122, 255, 0.08);
+  color: var(--ios-blue);
+  border-radius: var(--ios-radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+.no-feedbacks-yet {
+  text-align: center;
+  padding: 20px;
+  color: var(--ios-tertiary-label);
+}
+
+.no-feedbacks-yet p {
+  margin: 0;
+  font-size: 14px;
+}
+
+/* Mobile scroll hint */
+@media (max-width: 768px) {
+  .feedback-tabs {
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+  }
+  
+  .feedback-tabs::after {
+    content: '';
+    flex-shrink: 0;
+    width: 8px;
+  }
+}
+
+/* ============================================================================
+   MEETING SUMMARY - Collapsible Copilot Section
+   ============================================================================ */
+
+.meeting-summary-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--ios-separator);
+}
+
+.meeting-summary-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--ios-bg-secondary);
+  border: 1px solid var(--ios-separator);
+  border-radius: var(--ios-radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.meeting-summary-toggle:hover {
+  background: var(--ios-bg-tertiary);
+  border-color: var(--ios-teal);
+}
+
+.meeting-summary-toggle.expanded {
+  border-radius: var(--ios-radius-md) var(--ios-radius-md) 0 0;
+  border-bottom-color: transparent;
+}
+
+.toggle-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toggle-icon {
+  font-size: 20px;
+}
+
+.toggle-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ios-label);
+}
+
+.has-content-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ios-green);
+  background: rgba(52, 199, 89, 0.12);
+  padding: 2px 8px;
+  border-radius: var(--ios-radius-full);
+}
+
+.toggle-arrow {
+  font-size: 12px;
+  color: var(--ios-tertiary-label);
+  transition: transform 0.2s ease;
+}
+
+.toggle-arrow.expanded {
+  transform: rotate(180deg);
+}
+
+.meeting-summary-content {
+  padding: 16px;
+  background: var(--ios-bg-primary);
+  border: 1px solid var(--ios-separator);
+  border-top: none;
+  border-radius: 0 0 var(--ios-radius-md) var(--ios-radius-md);
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.meeting-summary-hint {
+  font-size: 13px;
+  color: var(--ios-secondary-label);
+  margin: 0 0 12px 0;
+  line-height: 1.4;
+}
+
+.meeting-summary-input textarea {
+  padding: 14px 16px;
+  border: 1px solid var(--ios-separator);
+  border-radius: var(--ios-radius-md);
+  font-size: 14px;
+  color: var(--ios-label);
+  background: var(--ios-bg-secondary);
+  resize: vertical;
+  min-height: 150px;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  line-height: 1.5;
+}
+
+.meeting-summary-input textarea:focus {
+  outline: none;
+  border-color: var(--ios-teal);
+  box-shadow: 0 0 0 3px rgba(13, 79, 92, 0.15);
+  background: var(--ios-bg-primary);
+}
+
+.meeting-summary-input textarea::placeholder {
+  color: var(--ios-tertiary-label);
+  font-size: 13px;
+}
+
+.meeting-summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.meeting-summary-actions button {
+  padding: 10px 20px !important;
+  border-radius: var(--ios-radius-md) !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+}
+
+.meeting-summary-actions .last-updated {
+  font-size: 12px;
+  color: var(--ios-tertiary-label);
+}

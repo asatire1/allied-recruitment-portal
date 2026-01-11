@@ -291,7 +291,7 @@ export function CandidateDetail() {
   const [sendingEmail, setSendingEmail] = useState(false)
   const [emailGeneratedBookingLink, setEmailGeneratedBookingLink] = useState<string | null>(null)
 
-  // Feedback form state
+  // Feedback form state - supports multiple feedbacks
   const [feedbackRatings, setFeedbackRatings] = useState<Record<string, number>>({
     communication: 0,
     experience: 0,
@@ -302,6 +302,15 @@ export function CandidateDetail() {
   const [feedbackNotes, setFeedbackNotes] = useState('')
   const [savingFeedback, setSavingFeedback] = useState(false)
   const [feedbackSaved, setFeedbackSaved] = useState(false)
+  const [allFeedbacks, setAllFeedbacks] = useState<Array<{
+    id: string
+    ratings: Record<string, number>
+    notes: string
+    submittedAt: any
+    submittedBy: string
+    submittedByName: string
+  }>>([])
+  const [selectedFeedbackIndex, setSelectedFeedbackIndex] = useState<number | 'new'>('new')
 
   // Feedback criteria labels
   const FEEDBACK_CRITERIA = [
@@ -312,8 +321,14 @@ export function CandidateDetail() {
     { key: 'overall', label: 'Overall Impression', icon: '⭐' },
   ]
 
-  // Check if feedback form should be editable
-  const canEditFeedback = candidate?.status === 'interview_complete' || candidate?.status === 'trial_complete'
+  // Feedback is always editable for adding new entries
+  const canAddFeedback = true
+
+  // Meeting Summary state (Copilot import)
+  const [meetingSummaryExpanded, setMeetingSummaryExpanded] = useState(false)
+  const [meetingSummary, setMeetingSummary] = useState('')
+  const [savingMeetingSummary, setSavingMeetingSummary] = useState(false)
+  const [meetingSummarySaved, setMeetingSummarySaved] = useState(false)
 
   const db = getFirebaseDb()
   const storage = getFirebaseStorage()
@@ -1272,41 +1287,63 @@ Allied Recruitment Team`)
     }
   }
 
-  // Save feedback to candidate document
+  // Save feedback to candidate document (supports multiple feedbacks)
   const handleSaveFeedback = async () => {
-    if (!candidate || !canEditFeedback) return
+    if (!candidate) return
 
     setSavingFeedback(true)
     try {
-      const feedbackData = {
+      const newFeedback = {
+        id: `feedback_${Date.now()}`,
         ratings: feedbackRatings,
         notes: feedbackNotes,
-        submittedAt: serverTimestamp(),
+        submittedAt: new Date().toISOString(),
         submittedBy: user?.id || user?.email || 'Unknown',
         submittedByName: user?.displayName || user?.email || 'Unknown',
       }
 
+      // Get existing feedbacks array or create new one
+      const existingFeedbacks = candidate.feedbacks || []
+      const updatedFeedbacks = [...existingFeedbacks, newFeedback]
+
       await updateDoc(doc(db, COLLECTIONS.CANDIDATES, candidate.id), {
-        feedback: feedbackData,
-        status: 'screening', // Move to next stage after feedback
-        statusUpdatedAt: serverTimestamp(),
+        feedbacks: updatedFeedbacks,
+        // Keep legacy feedback field for backwards compatibility (latest feedback)
+        feedback: {
+          ratings: feedbackRatings,
+          notes: feedbackNotes,
+          submittedAt: serverTimestamp(),
+          submittedBy: user?.id || user?.email || 'Unknown',
+          submittedByName: user?.displayName || user?.email || 'Unknown',
+        },
       })
 
       // Log activity
       await logActivity(
         candidate.id,
         'feedback_submitted',
-        `Feedback submitted - Overall rating: ${feedbackRatings.overall}/5`
+        `Feedback submitted by ${user?.displayName || user?.email} - Overall rating: ${feedbackRatings.overall}/5`
       )
 
       setFeedbackSaved(true)
       
-      // Update local candidate state
+      // Update local state
+      setAllFeedbacks(updatedFeedbacks)
       setCandidate(prev => prev ? {
         ...prev,
-        feedback: feedbackData as any,
-        status: 'screening',
+        feedbacks: updatedFeedbacks,
       } : null)
+
+      // Reset form for new entry
+      setFeedbackRatings({
+        communication: 0,
+        experience: 0,
+        attitude: 0,
+        availability: 0,
+        overall: 0,
+      })
+      setFeedbackNotes('')
+      setSelectedFeedbackIndex(updatedFeedbacks.length - 1) // Show the just-saved feedback
 
       setTimeout(() => setFeedbackSaved(false), 3000)
     } catch (error) {
@@ -1317,19 +1354,117 @@ Allied Recruitment Team`)
     }
   }
 
-  // Load existing feedback when candidate loads
+  // Load existing feedbacks when candidate loads
   useEffect(() => {
-    if (candidate?.feedback) {
-      setFeedbackRatings(candidate.feedback.ratings || {
+    if (candidate?.feedbacks && candidate.feedbacks.length > 0) {
+      setAllFeedbacks(candidate.feedbacks)
+      // Show the most recent feedback by default
+      setSelectedFeedbackIndex(candidate.feedbacks.length - 1)
+      const latestFeedback = candidate.feedbacks[candidate.feedbacks.length - 1]
+      setFeedbackRatings(latestFeedback.ratings || {
         communication: 0,
         experience: 0,
         attitude: 0,
         availability: 0,
         overall: 0,
       })
-      setFeedbackNotes(candidate.feedback.notes || '')
+      setFeedbackNotes(latestFeedback.notes || '')
+    } else if (candidate?.feedback) {
+      // Legacy single feedback - convert to array format
+      const legacyFeedback = {
+        id: 'legacy_feedback',
+        ratings: candidate.feedback.ratings || {},
+        notes: candidate.feedback.notes || '',
+        submittedAt: candidate.feedback.submittedAt,
+        submittedBy: candidate.feedback.submittedBy || 'Unknown',
+        submittedByName: candidate.feedback.submittedByName || 'Unknown',
+      }
+      setAllFeedbacks([legacyFeedback])
+      setSelectedFeedbackIndex(0)
+      setFeedbackRatings(legacyFeedback.ratings)
+      setFeedbackNotes(legacyFeedback.notes)
     }
-  }, [candidate?.feedback])
+  }, [candidate?.feedbacks, candidate?.feedback])
+
+  // Handle switching between feedbacks
+  const handleSelectFeedback = (index: number | 'new') => {
+    setSelectedFeedbackIndex(index)
+    if (index === 'new') {
+      // Clear form for new feedback
+      setFeedbackRatings({
+        communication: 0,
+        experience: 0,
+        attitude: 0,
+        availability: 0,
+        overall: 0,
+      })
+      setFeedbackNotes('')
+    } else {
+      // Load selected feedback
+      const feedback = allFeedbacks[index]
+      if (feedback) {
+        setFeedbackRatings(feedback.ratings || {
+          communication: 0,
+          experience: 0,
+          attitude: 0,
+          availability: 0,
+          overall: 0,
+        })
+        setFeedbackNotes(feedback.notes || '')
+      }
+    }
+  }
+
+  // Save meeting summary (Copilot import)
+  const handleSaveMeetingSummary = async () => {
+    if (!candidate) return
+
+    setSavingMeetingSummary(true)
+    try {
+      await updateDoc(doc(db, COLLECTIONS.CANDIDATES, candidate.id), {
+        meetingSummary: {
+          content: meetingSummary,
+          updatedAt: serverTimestamp(),
+          updatedBy: user?.id || user?.email || 'Unknown',
+          updatedByName: user?.displayName || user?.email || 'Unknown',
+        },
+      })
+
+      // Log activity
+      await logActivity(
+        candidate.id,
+        'updated',
+        `Meeting summary updated by ${user?.displayName || user?.email}`
+      )
+
+      setMeetingSummarySaved(true)
+      
+      // Update local state
+      setCandidate(prev => prev ? {
+        ...prev,
+        meetingSummary: {
+          content: meetingSummary,
+          updatedAt: new Date(),
+          updatedBy: user?.id || user?.email || 'Unknown',
+          updatedByName: user?.displayName || user?.email || 'Unknown',
+        },
+      } : null)
+
+      setTimeout(() => setMeetingSummarySaved(false), 3000)
+    } catch (error) {
+      console.error('Error saving meeting summary:', error)
+      alert('Failed to save meeting summary. Please try again.')
+    } finally {
+      setSavingMeetingSummary(false)
+    }
+  }
+
+  // Load meeting summary when candidate loads
+  useEffect(() => {
+    if (candidate?.meetingSummary?.content) {
+      setMeetingSummary(candidate.meetingSummary.content)
+    }
+  }, [candidate?.meetingSummary])
 
   // Filter email templates by category
   const filteredEmailTemplates = emailTemplates.filter(t => 
@@ -1855,82 +1990,172 @@ Allied Recruitment Team`)
             </div>
           </Card>
 
-          {/* Feedback Card */}
+          {/* Feedback Card - Multiple Feedbacks */}
           <Card className="detail-card feedback-card">
             <h2>Interview Feedback</h2>
-            {!canEditFeedback && !candidate.feedback ? (
-              <div className="feedback-locked">
-                <div className="locked-icon">🔒</div>
-                <p>Feedback will be available after the interview is completed</p>
-                <span className="current-status">Current status: {candidate.status.replace(/_/g, ' ')}</span>
-              </div>
-            ) : (
-              <div className="feedback-form">
-                {/* Star Ratings */}
-                <div className="feedback-criteria-list">
-                  {FEEDBACK_CRITERIA.map(({ key, label, icon }) => (
-                    <div key={key} className="feedback-criterion">
-                      <div className="criterion-label">
-                        <span className="criterion-icon">{icon}</span>
-                        <span>{label}</span>
-                      </div>
-                      <div className="star-rating">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <button
-                            key={star}
-                            type="button"
-                            className={`star-btn ${feedbackRatings[key] >= star ? 'active' : ''}`}
-                            onClick={() => canEditFeedback && setFeedbackRatings(prev => ({ ...prev, [key]: star }))}
-                            disabled={!canEditFeedback}
-                          >
-                            ★
-                          </button>
-                        ))}
-                        <span className="rating-value">
-                          {feedbackRatings[key] > 0 ? feedbackRatings[key] : '-'}/5
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Notes Section */}
-                <div className="feedback-notes-section">
-                  <label className="notes-label">Additional Notes</label>
-                  <Textarea
-                    value={feedbackNotes}
-                    onChange={(e) => setFeedbackNotes(e.target.value)}
-                    placeholder={canEditFeedback ? "Add any additional observations, strengths, concerns..." : "No notes added"}
-                    rows={4}
-                    disabled={!canEditFeedback}
-                    className="feedback-notes-input"
-                  />
-                </div>
-
-                {/* Save Button */}
-                {canEditFeedback && (
-                  <div className="feedback-actions">
-                    <Button
-                      variant="primary"
-                      onClick={handleSaveFeedback}
-                      disabled={savingFeedback || feedbackRatings.overall === 0}
+            
+            {/* Feedback Tabs */}
+            {allFeedbacks.length > 0 && (
+              <div className="feedback-tabs">
+                {allFeedbacks.map((fb, index) => {
+                  const fbDate = fb.submittedAt ? new Date(fb.submittedAt) : new Date()
+                  return (
+                    <button
+                      key={fb.id}
+                      className={`feedback-tab ${selectedFeedbackIndex === index ? 'active' : ''}`}
+                      onClick={() => handleSelectFeedback(index)}
                     >
-                      {savingFeedback ? 'Saving...' : feedbackSaved ? '✓ Saved!' : 'Save Feedback'}
-                    </Button>
-                    {feedbackRatings.overall === 0 && (
-                      <span className="feedback-hint">Please rate "Overall Impression" to save</span>
-                    )}
-                  </div>
-                )}
-
-                {/* Show submitted info if feedback exists */}
-                {candidate.feedback?.submittedAt && (
-                  <div className="feedback-submitted-info">
-                    ✓ Feedback submitted by {candidate.feedback.submittedByName || 'Unknown'} on {formatDate(candidate.feedback.submittedAt)}
-                  </div>
-                )}
+                      <span className="tab-name">{fb.submittedByName?.split(' ')[0] || 'Unknown'}</span>
+                      <span className="tab-date">{fbDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                      <span className="tab-rating">⭐ {fb.ratings?.overall || '-'}</span>
+                    </button>
+                  )
+                })}
+                <button
+                  className={`feedback-tab add-new ${selectedFeedbackIndex === 'new' ? 'active' : ''}`}
+                  onClick={() => handleSelectFeedback('new')}
+                >
+                  <span className="tab-icon">+</span>
+                  <span className="tab-name">Add New</span>
+                </button>
               </div>
             )}
+
+            <div className="feedback-form">
+              {/* Viewing existing feedback indicator */}
+              {selectedFeedbackIndex !== 'new' && allFeedbacks[selectedFeedbackIndex as number] && (
+                <div className="viewing-feedback-info">
+                  📋 Viewing feedback from {allFeedbacks[selectedFeedbackIndex as number].submittedByName}
+                  {allFeedbacks[selectedFeedbackIndex as number].submittedAt && (
+                    <> on {new Date(allFeedbacks[selectedFeedbackIndex as number].submittedAt).toLocaleDateString('en-GB', { 
+                      day: 'numeric', 
+                      month: 'long', 
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}</>
+                  )}
+                </div>
+              )}
+
+              {/* Star Ratings */}
+              <div className="feedback-criteria-list">
+                {FEEDBACK_CRITERIA.map(({ key, label, icon }) => (
+                  <div key={key} className="feedback-criterion">
+                    <div className="criterion-label">
+                      <span className="criterion-icon">{icon}</span>
+                      <span>{label}</span>
+                    </div>
+                    <div className="star-rating">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          className={`star-btn ${feedbackRatings[key] >= star ? 'active' : ''}`}
+                          onClick={() => selectedFeedbackIndex === 'new' && setFeedbackRatings(prev => ({ ...prev, [key]: star }))}
+                          disabled={selectedFeedbackIndex !== 'new'}
+                        >
+                          ★
+                        </button>
+                      ))}
+                      <span className="rating-value">
+                        {feedbackRatings[key] > 0 ? feedbackRatings[key] : '-'}/5
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Notes Section */}
+              <div className="feedback-notes-section">
+                <label className="notes-label">Additional Notes</label>
+                <Textarea
+                  value={feedbackNotes}
+                  onChange={(e) => setFeedbackNotes(e.target.value)}
+                  placeholder={selectedFeedbackIndex === 'new' ? "Add any additional observations, strengths, concerns..." : "No notes added"}
+                  rows={4}
+                  disabled={selectedFeedbackIndex !== 'new'}
+                  className="feedback-notes-input"
+                />
+              </div>
+
+              {/* Save Button - only show for new feedback */}
+              {selectedFeedbackIndex === 'new' && (
+                <div className="feedback-actions">
+                  <Button
+                    variant="primary"
+                    onClick={handleSaveFeedback}
+                    disabled={savingFeedback || feedbackRatings.overall === 0}
+                  >
+                    {savingFeedback ? 'Saving...' : feedbackSaved ? '✓ Saved!' : 'Save Feedback'}
+                  </Button>
+                  {feedbackRatings.overall === 0 && (
+                    <span className="feedback-hint">Please rate "Overall Impression" to save</span>
+                  )}
+                </div>
+              )}
+
+              {/* No feedbacks yet message */}
+              {allFeedbacks.length === 0 && selectedFeedbackIndex === 'new' && (
+                <div className="no-feedbacks-yet">
+                  <p>No feedback has been submitted yet. Be the first to add feedback!</p>
+                </div>
+              )}
+            </div>
+
+            {/* Collapsible Meeting Summary Section */}
+            <div className="meeting-summary-section">
+              <button 
+                className={`meeting-summary-toggle ${meetingSummaryExpanded ? 'expanded' : ''}`}
+                onClick={() => setMeetingSummaryExpanded(!meetingSummaryExpanded)}
+              >
+                <div className="toggle-left">
+                  <span className="toggle-icon">🤖</span>
+                  <span className="toggle-title">Meeting Summary (Copilot)</span>
+                  {candidate.meetingSummary?.content && (
+                    <span className="has-content-badge">Has content</span>
+                  )}
+                </div>
+                <span className={`toggle-arrow ${meetingSummaryExpanded ? 'expanded' : ''}`}>
+                  ▼
+                </span>
+              </button>
+
+              {meetingSummaryExpanded && (
+                <div className="meeting-summary-content">
+                  <p className="meeting-summary-hint">
+                    Paste the AI-generated meeting summary from Microsoft Copilot or Teams below.
+                  </p>
+                  <Textarea
+                    value={meetingSummary}
+                    onChange={(e) => setMeetingSummary(e.target.value)}
+                    placeholder="Paste meeting summary from Copilot here...
+
+Example:
+- Key discussion points
+- Candidate's responses
+- Action items
+- Overall assessment from the meeting"
+                    rows={8}
+                    className="meeting-summary-input"
+                  />
+                  <div className="meeting-summary-actions">
+                    <Button
+                      variant="primary"
+                      onClick={handleSaveMeetingSummary}
+                      disabled={savingMeetingSummary || !meetingSummary.trim()}
+                    >
+                      {savingMeetingSummary ? 'Saving...' : meetingSummarySaved ? '✓ Saved!' : 'Save Summary'}
+                    </Button>
+                    {candidate.meetingSummary?.updatedAt && (
+                      <span className="last-updated">
+                        Last updated by {candidate.meetingSummary.updatedByName} on {formatDate(candidate.meetingSummary.updatedAt)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </Card>
 
           {/* CV Card */}
