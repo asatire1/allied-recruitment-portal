@@ -5,6 +5,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.msOrganizerUserId = exports.msTenantId = exports.msClientSecret = exports.msClientId = void 0;
+exports.getAccessToken = getAccessToken;
 exports.createTeamsMeeting = createTeamsMeeting;
 exports.sendConfirmationEmail = sendConfirmationEmail;
 exports.getTeamsMeetingICSContent = getTeamsMeetingICSContent;

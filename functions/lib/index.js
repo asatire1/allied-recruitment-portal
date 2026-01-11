@@ -40,7 +40,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onCandidateDeleted = exports.permanentlyDeleteCandidate = exports.reactivateCandidate = exports.checkReturningCandidate = exports.restoreCandidate = exports.archiveCandidate = exports.parseIndeedJob = exports.submitBooking = exports.getBookingTimeSlots = exports.getBookingAvailability = exports.onTrialCompleted = exports.sendFeedbackReminders = exports.onTrialCreated = exports.createUserWithPassword = exports.sendBookingConfirmation = exports.markBookingLinkUsed = exports.validateBookingToken = exports.createBookingLink = exports.healthCheck = exports.parseCV = void 0;
+exports.parseIndeedJob = exports.onCandidateWithdrawnOrRejected = exports.onCandidateStatusChange = exports.resolveLapsedInterview = exports.markLapsedInterviews = exports.checkReturningCandidate = exports.reactivateCandidate = exports.restoreCandidate = exports.archiveCandidate = exports.permanentlyDeleteCandidate = exports.onCandidateDeleted = exports.fetchMeetingInsights = exports.checkMeetingStatus = exports.createTeamsMeeting = exports.trackClick = exports.trackOpen = exports.sendBulkCandidateEmails = exports.sendCandidateEmail = exports.submitBooking = exports.getBookingTimeSlots = exports.getBookingAvailability = exports.sendEmail = exports.markBookingLinkUsed = exports.validateBookingToken = exports.createBookingLink = exports.healthCheck = exports.parseCV = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const options_1 = require("firebase-functions/v2/options");
 const params_1 = require("firebase-functions/params");
@@ -60,6 +60,9 @@ admin.initializeApp();
 // ============================================================================
 // TEXT EXTRACTION
 // ============================================================================
+/**
+ * Extract text from PDF using pdf-parse
+ */
 async function extractTextFromPDF(buffer) {
     try {
         const data = await (0, pdf_parse_1.default)(buffer);
@@ -70,6 +73,9 @@ async function extractTextFromPDF(buffer) {
         throw new Error('Failed to extract text from PDF');
     }
 }
+/**
+ * Extract text from DOCX using mammoth
+ */
 async function extractTextFromDOCX(buffer) {
     try {
         const result = await mammoth.extractRawText({ buffer });
@@ -80,6 +86,9 @@ async function extractTextFromDOCX(buffer) {
         throw new Error('Failed to extract text from Word document');
     }
 }
+/**
+ * Extract text from file based on MIME type
+ */
 async function extractText(buffer, mimeType) {
     if (mimeType === 'application/pdf') {
         return extractTextFromPDF(buffer);
@@ -96,16 +105,21 @@ async function extractText(buffer, mimeType) {
     }
 }
 // ============================================================================
-// REGEX-BASED FALLBACK PARSING
+// REGEX-BASED FALLBACK PARSING (No AI)
 // ============================================================================
+/**
+ * Parse CV text using regex patterns (fallback when AI is unavailable)
+ */
 function parseWithRegex(text) {
+    // Email pattern
     const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/i);
     const email = emailMatch ? emailMatch[0].toLowerCase() : null;
+    // UK Phone patterns (mobile and landline)
     const phonePatterns = [
-        /(?:(?:\+44\s?|0)7\d{3}\s?\d{3}\s?\d{3})/,
-        /(?:(?:\+44\s?|0)\d{2,4}\s?\d{3}\s?\d{4})/,
-        /07\d{9}/,
-        /(?:\+44|0)\s*\d[\d\s]{9,}/,
+        /(?:(?:\+44\s?|0)7\d{3}\s?\d{3}\s?\d{3})/, // Mobile: 07xxx xxx xxx or +44 7xxx xxx xxx
+        /(?:(?:\+44\s?|0)\d{2,4}\s?\d{3}\s?\d{4})/, // Landline: 01onal xxx xxxx
+        /07\d{9}/, // Mobile no spaces
+        /(?:\+44|0)\s*\d[\d\s]{9,}/, // General UK
     ];
     let phone = null;
     for (const pattern of phonePatterns) {
@@ -115,13 +129,17 @@ function parseWithRegex(text) {
             break;
         }
     }
+    // UK Postcode pattern
     const postcodeMatch = text.match(/[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}/i);
     const postcode = postcodeMatch ? postcodeMatch[0].toUpperCase().replace(/\s*/g, ' ').trim() : null;
+    // Name extraction - look for name at the start or after common headers
     let firstName = null;
     let lastName = null;
+    // Try to find name at the very beginning (first line that looks like a name)
     const lines = text.split(/\n/).map(l => l.trim()).filter(l => l.length > 0);
     for (let i = 0; i < Math.min(10, lines.length); i++) {
         const line = lines[i];
+        // Skip lines that look like headers, emails, phones, addresses
         if (line.match(/^(curriculum|resume|cv|profile|contact|email|phone|address|summary|objective)/i))
             continue;
         if (line.includes('@'))
@@ -130,6 +148,7 @@ function parseWithRegex(text) {
             continue;
         if (line.length > 50)
             continue;
+        // Check if line looks like a name (2-4 words, each starting with capital)
         const words = line.split(/\s+/).filter(w => w.length > 1);
         if (words.length >= 2 && words.length <= 4) {
             const looksLikeName = words.every(w => /^[A-Z][a-z]+$/.test(w) || /^[A-Z]+$/.test(w));
@@ -139,6 +158,7 @@ function parseWithRegex(text) {
                 break;
             }
         }
+        // Also try: if first line is just a capitalized phrase
         if (i === 0 && words.length >= 2 && words.length <= 4) {
             const allCaps = words.every(w => /^[A-Z]/.test(w));
             if (allCaps) {
@@ -148,6 +168,7 @@ function parseWithRegex(text) {
             }
         }
     }
+    // Try name extraction from "Name:" pattern
     if (!firstName) {
         const nameMatch = text.match(/(?:name|full\s*name)\s*[:\-]?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i);
         if (nameMatch) {
@@ -156,11 +177,13 @@ function parseWithRegex(text) {
             lastName = nameParts.slice(1).join(' ');
         }
     }
+    // Extract address (look for street-like patterns)
     let address = null;
     const addressMatch = text.match(/\d+\s+[A-Za-z]+(?:\s+[A-Za-z]+)*(?:\s+(?:Street|St|Road|Rd|Avenue|Ave|Lane|Ln|Drive|Dr|Close|Way|Court|Ct|Place|Pl|Crescent|Gardens?))/i);
     if (addressMatch) {
         address = addressMatch[0];
     }
+    // Look for pharmacy qualifications
     const qualifications = [];
     const qualPatterns = [
         /GPhC(?:\s+(?:registered|registration))?/gi,
@@ -184,6 +207,7 @@ function parseWithRegex(text) {
             });
         }
     }
+    // Extract skills (common pharmacy/healthcare terms)
     const skills = [];
     const skillTerms = [
         'dispensing', 'customer service', 'patient care', 'stock control',
@@ -197,16 +221,20 @@ function parseWithRegex(text) {
             skills.push(skill.charAt(0).toUpperCase() + skill.slice(1));
         }
     });
+    // Try to extract years of experience from text patterns
     let totalYearsExperience = null;
     let pharmacyYearsExperience = null;
+    // Look for patterns like "X years experience" or "X+ years"
     const yearsMatch = text.match(/(\d+)\+?\s*years?\s*(?:of\s+)?(?:experience|working)/i);
     if (yearsMatch) {
         totalYearsExperience = parseInt(yearsMatch[1], 10);
     }
+    // Look for pharmacy-specific experience
     const pharmacyYearsMatch = text.match(/(\d+)\+?\s*years?\s*(?:of\s+)?(?:pharmacy|pharmaceutical|dispensing|healthcare)/i);
     if (pharmacyYearsMatch) {
         pharmacyYearsExperience = parseInt(pharmacyYearsMatch[1], 10);
     }
+    // Generate a basic summary from qualifications and skills
     let summary = null;
     if (qualifications.length > 0 || skills.length > 0) {
         const parts = [];
@@ -222,6 +250,7 @@ function parseWithRegex(text) {
                 summary = summary.substring(0, 197) + '...';
         }
     }
+    // Calculate confidence scores
     const confidence = {
         firstName: firstName ? 70 : 0,
         lastName: lastName ? 70 : 0,
@@ -232,11 +261,24 @@ function parseWithRegex(text) {
     const foundFields = [firstName, lastName, email, phone].filter(f => f !== null).length;
     confidence.overall = Math.round((foundFields / 4) * 100);
     return {
-        firstName, lastName, email, phone, address, postcode, summary,
-        experience: [], education: [], qualifications, skills,
+        firstName,
+        lastName,
+        email,
+        phone,
+        address,
+        postcode,
+        summary,
+        experience: [],
+        education: [],
+        qualifications,
+        skills,
         rightToWork: textLower.includes('right to work') || textLower.includes('eligible to work') ? true : null,
         hasDriversLicense: textLower.includes('driving licen') || textLower.includes('driver') ? true : null,
-        totalYearsExperience, pharmacyYearsExperience, confidence, rawText: text, usedAI: false,
+        totalYearsExperience,
+        pharmacyYearsExperience,
+        confidence,
+        rawText: text,
+        usedAI: false,
     };
 }
 // ============================================================================
@@ -249,44 +291,104 @@ Return a JSON object with these fields:
   "firstName": "string or null",
   "lastName": "string or null",
   "email": "string or null",
-  "phone": "string or null (UK format preferred)",
+  "phone": "string or null (UK format preferred, e.g., 07123 456789)",
   "address": "string or null (street address without postcode)",
-  "postcode": "string or null (UK postcode format)",
+  "postcode": "string or null (UK postcode format, e.g., M1 1AA)",
   "summary": "string or null (brief professional summary, max 200 chars)",
-  "experience": [{"title": "job title", "company": "company name", "startDate": "YYYY-MM or null", "endDate": "YYYY-MM or null", "current": true/false, "description": "brief description or null"}],
-  "education": [{"institution": "name", "qualification": "degree/certificate", "field": "field or null", "year": "year or null"}],
-  "qualifications": ["list of professional qualifications"],
+  "experience": [
+    {
+      "title": "job title",
+      "company": "company name",
+      "startDate": "YYYY-MM or null",
+      "endDate": "YYYY-MM or null",
+      "current": true/false,
+      "description": "brief description or null"
+    }
+  ],
+  "education": [
+    {
+      "institution": "school/university name",
+      "qualification": "degree/certificate name",
+      "field": "field of study or null",
+      "year": "graduation year or null"
+    }
+  ],
+  "qualifications": ["list of professional qualifications, e.g., GPhC, NVQ Level 2"],
   "skills": ["list of relevant skills"],
-  "rightToWork": true/false/null,
-  "hasDriversLicense": true/false/null,
-  "totalYearsExperience": number or null,
-  "pharmacyYearsExperience": number or null,
-  "confidence": {"firstName": 0-100, "lastName": 0-100, "email": 0-100, "phone": 0-100, "overall": 0-100}
+  "rightToWork": true/false/null (if mentioned),
+  "hasDriversLicense": true/false/null (if mentioned),
+  "totalYearsExperience": number or null (calculate total years of work experience from dates),
+  "pharmacyYearsExperience": number or null (calculate years specifically in pharmacy/healthcare roles),
+  "confidence": {
+    "firstName": 0-100,
+    "lastName": 0-100,
+    "email": 0-100,
+    "phone": 0-100,
+    "overall": 0-100
+  }
 }
 
-Return ONLY valid JSON, no other text.
+Pharmacy-specific qualifications to look for:
+- GPhC Registration (General Pharmaceutical Council)
+- NVQ Level 2/3 in Pharmacy Services
+- BTEC in Pharmaceutical Science
+- MPharm (Master of Pharmacy)
+- Dispensing Assistant qualifications
+- Medicines Counter Assistant (MCA)
+- Accuracy Checking Technician (ACT)
+- DBS Check
+
+Important:
+1. Extract UK phone numbers, normalizing to a consistent format
+2. Extract UK postcodes correctly
+3. Identify pharmacy-relevant qualifications and skills
+4. Set confidence scores based on how clearly the data was found
+5. For experience, list most recent first
+6. If data is ambiguous or not found, use null
+7. Calculate totalYearsExperience by summing up all work experience durations
+8. Calculate pharmacyYearsExperience for roles containing: pharmacy, pharmacist, dispenser, dispensing, healthcare, NHS, clinical, medical
+9. Write a concise summary (max 200 chars) highlighting key qualifications and experience
+10. Return ONLY valid JSON, no other text
 
 CV Text:
 `;
+/**
+ * Parse CV text using Claude API
+ */
 async function parseWithClaude(text, apiKey) {
-    if (!apiKey)
+    if (!apiKey) {
         throw new Error('ANTHROPIC_API_KEY not configured');
+    }
     const anthropic = new sdk_1.default({ apiKey });
     const response = await anthropic.messages.create({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 2000,
-        messages: [{ role: 'user', content: CV_PARSING_PROMPT + text.substring(0, 15000) }],
+        messages: [
+            {
+                role: 'user',
+                content: CV_PARSING_PROMPT + text.substring(0, 15000), // Limit text length
+            },
+        ],
     });
+    // Extract the text content
     const content = response.content[0];
-    if (content.type !== 'text')
+    if (content.type !== 'text') {
         throw new Error('Unexpected response type from Claude');
+    }
+    // Parse the JSON response
     try {
+        // Try to extract JSON from the response (Claude might wrap it in markdown)
         let jsonText = content.text;
         const jsonMatch = jsonText.match(/```json\s*([\s\S]*?)\s*```/);
-        if (jsonMatch)
+        if (jsonMatch) {
             jsonText = jsonMatch[1];
+        }
         const parsed = JSON.parse(jsonText);
-        return { ...parsed, rawText: text, usedAI: true };
+        return {
+            ...parsed,
+            rawText: text,
+            usedAI: true,
+        };
     }
     catch (error) {
         console.error('Failed to parse Claude response:', content.text);
@@ -294,452 +396,471 @@ async function parseWithClaude(text, apiKey) {
     }
 }
 // ============================================================================
-// PARSE CV FUNCTION
+// CLOUD FUNCTION
 // ============================================================================
-exports.parseCV = (0, https_1.onCall)({ timeoutSeconds: 60, memory: '512MiB', enforceAppCheck: false, secrets: [anthropicApiKey] }, async (request) => {
-    if (!request.auth)
+/**
+ * Parse CV Cloud Function
+ *
+ * Accepts a file URL from Firebase Storage and returns structured CV data
+ */
+exports.parseCV = (0, https_1.onCall)({
+    timeoutSeconds: 60,
+    memory: '512MiB',
+    enforceAppCheck: false, // Enable in production
+    secrets: [anthropicApiKey], // Make secret available to function
+}, async (request) => {
+    // Verify authentication
+    if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
     const { fileUrl, fileName, mimeType } = request.data;
+    // Validate input
     if (!fileUrl || !fileName || !mimeType) {
         throw new https_1.HttpsError('invalid-argument', 'Missing required fields: fileUrl, fileName, mimeType');
     }
     console.log(`Parsing CV: ${fileName} (${mimeType})`);
     try {
+        // Download file from Firebase Storage
         const bucket = admin.storage().bucket();
+        // Extract file path from URL
+        // URL format: https://firebasestorage.googleapis.com/v0/b/BUCKET/o/PATH?alt=media&token=TOKEN
         const urlPath = new URL(fileUrl).pathname;
         const encodedPath = urlPath.split('/o/')[1]?.split('?')[0];
-        if (!encodedPath)
+        if (!encodedPath) {
             throw new https_1.HttpsError('invalid-argument', 'Invalid file URL format');
+        }
         const filePath = decodeURIComponent(encodedPath);
         const file = bucket.file(filePath);
+        // Check if file exists
         const [exists] = await file.exists();
-        if (!exists)
+        if (!exists) {
             throw new https_1.HttpsError('not-found', 'File not found in storage');
+        }
+        // Download file
         const [buffer] = await file.download();
+        // Extract text
+        console.log('Extracting text...');
         const text = await extractText(buffer, mimeType);
         if (!text || text.trim().length < 50) {
             throw new https_1.HttpsError('failed-precondition', 'Could not extract sufficient text from file');
         }
+        console.log(`Extracted ${text.length} characters`);
+        // Try parsing with Claude AI first, fallback to regex
         let parsedData;
         let usedAI = false;
+        // Get API key from secret
         const apiKey = anthropicApiKey.value();
         try {
+            console.log('Attempting to parse with Claude AI...');
             parsedData = await parseWithClaude(text, apiKey);
             usedAI = true;
+            console.log('CV parsed successfully with AI:', {
+                name: `${parsedData.firstName} ${parsedData.lastName}`,
+                email: parsedData.email,
+                confidence: parsedData.confidence.overall,
+            });
         }
         catch (aiError) {
-            console.log('Claude AI parsing failed, using regex fallback');
+            console.log('Claude AI parsing failed, using regex fallback:', aiError instanceof Error ? aiError.message : aiError);
+            // Fallback to regex-based parsing
             parsedData = parseWithRegex(text);
+            console.log('CV parsed with regex fallback:', {
+                name: `${parsedData.firstName} ${parsedData.lastName}`,
+                email: parsedData.email,
+                phone: parsedData.phone,
+                confidence: parsedData.confidence.overall,
+            });
         }
-        return { success: true, data: parsedData, usedAI };
+        return {
+            success: true,
+            data: parsedData,
+            usedAI,
+        };
     }
     catch (error) {
-        if (error instanceof https_1.HttpsError)
+        console.error('CV parsing error:', error);
+        if (error instanceof https_1.HttpsError) {
             throw error;
+        }
         const message = error instanceof Error ? error.message : 'Unknown error';
         throw new https_1.HttpsError('internal', `CV parsing failed: ${message}`);
     }
 });
+/**
+ * Health check function for testing
+ */
 exports.healthCheck = (0, https_1.onCall)({ timeoutSeconds: 10 }, async () => {
-    return { status: 'ok', timestamp: new Date().toISOString(), region: 'us-central1' };
+    return {
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        region: 'europe-west2',
+    };
 });
+/**
+ * Generate a cryptographically secure token
+ * Uses Node.js crypto for server-side security
+ */
 function generateSecureToken(length = 21) {
     const crypto = require('crypto');
-    return crypto.randomBytes(length).toString('base64url').substring(0, length);
+    const bytes = crypto.randomBytes(length);
+    // Convert to URL-safe base64
+    return bytes.toString('base64url').substring(0, length);
 }
+/**
+ * Hash a token using SHA-256
+ */
 function hashToken(token) {
     const crypto = require('crypto');
     return crypto.createHash('sha256').update(token).digest('hex');
 }
-// ============================================================================
-// AUTO STATUS UPDATE HELPER - Updates candidate status when invite sent
-// ============================================================================
-async function updateCandidateStatusOnInvite(candidateId, inviteType, createdBy) {
-    try {
-        const db = admin.firestore();
-        const candidateRef = db.collection('candidates').doc(candidateId);
-        const candidateDoc = await candidateRef.get();
-        if (!candidateDoc.exists) {
-            console.warn(`Candidate ${candidateId} not found for status update`);
-            return;
-        }
-        const previousStatus = candidateDoc.data()?.status || 'unknown';
-        // Update candidate status to invite_sent
-        await candidateRef.update({
-            status: 'invite_sent',
-            inviteType: inviteType,
-            inviteSentAt: admin.firestore.FieldValue.serverTimestamp(),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        // Log the automatic status change
-        await db.collection('activityLog').add({
-            entityType: 'candidate',
-            entityId: candidateId,
-            action: 'status_changed',
-            description: `Status automatically changed from "${previousStatus.replace(/_/g, ' ')}" to "invite sent" - ${inviteType} booking link created`,
-            previousValue: { status: previousStatus },
-            newValue: { status: 'invite_sent', inviteType },
-            userId: createdBy,
-            userName: 'System (Automatic)',
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        console.log(`Candidate ${candidateId} status updated to invite_sent (${inviteType})`);
-    }
-    catch (error) {
-        // Non-blocking - log error but don't fail the booking link creation
-        console.error(`Failed to update candidate status for ${candidateId}:`, error);
-    }
-}
-// ============================================================================
-exports.createBookingLink = (0, https_1.onCall)({ timeoutSeconds: 30, memory: '256MiB', enforceAppCheck: false }, async (request) => {
-    if (!request.auth)
+/**
+ * Create Booking Link Cloud Function
+ *
+ * Generates a secure booking link for interview/trial scheduling.
+ * Token is only returned once; only the hash is stored in Firestore.
+ */
+exports.createBookingLink = (0, https_1.onCall)({
+    timeoutSeconds: 30,
+    memory: '256MiB',
+    enforceAppCheck: false, // Enable in production
+}, async (request) => {
+    // Verify authentication
+    if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
-    const { candidateId, candidateName, candidateEmail, type, jobId, jobTitle, branchId, branchName, branchAddress, location, duration: customDuration, expiryDays = 3, maxUses = 1, notes } = request.data;
+    }
+    const { candidateId, candidateName, candidateEmail, type, jobId, jobTitle, location, expiryDays = 3, maxUses = 1 } = request.data;
+    // Validate required fields
     if (!candidateId || !candidateName || !type) {
         throw new https_1.HttpsError('invalid-argument', 'Missing required fields: candidateId, candidateName, type');
     }
     if (!['interview', 'trial'].includes(type)) {
         throw new https_1.HttpsError('invalid-argument', 'Type must be "interview" or "trial"');
     }
+    console.log(`Creating booking link for candidate: ${candidateName} (${candidateId}), type: ${type}`);
     try {
         const db = admin.firestore();
-        let duration = customDuration;
-        if (!duration) {
-            duration = type === 'interview' ? 30 : 240;
-        }
+        // Generate secure token
         const token = generateSecureToken(21);
         const tokenHash = hashToken(token);
+        // Calculate expiry
         const expiresAt = admin.firestore.Timestamp.fromDate(new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000));
+        // Prepare document
         const bookingLinkDoc = {
-            tokenHash, candidateId, candidateName, candidateEmail: candidateEmail || null,
-            type, duration, jobId: jobId || null, jobTitle: jobTitle || null,
-            branchId: branchId || null, branchName: branchName || location || null,
-            branchAddress: branchAddress || null, notes: notes || null,
-            status: 'active', expiresAt, maxUses, useCount: 0,
+            tokenHash,
+            candidateId,
+            candidateName,
+            candidateEmail: candidateEmail || null,
+            type,
+            jobId: jobId || null,
+            jobTitle: jobTitle || null,
+            location: location || null,
+            status: 'active',
+            expiresAt,
+            maxUses,
+            useCount: 0,
             requireEmailVerification: false,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             createdBy: request.auth.uid,
         };
+        // Store in Firestore (token hash only, never the raw token)
         const docRef = await db.collection('bookingLinks').add(bookingLinkDoc);
-        const url = `https://allied-booking.web.app/book/${token}`;
-        // Auto-update candidate status to 'invite_sent'
-        await updateCandidateStatusOnInvite(candidateId, type, request.auth.uid);
-        return { success: true, id: docRef.id, url, expiresAt: expiresAt.toDate().toISOString(), duration };
+        // Generate URL - Firebase hosted booking page
+        const baseUrl = 'https://allied-booking.web.app/book';
+        const url = `${baseUrl}/${token}`;
+        console.log(`Booking link created: ${docRef.id}, expires: ${expiresAt.toDate().toISOString()}`);
+        return {
+            success: true,
+            id: docRef.id,
+            url,
+            expiresAt: expiresAt.toDate().toISOString(),
+        };
     }
     catch (error) {
-        if (error instanceof https_1.HttpsError)
+        console.error('Error creating booking link:', error);
+        if (error instanceof https_1.HttpsError) {
             throw error;
+        }
         const message = error instanceof Error ? error.message : 'Unknown error';
         throw new https_1.HttpsError('internal', `Failed to create booking link: ${message}`);
     }
 });
-exports.validateBookingToken = (0, https_1.onCall)({ timeoutSeconds: 10, memory: '256MiB', enforceAppCheck: false }, async (request) => {
+exports.validateBookingToken = (0, https_1.onCall)({
+    cors: true,
+    timeoutSeconds: 10,
+    memory: '256MiB',
+    enforceAppCheck: false, // Public function
+}, async (request) => {
+    // Note: This function does NOT require authentication
+    // It's used by the public booking page
     const { token } = request.data;
-    if (!token)
+    if (!token) {
         throw new https_1.HttpsError('invalid-argument', 'Token is required');
+    }
+    console.log('Validating booking token...');
     try {
         const db = admin.firestore();
         const tokenHash = hashToken(token);
+        // Find booking link by token hash
         const snapshot = await db.collection('bookingLinks')
             .where('tokenHash', '==', tokenHash)
             .where('status', '==', 'active')
             .limit(1)
             .get();
-        if (snapshot.empty)
-            return { valid: false, error: 'Invalid or expired booking link' };
+        if (snapshot.empty) {
+            console.log('Token not found or not active');
+            return {
+                valid: false,
+                error: 'Invalid or expired booking link',
+            };
+        }
         const doc = snapshot.docs[0];
         const data = doc.data();
+        // Check expiry
         const expiresAt = data.expiresAt.toDate();
         if (expiresAt < new Date()) {
+            // Mark as expired
             await doc.ref.update({ status: 'expired' });
-            return { valid: false, error: 'This booking link has expired' };
+            console.log('Token expired');
+            return {
+                valid: false,
+                error: 'This booking link has expired',
+            };
         }
+        // Check max uses
         if (data.useCount >= data.maxUses) {
             await doc.ref.update({ status: 'used' });
-            return { valid: false, error: 'This booking link has already been used' };
+            console.log('Token max uses reached');
+            return {
+                valid: false,
+                error: 'This booking link has already been used',
+            };
         }
-        // Get the correct slot duration from settings for interviews
-        let interviewDuration = 30; // default
+        console.log(`Token valid for: ${data.candidateName}`);
+        // Get duration from settings for interviews, 240 min (4 hours) for trials
+        let duration = 240; // Default for trials
         if (data.type === 'interview') {
-            try {
-                const settingsDoc = await db.collection('settings').doc('interviewAvailability').get();
-                console.log('Settings doc exists:', settingsDoc.exists);
-                if (settingsDoc.exists) {
-                    const settingsData = settingsDoc.data();
-                    console.log('Settings data:', JSON.stringify(settingsData));
-                    interviewDuration = settingsData?.slotDuration || 30;
-                    console.log('Interview duration from settings:', interviewDuration);
-                }
+            const settingsDoc = await db.collection('settings').doc('interviewAvailability').get();
+            if (settingsDoc.exists) {
+                duration = settingsDoc.data()?.slotDuration || 30;
             }
-            catch (settingsError) {
-                console.error('Failed to get slot duration from settings:', settingsError);
+            else {
+                duration = 30; // Default for interviews if no settings
             }
         }
-        const duration = data.type === 'interview' ? interviewDuration : (data.duration || 240);
-        console.log('Final duration:', duration, 'data.duration:', data.duration, 'type:', data.type);
         return {
             valid: true,
             data: {
-                id: doc.id, candidateId: data.candidateId, candidateName: data.candidateName,
-                candidateEmail: data.candidateEmail, type: data.type,
+                id: doc.id,
+                candidateId: data.candidateId,
+                candidateName: data.candidateName,
+                type: data.type,
+                jobTitle: data.jobTitle,
+                location: data.location,
                 duration,
-                jobId: data.jobId, jobTitle: data.jobTitle, branchId: data.branchId,
-                branchName: data.branchName || data.location, branchAddress: data.branchAddress,
-                notes: data.notes, expiresAt: expiresAt.toISOString(),
+                expiresAt: expiresAt.toISOString(),
             },
         };
     }
     catch (error) {
+        console.error('Error validating token:', error);
         const message = error instanceof Error ? error.message : 'Unknown error';
         throw new https_1.HttpsError('internal', `Failed to validate token: ${message}`);
     }
 });
-exports.markBookingLinkUsed = (0, https_1.onCall)({ timeoutSeconds: 10, memory: '256MiB', enforceAppCheck: false }, async (request) => {
+exports.markBookingLinkUsed = (0, https_1.onCall)({
+    timeoutSeconds: 10,
+    memory: '256MiB',
+    enforceAppCheck: false,
+}, async (request) => {
     const { bookingLinkId, interviewId } = request.data;
-    if (!bookingLinkId)
+    if (!bookingLinkId) {
         throw new https_1.HttpsError('invalid-argument', 'bookingLinkId is required');
+    }
+    console.log(`Marking booking link as used: ${bookingLinkId}`);
     try {
         const db = admin.firestore();
         const linkRef = db.collection('bookingLinks').doc(bookingLinkId);
         const linkDoc = await linkRef.get();
-        if (!linkDoc.exists)
+        if (!linkDoc.exists) {
             throw new https_1.HttpsError('not-found', 'Booking link not found');
+        }
         await linkRef.update({
             useCount: admin.firestore.FieldValue.increment(1),
             status: 'used',
             usedAt: admin.firestore.FieldValue.serverTimestamp(),
             ...(interviewId && { interviewId }),
         });
+        console.log('Booking link marked as used');
         return { success: true };
     }
     catch (error) {
-        if (error instanceof https_1.HttpsError)
+        console.error('Error marking booking link used:', error);
+        if (error instanceof https_1.HttpsError) {
             throw error;
+        }
         const message = error instanceof Error ? error.message : 'Unknown error';
         throw new https_1.HttpsError('internal', `Failed to mark booking link used: ${message}`);
     }
 });
-function generateICSFile(title, description, location, startDate, endDate, organizerEmail = 'recruitment@alliedpharmacies.co.uk', teamsJoinUrl) {
-    const formatDate = (date) => date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-    const uid = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}@alliedpharmacies.co.uk`;
-    let fullDescription = description;
-    if (teamsJoinUrl)
-        fullDescription += `\\n\\n---\\nJoin Microsoft Teams Meeting:\\n${teamsJoinUrl}`;
-    const meetingLocation = teamsJoinUrl ? 'Microsoft Teams Meeting' : location;
-    return `BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//Allied Pharmacies//Recruitment Portal//EN
-CALSCALE:GREGORIAN
-METHOD:REQUEST
-BEGIN:VEVENT
-UID:${uid}
-DTSTART:${formatDate(startDate)}
-DTEND:${formatDate(endDate)}
-SUMMARY:${title}
-DESCRIPTION:${fullDescription}
-LOCATION:${meetingLocation}
-ORGANIZER;CN=Allied Pharmacies Recruitment:mailto:${organizerEmail}
-STATUS:CONFIRMED
-SEQUENCE:0
-${teamsJoinUrl ? `X-MICROSOFT-ONLINEMEETINGINFORMATION:${teamsJoinUrl}` : ''}
-BEGIN:VALARM
-TRIGGER:-PT1H
-ACTION:DISPLAY
-DESCRIPTION:Reminder: ${title}
-END:VALARM
-END:VEVENT
-END:VCALENDAR`;
-}
-exports.sendBookingConfirmation = (0, https_1.onCall)({ region: 'us-central1', maxInstances: 10 }, async (request) => {
-    const data = request.data;
-    const { interviewId, candidateName, candidateEmail, interviewType, scheduledAt, duration, jobTitle, branchName, branchId, teamsJoinUrl } = data;
-    if (!interviewId)
-        throw new https_1.HttpsError('invalid-argument', 'interviewId is required');
-    const db = admin.firestore();
-    const scheduledDate = new Date(scheduledAt);
-    const endDate = new Date(scheduledDate.getTime() + duration * 60000);
-    const dateOptions = {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-        hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London'
-    };
-    const formattedDate = scheduledDate.toLocaleDateString('en-GB', dateOptions);
-    const typeLabel = interviewType === 'trial' ? 'Trial Shift' : 'Interview';
-    const title = `${typeLabel}${jobTitle ? ` - ${jobTitle}` : ''} with Allied Pharmacies`;
-    let branchAddress = '';
-    let branchEmail = '';
-    if (branchId) {
-        try {
-            const branchDoc = await db.collection('branches').doc(branchId).get();
-            if (branchDoc.exists) {
-                const branchData = branchDoc.data();
-                branchAddress = branchData?.address || '';
-                branchEmail = branchData?.email || branchData?.managerEmail || '';
-            }
-        }
-        catch (err) {
-            console.warn('Could not fetch branch details:', err);
-        }
+// ============================================================================
+// MICROSOFT GRAPH EMAIL FUNCTION
+// ============================================================================
+// Use existing Microsoft Graph secrets (same as Teams integration)
+const msClientId = (0, params_1.defineSecret)('MS_CLIENT_ID');
+const msClientSecret = (0, params_1.defineSecret)('MS_CLIENT_SECRET');
+const msTenantId = (0, params_1.defineSecret)('MS_TENANT_ID');
+const msOrganizerUserId = (0, params_1.defineSecret)('MS_ORGANIZER_USER_ID');
+/**
+ * Send Email via Microsoft Graph API
+ *
+ * Sends an email using Microsoft Graph API with application permissions.
+ * Uses existing MS_CLIENT_ID, MS_CLIENT_SECRET, MS_TENANT_ID secrets
+ * and sends from the organizer user (recruitment@alliedpharmacies.co.uk).
+ */
+exports.sendEmail = (0, https_1.onCall)({
+    timeoutSeconds: 30,
+    memory: '256MiB',
+    secrets: [msClientId, msClientSecret, msTenantId, msOrganizerUserId],
+    enforceAppCheck: false,
+}, async (request) => {
+    // Verify authentication
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
     }
-    const location = interviewType === 'interview' && teamsJoinUrl
-        ? 'Microsoft Teams (online)'
-        : (branchAddress || branchName || 'To be confirmed');
-    const icsDescription = `Your ${typeLabel.toLowerCase()} has been scheduled.\\n\\nCandidate: ${candidateName}\\nPosition: ${jobTitle || 'Not specified'}\\nDuration: ${duration} minutes`;
-    const icsContent = generateICSFile(title, icsDescription, location, scheduledDate, endDate, 'recruitment@alliedpharmacies.co.uk', interviewType === 'interview' ? teamsJoinUrl : undefined);
+    const { to, subject, body, candidateId, candidateName } = request.data;
+    // Validate required fields
+    if (!to || !subject || !body) {
+        throw new https_1.HttpsError('invalid-argument', 'Missing required fields: to, subject, body');
+    }
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(to)) {
+        throw new https_1.HttpsError('invalid-argument', 'Invalid email address format');
+    }
+    console.log(`Sending email to: ${to}, subject: "${subject}"`);
     try {
-        await db.collection('emailNotifications').add({
-            type: 'booking_confirmation', interviewId, candidateName,
-            candidateEmail: candidateEmail || null, interviewType,
-            scheduledAt: admin.firestore.Timestamp.fromDate(scheduledDate),
-            duration, jobTitle: jobTitle || null, branchName: branchName || null,
-            branchId: branchId || null, branchEmail: branchEmail || null,
-            teamsJoinUrl: teamsJoinUrl || null, status: 'pending',
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        // Get Microsoft Graph access token using existing credentials
+        const tokenUrl = `https://login.microsoftonline.com/${msTenantId.value()}/oauth2/v2.0/token`;
+        const tokenParams = new URLSearchParams({
+            client_id: msClientId.value(),
+            client_secret: msClientSecret.value(),
+            scope: 'https://graph.microsoft.com/.default',
+            grant_type: 'client_credentials',
         });
-        const teamsMeetingSection = teamsJoinUrl && interviewType === 'interview' ? `
-        <div style="background: #f0f7ff; border-radius: 8px; padding: 20px; margin: 20px 0; border-left: 4px solid #0078d4;">
-          <p style="margin: 0 0 12px 0; font-size: 16px; font-weight: 600; color: #0078d4;">📹 Microsoft Teams Meeting</p>
-          <p style="margin: 0 0 12px 0; font-size: 14px; color: #374151;">This is an online interview. Click the button below to join at your scheduled time:</p>
-          <a href="${teamsJoinUrl}" style="display: inline-block; background: #0078d4; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 500;">Join Teams Meeting</a>
-          <p style="margin: 12px 0 0 0; font-size: 12px; color: #6b7280;">Or copy this link: ${teamsJoinUrl}</p>
-        </div>
-      ` : '';
-        if (candidateEmail) {
-            await db.collection('mail').add({
-                to: candidateEmail,
-                message: {
-                    subject: `Booking Confirmed: ${title}`,
-                    html: `
-              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="background: linear-gradient(135deg, #0d9488 0%, #14b8a6 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
-                  <h1 style="color: white; margin: 0; font-size: 24px;">Booking Confirmed</h1>
-                </div>
-                <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 12px 12px;">
-                  <p style="font-size: 16px; color: #374151;">Dear ${candidateName},</p>
-                  <p style="font-size: 16px; color: #374151;">Your ${typeLabel.toLowerCase()} has been successfully booked.</p>
-                  <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border: 1px solid #e5e7eb;">
-                    <p style="margin: 8px 0; font-size: 15px;"><strong>📅 Date & Time:</strong> ${formattedDate}</p>
-                    <p style="margin: 8px 0; font-size: 15px;"><strong>📍 Location:</strong> ${location}</p>
-                    <p style="margin: 8px 0; font-size: 15px;"><strong>⏱️ Duration:</strong> ${duration} minutes</p>
-                    ${jobTitle ? `<p style="margin: 8px 0; font-size: 15px;"><strong>💼 Position:</strong> ${jobTitle}</p>` : ''}
-                  </div>
-                  ${teamsMeetingSection}
-                  <p style="font-size: 14px; color: #6b7280;">Please add this to your calendar using the attached .ics file.</p>
-                  <p style="font-size: 14px; color: #6b7280;">If you need to reschedule or cancel, please contact us as soon as possible.</p>
-                  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">
-                  <p style="font-size: 14px; color: #9ca3af; text-align: center;">Allied Pharmacies Recruitment Team</p>
-                </div>
-              </div>
-            `,
-                },
-                attachments: [{
-                        filename: 'interview-invite.ics',
-                        content: Buffer.from(icsContent).toString('base64'),
-                        encoding: 'base64',
-                        contentType: 'text/calendar; method=REQUEST'
-                    }]
-            });
+        const tokenResponse = await fetch(tokenUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: tokenParams.toString(),
+        });
+        if (!tokenResponse.ok) {
+            const errorText = await tokenResponse.text();
+            console.error('Token error:', errorText);
+            throw new Error(`Failed to get access token: ${tokenResponse.status}`);
         }
-        if (branchEmail && interviewType === 'trial') {
-            await db.collection('mail').add({
-                to: branchEmail,
-                message: {
-                    subject: `New ${typeLabel} Booking: ${candidateName}`,
-                    html: `
-              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
-                  <h1 style="color: white; margin: 0; font-size: 24px;">New ${typeLabel} Booking</h1>
-                </div>
-                <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 12px 12px;">
-                  <p style="font-size: 16px; color: #374151;">A new ${typeLabel.toLowerCase()} has been self-booked by a candidate.</p>
-                  <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border: 1px solid #e5e7eb;">
-                    <p style="margin: 8px 0; font-size: 15px;"><strong>👤 Candidate:</strong> ${candidateName}</p>
-                    <p style="margin: 8px 0; font-size: 15px;"><strong>📅 Date & Time:</strong> ${formattedDate}</p>
-                    <p style="margin: 8px 0; font-size: 15px;"><strong>📍 Location:</strong> ${location}</p>
-                    <p style="margin: 8px 0; font-size: 15px;"><strong>⏱️ Duration:</strong> ${duration} minutes</p>
-                    ${jobTitle ? `<p style="margin: 8px 0; font-size: 15px;"><strong>💼 Position:</strong> ${jobTitle}</p>` : ''}
-                  </div>
-                  <p style="font-size: 14px; color: #6b7280;">The candidate has received a confirmation email with a calendar invite.</p>
-                  <p style="font-size: 14px; color: #ef4444; font-weight: 500;">Please ensure someone is available to conduct the ${typeLabel.toLowerCase()}.</p>
-                </div>
-              </div>
-            `,
+        const tokenData = await tokenResponse.json();
+        const accessToken = tokenData.access_token;
+        // Send email via Microsoft Graph using organizer user ID
+        const organizerUserId = msOrganizerUserId.value();
+        const graphUrl = `https://graph.microsoft.com/v1.0/users/${organizerUserId}/sendMail`;
+        // Convert plain text body to HTML with line breaks
+        const htmlBody = body
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\n/g, '<br>');
+        const emailPayload = {
+            message: {
+                subject: subject,
+                body: {
+                    contentType: 'HTML',
+                    content: `<div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6;">${htmlBody}</div>`,
                 },
-                attachments: [{
-                        filename: 'interview-invite.ics',
-                        content: Buffer.from(icsContent).toString('base64'),
-                        encoding: 'base64',
-                        contentType: 'text/calendar; method=REQUEST'
-                    }]
-            });
+                toRecipients: [
+                    {
+                        emailAddress: {
+                            address: to,
+                            name: candidateName || to,
+                        },
+                    },
+                ],
+            },
+            saveToSentItems: true,
+        };
+        const sendResponse = await fetch(graphUrl, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(emailPayload),
+        });
+        if (!sendResponse.ok) {
+            const errorText = await sendResponse.text();
+            console.error('Send email error:', errorText);
+            throw new Error(`Failed to send email: ${sendResponse.status} - ${errorText}`);
         }
+        // Log the email send to Firestore
+        const db = admin.firestore();
+        await db.collection('emailLog').add({
+            to,
+            subject,
+            candidateId: candidateId || null,
+            candidateName: candidateName || null,
+            sentBy: request.auth.uid,
+            sentAt: admin.firestore.FieldValue.serverTimestamp(),
+            status: 'sent',
+        });
+        console.log(`Email sent successfully to ${to}`);
         return {
-            success: true, message: 'Booking confirmation emails sent',
-            notification: { candidateEmail: candidateEmail || 'Not provided', branchEmail: branchEmail || 'Not configured', scheduledAt: formattedDate, teamsJoinUrl: teamsJoinUrl || null }
+            success: true,
+            messageId: `email-${Date.now()}`,
         };
     }
     catch (error) {
+        console.error('Error sending email:', error);
+        if (error instanceof https_1.HttpsError) {
+            throw error;
+        }
         const message = error instanceof Error ? error.message : 'Unknown error';
-        throw new https_1.HttpsError('internal', `Failed to send confirmation: ${message}`);
+        throw new https_1.HttpsError('internal', `Failed to send email: ${message}`);
     }
 });
-exports.createUserWithPassword = (0, https_1.onCall)({ region: 'us-central1', maxInstances: 10 }, async (request) => {
-    if (!request.auth)
-        throw new https_1.HttpsError('unauthenticated', 'Must be logged in to create users');
-    const db = admin.firestore();
-    const callerDoc = await db.collection('users').doc(request.auth.uid).get();
-    if (!callerDoc.exists || callerDoc.data()?.role !== 'super_admin') {
-        throw new https_1.HttpsError('permission-denied', 'Only super admins can create users');
-    }
-    const { email, password, displayName, phone, role, entities, branchIds, emailNotifications, pushNotifications } = request.data;
-    if (!email || !password || !displayName || !role) {
-        throw new https_1.HttpsError('invalid-argument', 'Missing required fields');
-    }
-    if (password.length < 6) {
-        throw new https_1.HttpsError('invalid-argument', 'Password must be at least 6 characters');
-    }
-    try {
-        const userRecord = await admin.auth().createUser({
-            email: email.toLowerCase(), password, displayName, disabled: false,
-        });
-        await db.collection('users').doc(userRecord.uid).set({
-            email: email.toLowerCase(), displayName, phone: phone || null, role,
-            entities: entities || [], branchIds: branchIds || [], active: true,
-            emailNotifications: emailNotifications ?? true, pushNotifications: pushNotifications ?? true,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            createdBy: request.auth.uid,
-        });
-        return { success: true, uid: userRecord.uid, message: `User ${displayName} created successfully` };
-    }
-    catch (error) {
-        if (error.code === 'auth/email-already-exists')
-            throw new https_1.HttpsError('already-exists', 'A user with this email already exists');
-        if (error.code === 'auth/invalid-email')
-            throw new https_1.HttpsError('invalid-argument', 'Invalid email address');
-        if (error.code === 'auth/weak-password')
-            throw new https_1.HttpsError('invalid-argument', 'Password is too weak');
-        throw new https_1.HttpsError('internal', `Failed to create user: ${error.message}`);
-    }
-});
-// B4: Push Notifications
-var pushNotifications_1 = require("./pushNotifications");
-Object.defineProperty(exports, "onTrialCreated", { enumerable: true, get: function () { return pushNotifications_1.onTrialCreated; } });
-Object.defineProperty(exports, "sendFeedbackReminders", { enumerable: true, get: function () { return pushNotifications_1.sendFeedbackReminders; } });
-Object.defineProperty(exports, "onTrialCompleted", { enumerable: true, get: function () { return pushNotifications_1.onTrialCompleted; } });
-// Booking Page Functions
+// ============================================================================
+// RE-EXPORT ALL FUNCTIONS FROM OTHER FILES
+// ============================================================================
+// Booking functions
 var bookingFunctions_1 = require("./bookingFunctions");
 Object.defineProperty(exports, "getBookingAvailability", { enumerable: true, get: function () { return bookingFunctions_1.getBookingAvailability; } });
 Object.defineProperty(exports, "getBookingTimeSlots", { enumerable: true, get: function () { return bookingFunctions_1.getBookingTimeSlots; } });
 Object.defineProperty(exports, "submitBooking", { enumerable: true, get: function () { return bookingFunctions_1.submitBooking; } });
-// Indeed Job Import
-var jobImport_1 = require("./jobImport");
-Object.defineProperty(exports, "parseIndeedJob", { enumerable: true, get: function () { return jobImport_1.parseIndeedJob; } });
-// Candidate archive functions
+// Email functions with tracking
+var emailFunctions_1 = require("./emailFunctions");
+Object.defineProperty(exports, "sendCandidateEmail", { enumerable: true, get: function () { return emailFunctions_1.sendCandidateEmail; } });
+Object.defineProperty(exports, "sendBulkCandidateEmails", { enumerable: true, get: function () { return emailFunctions_1.sendBulkCandidateEmails; } });
+Object.defineProperty(exports, "trackOpen", { enumerable: true, get: function () { return emailFunctions_1.trackOpen; } });
+Object.defineProperty(exports, "trackClick", { enumerable: true, get: function () { return emailFunctions_1.trackClick; } });
+// Teams meeting functions
+var teamsMeetingFunctions_1 = require("./teamsMeetingFunctions");
+Object.defineProperty(exports, "createTeamsMeeting", { enumerable: true, get: function () { return teamsMeetingFunctions_1.createTeamsMeeting; } });
+Object.defineProperty(exports, "checkMeetingStatus", { enumerable: true, get: function () { return teamsMeetingFunctions_1.checkMeetingStatus; } });
+Object.defineProperty(exports, "fetchMeetingInsights", { enumerable: true, get: function () { return teamsMeetingFunctions_1.fetchMeetingInsights; } });
+// Cascade deletion triggers
 var cascadeDeletion_1 = require("./cascadeDeletion");
+Object.defineProperty(exports, "onCandidateDeleted", { enumerable: true, get: function () { return cascadeDeletion_1.onCandidateDeleted; } });
+Object.defineProperty(exports, "permanentlyDeleteCandidate", { enumerable: true, get: function () { return cascadeDeletion_1.permanentlyDeleteCandidate; } });
 Object.defineProperty(exports, "archiveCandidate", { enumerable: true, get: function () { return cascadeDeletion_1.archiveCandidate; } });
 Object.defineProperty(exports, "restoreCandidate", { enumerable: true, get: function () { return cascadeDeletion_1.restoreCandidate; } });
-Object.defineProperty(exports, "checkReturningCandidate", { enumerable: true, get: function () { return cascadeDeletion_1.checkReturningCandidate; } });
 Object.defineProperty(exports, "reactivateCandidate", { enumerable: true, get: function () { return cascadeDeletion_1.reactivateCandidate; } });
-Object.defineProperty(exports, "permanentlyDeleteCandidate", { enumerable: true, get: function () { return cascadeDeletion_1.permanentlyDeleteCandidate; } });
-Object.defineProperty(exports, "onCandidateDeleted", { enumerable: true, get: function () { return cascadeDeletion_1.onCandidateDeleted; } });
+Object.defineProperty(exports, "checkReturningCandidate", { enumerable: true, get: function () { return cascadeDeletion_1.checkReturningCandidate; } });
+// Lapsed interviews and status change triggers
+var lapsedInterviews_1 = require("./lapsedInterviews");
+Object.defineProperty(exports, "markLapsedInterviews", { enumerable: true, get: function () { return lapsedInterviews_1.markLapsedInterviews; } });
+Object.defineProperty(exports, "resolveLapsedInterview", { enumerable: true, get: function () { return lapsedInterviews_1.resolveLapsedInterview; } });
+Object.defineProperty(exports, "onCandidateStatusChange", { enumerable: true, get: function () { return lapsedInterviews_1.onCandidateStatusChange; } });
+Object.defineProperty(exports, "onCandidateWithdrawnOrRejected", { enumerable: true, get: function () { return lapsedInterviews_1.onCandidateWithdrawnOrRejected; } });
+// Job import
+var jobImport_1 = require("./jobImport");
+Object.defineProperty(exports, "parseIndeedJob", { enumerable: true, get: function () { return jobImport_1.parseIndeedJob; } });
 //# sourceMappingURL=index.js.map

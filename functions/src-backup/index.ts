@@ -688,8 +688,9 @@ export const createBookingLink = onCall<CreateBookingLinkRequest, Promise<Create
       // Store in Firestore (token hash only, never the raw token)
       const docRef = await db.collection('bookingLinks').add(bookingLinkDoc)
       
-      // Generate URL - Firebase hosted booking page
-      const baseUrl = 'https://allied-booking.web.app/book'
+      // Generate URL - adjust base URL as needed for your deployment
+      // In production, this would come from environment config
+      const baseUrl = 'https://alliedpharmacies.com/book'
       const url = `${baseUrl}/${token}`
       
       console.log(`Booking link created: ${docRef.id}, expires: ${expiresAt.toDate().toISOString()}`)
@@ -732,7 +733,6 @@ interface ValidateBookingTokenResponse {
     type: 'interview' | 'trial'
     jobTitle?: string
     location?: string
-    duration: number
     expiresAt: string
   }
   error?: string
@@ -740,7 +740,6 @@ interface ValidateBookingTokenResponse {
 
 export const validateBookingToken = onCall<ValidateBookingTokenRequest, Promise<ValidateBookingTokenResponse>>(
   {
-    cors: true,
     timeoutSeconds: 10,
     memory: '256MiB',
     enforceAppCheck: false, // Public function
@@ -802,18 +801,7 @@ export const validateBookingToken = onCall<ValidateBookingTokenRequest, Promise<
       }
       
       console.log(`Token valid for: ${data.candidateName}`)
-
-      // Get duration from settings for interviews, 240 min (4 hours) for trials
-      let duration = 240 // Default for trials
-      if (data.type === 'interview') {
-        const settingsDoc = await db.collection('settings').doc('interviewAvailability').get()
-        if (settingsDoc.exists) {
-          duration = settingsDoc.data()?.slotDuration || 30
-        } else {
-          duration = 30 // Default for interviews if no settings
-        }
-      }
-
+      
       return {
         valid: true,
         data: {
@@ -823,7 +811,6 @@ export const validateBookingToken = onCall<ValidateBookingTokenRequest, Promise<
           type: data.type,
           jobTitle: data.jobTitle,
           location: data.location,
-          duration,
           expiresAt: expiresAt.toISOString(),
         },
       }
@@ -1056,24 +1043,5 @@ export const sendEmail = onCall<SendEmailRequest, Promise<SendEmailResponse>>(
   }
 )
 
-// ============================================================================
-// RE-EXPORT ALL FUNCTIONS FROM OTHER FILES
-// ============================================================================
-
-// Booking functions
-export { getBookingAvailability, getBookingTimeSlots, submitBooking } from './bookingFunctions'
-
-// Email functions with tracking
+// Export email functions
 export { sendCandidateEmail, sendBulkCandidateEmails, trackOpen, trackClick } from './emailFunctions'
-
-// Teams meeting functions
-export { createTeamsMeeting, checkMeetingStatus, fetchMeetingInsights } from './teamsMeetingFunctions'
-
-// Cascade deletion triggers
-export { onCandidateDeleted, permanentlyDeleteCandidate, archiveCandidate, restoreCandidate, reactivateCandidate, checkReturningCandidate } from './cascadeDeletion'
-
-// Lapsed interviews and status change triggers
-export { markLapsedInterviews, resolveLapsedInterview, onCandidateStatusChange, onCandidateWithdrawnOrRejected } from './lapsedInterviews'
-
-// Job import
-export { parseIndeedJob } from './jobImport'

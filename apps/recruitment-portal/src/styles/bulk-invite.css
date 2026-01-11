@@ -267,7 +267,8 @@
   flex-shrink: 0;
 }
 
-.no-phone {
+.no-phone,
+.no-email {
   color: #9ca3af;
   font-size: 12px;
   padding: 6px 12px;

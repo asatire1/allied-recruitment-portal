@@ -262,12 +262,14 @@ export function Candidates() {
     candidateId: string
     candidateName: string
     candidatePhone: string
+    candidateEmail: string
     jobTitle: string
     branchName: string
     success: boolean
     bookingUrl?: string
     error?: string
   }>>([])
+  const [sendingBulkEmails, setSendingBulkEmails] = useState(false)
 
   const db = getFirebaseDb()
 
@@ -1365,6 +1367,7 @@ export function Candidates() {
           candidateId: candidate.id,
           candidateName: `${candidate.firstName} ${candidate.lastName}`,
           candidatePhone: candidate.phone || '',
+          candidateEmail: candidate.email || '',
           jobTitle: candidate.jobTitle || '-',
           branchName: candidate.branchName || candidate.location || '-',
           success: true,
@@ -1377,6 +1380,7 @@ export function Candidates() {
           candidateId: candidate.id,
           candidateName: `${candidate.firstName} ${candidate.lastName}`,
           candidatePhone: candidate.phone || '',
+          candidateEmail: candidate.email || '',
           jobTitle: candidate.jobTitle || '-',
           branchName: candidate.branchName || candidate.location || '-',
           success: false,
@@ -1447,6 +1451,112 @@ export function Candidates() {
     setShowBulkInviteModal(false)
     setBulkInviteResults([])
     clearSelection() // Clear selection when modal closes
+  }
+
+  // Get email message body
+  const getEmailMessage = (candidateName: string, bookingUrl: string, type: 'interview' | 'trial') => {
+    const firstName = candidateName.split(' ')[0]
+    if (type === 'interview') {
+      return `Dear ${firstName},
+
+Thank you for your application to Allied Pharmacies!
+
+We would like to invite you for an interview. Please book a convenient time using the link below:
+
+${bookingUrl}
+
+If you have any questions, please don't hesitate to contact us.
+
+Best regards,
+Allied Recruitment Team`
+    } else {
+      return `Dear ${firstName},
+
+Following your interview with Allied Pharmacies, we are pleased to invite you for a trial shift.
+
+Please book a convenient time using the link below:
+
+${bookingUrl}
+
+What to bring:
+• GPhC registration (if applicable)
+• Photo ID
+• Smart professional attire
+
+Best regards,
+Allied Recruitment Team`
+    }
+  }
+
+  // Get email subject
+  const getEmailSubject = (type: 'interview' | 'trial') => {
+    if (type === 'interview') {
+      return 'Interview Invitation - Allied Pharmacies'
+    } else {
+      return 'Trial Shift Invitation - Allied Pharmacies'
+    }
+  }
+
+  // Send single email
+  const sendSingleEmail = async (result: typeof bulkInviteResults[0]) => {
+    if (!result.candidateEmail || !result.bookingUrl) return
+
+    try {
+      const functions = getFirebaseFunctions()
+      const sendEmailFn = httpsCallable(functions, 'sendCandidateEmail')
+      
+      await sendEmailFn({
+        to: result.candidateEmail,
+        candidateId: result.candidateId,
+        candidateName: result.candidateName,
+        subject: getEmailSubject(bulkInviteType),
+        body: getEmailMessage(result.candidateName, result.bookingUrl, bulkInviteType),
+        type: bulkInviteType,
+      })
+      
+      alert(`Email sent to ${result.candidateName}`)
+    } catch (error: any) {
+      console.error('Error sending email:', error)
+      alert(`Failed to send email: ${error.message}`)
+    }
+  }
+
+  // Send all emails
+  const sendAllEmails = async () => {
+    const emailableResults = bulkInviteResults.filter(r => r.success && r.candidateEmail && r.bookingUrl)
+    if (emailableResults.length === 0) return
+
+    setSendingBulkEmails(true)
+
+    try {
+      const functions = getFirebaseFunctions()
+      const sendBulkEmailFn = httpsCallable(functions, 'sendBulkCandidateEmails')
+      
+      const candidates = emailableResults.map(r => ({
+        id: r.candidateId,
+        email: r.candidateEmail,
+        firstName: r.candidateName.split(' ')[0],
+        lastName: r.candidateName.split(' ').slice(1).join(' '),
+        jobTitle: r.jobTitle,
+        branchName: r.branchName,
+        bookingUrl: r.bookingUrl,
+      }))
+
+      const result = await sendBulkEmailFn({
+        candidates,
+        subject: getEmailSubject(bulkInviteType),
+        body: getEmailMessage('{{firstName}}', '{{bookingLink}}', bulkInviteType),
+        type: bulkInviteType,
+      })
+
+      const data = result.data as { sent: number; failed: number }
+      alert(`Emails sent: ${data.sent} successful, ${data.failed} failed`)
+    } catch (error: any) {
+      console.error('Error sending bulk emails:', error)
+      alert(`Failed to send emails: ${error.message}`)
+    } finally {
+      setSendingBulkEmails(false)
+    }
   }
 
   // ==========================================================================
@@ -2936,6 +3046,17 @@ export function Candidates() {
                         ) : (
                           <span className="no-phone">No phone</span>
                         )}
+                        {result.candidateEmail ? (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => sendSingleEmail(result)}
+                          >
+                            ✉️ Email
+                          </Button>
+                        ) : (
+                          <span className="no-email">No email</span>
+                        )}
                         <Button
                           variant="outline"
                           size="sm"
@@ -2950,6 +3071,15 @@ export function Candidates() {
               </div>
 
               <div className="modal-actions">
+                {bulkInviteResults.filter(r => r.success && r.candidateEmail).length > 0 && (
+                  <Button 
+                    variant="secondary" 
+                    onClick={sendAllEmails}
+                    disabled={sendingBulkEmails}
+                  >
+                    {sendingBulkEmails ? '✉️ Sending...' : `✉️ Send All Emails (${bulkInviteResults.filter(r => r.success && r.candidateEmail).length})`}
+                  </Button>
+                )}
                 {bulkInviteResults.filter(r => r.success && r.candidatePhone).length > 0 && (
                   <Button 
                     variant="secondary" 

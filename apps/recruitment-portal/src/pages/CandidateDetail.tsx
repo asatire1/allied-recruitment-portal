@@ -40,6 +40,17 @@ interface WhatsAppTemplate {
   active: boolean
 }
 
+// Email Template interface (reuses same structure as WhatsApp)
+interface EmailTemplate {
+  id: string
+  name: string
+  category: TemplateCategory
+  subject: string
+  content: string
+  placeholders: string[]
+  active: boolean
+}
+
 const TEMPLATE_CATEGORIES = [
   { value: 'interview', label: 'Interview', color: '#3b82f6' },
   { value: 'trial', label: 'Trial', color: '#f59e0b' },
@@ -118,34 +129,24 @@ interface FormErrors {
 
 const formatDate = (timestamp: any): string => {
   if (!timestamp) return '-'
-  try {
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
-    if (isNaN(date.getTime())) return '-'
-    return date.toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    })
-  } catch {
-    return '-'
-  }
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+  return date.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
 }
 
 const formatDateTime = (timestamp: any): string => {
   if (!timestamp) return '-'
-  try {
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
-    if (isNaN(date.getTime())) return '-'
-    return date.toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  } catch {
-    return '-'
-  }
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+  return date.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 const formatPhone = (phone: string): string => {
@@ -277,255 +278,20 @@ export function CandidateDetail() {
   const [generatedBookingLink, setGeneratedBookingLink] = useState<string | null>(null)
   const [generatingBookingLink, setGeneratingBookingLink] = useState(false)
 
-  // Scheduled interviews/trials for this candidate
-  const [candidateInterviews, setCandidateInterviews] = useState<any[]>([])
-  const [loadingInterviews, setLoadingInterviews] = useState(false)
-
-  // Job assignment
-  const [jobs, setJobs] = useState<any[]>([])
-  const [loadingJobs, setLoadingJobs] = useState(false)
-  const [showJobAssignModal, setShowJobAssignModal] = useState(false)
-
-  // Schedule Interview/Trial Modal state
-  const [showScheduleModal, setShowScheduleModal] = useState(false)
-  const [scheduleType, setScheduleType] = useState<'interview' | 'trial'>('interview')
-  const [scheduleDate, setScheduleDate] = useState('')
-  const [scheduleTime, setScheduleTime] = useState('')
-  const [scheduleDuration, setScheduleDuration] = useState(30)
-  const [scheduleNotes, setScheduleNotes] = useState('')
-  const [sendScheduleConfirmation, setSendScheduleConfirmation] = useState(true)
-  const [scheduling, setScheduling] = useState(false)
-  const [scheduleError, setScheduleError] = useState<string | null>(null)
-  const [selectedBranchId, setSelectedBranchId] = useState('')
-  const [branches, setBranches] = useState<any[]>([])
-  const [loadingBranches, setLoadingBranches] = useState(false)
-  const [availableDates, setAvailableDates] = useState<Date[]>([])
-  const [selectedScheduleDate, setSelectedScheduleDate] = useState<Date | null>(null)
-  const [timeSlots, setTimeSlots] = useState<Array<{ time: string; available: boolean }>>([])
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('')
-  const [loadingAvailability, setLoadingAvailability] = useState(false)
-  const [loadingSlots, setLoadingSlots] = useState(false)
-  const [currentMonth, setCurrentMonth] = useState(new Date())
-  const [selectedJobId, setSelectedJobId] = useState<string>('')
-  const [assigningJob, setAssigningJob] = useState(false)
+  // Email Modal state
+  const [showEmailModal, setShowEmailModal] = useState(false)
+  const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([])
+  const [loadingEmailTemplates, setLoadingEmailTemplates] = useState(false)
+  const [selectedEmailTemplate, setSelectedEmailTemplate] = useState<EmailTemplate | null>(null)
+  const [emailCategoryFilter, setEmailCategoryFilter] = useState<TemplateCategory | 'all'>('all')
+  const [emailSubject, setEmailSubject] = useState('')
+  const [emailContent, setEmailContent] = useState('')
+  const [isEditingEmail, setIsEditingEmail] = useState(false)
+  const [emailCopied, setEmailCopied] = useState(false)
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [emailGeneratedBookingLink, setEmailGeneratedBookingLink] = useState<string | null>(null)
 
   const db = getFirebaseDb()
-
-  
-
-  // Fetch availability when schedule modal opens
-  useEffect(() => {
-    const fetchAvailability = async () => {
-      if (!showScheduleModal) return
-      
-      setLoadingAvailability(true)
-      try {
-        const functions = getFirebaseFunctions()
-        const getAvailability = httpsCallable(functions, 'getBookingAvailability')
-        
-        // Create a temporary token for internal scheduling
-        const result = await getAvailability({ token: '__internal__', type: scheduleType })
-        
-        if (result.data) {
-          // Generate available dates for next 14 days based on settings
-          const settings = result.data.settings || {}
-          const fullyBookedDates = result.data.fullyBookedDates || []
-          const dates: Date[] = []
-          const today = new Date()
-          today.setHours(0, 0, 0, 0)
-          
-          const schedule = settings.schedule || {
-            monday: { enabled: true }, tuesday: { enabled: true },
-            wednesday: { enabled: true }, thursday: { enabled: true },
-            friday: { enabled: true }, saturday: { enabled: false },
-            sunday: { enabled: false }
-          }
-          
-          const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-          
-          for (let i = 0; i < 30; i++) {
-            const date = new Date(today)
-            date.setDate(today.getDate() + i)
-            const dayName = dayNames[date.getDay()]
-            const daySchedule = schedule[dayName]
-            
-            if (daySchedule?.enabled) {
-              const dateStr = date.toISOString().split('T')[0]
-              if (!fullyBookedDates.includes(dateStr)) {
-                dates.push(new Date(date))
-              }
-            }
-          }
-          
-          setAvailableDates(dates)
-          setScheduleDuration(settings.slotDuration || (scheduleType === 'interview' ? 30 : 240))
-        }
-      } catch (err) {
-        console.error('Error fetching availability:', err)
-        // Fallback: enable all weekdays
-        const dates: Date[] = []
-        const today = new Date()
-        for (let i = 0; i < 30; i++) {
-          const date = new Date(today)
-          date.setDate(today.getDate() + i)
-          if (date.getDay() !== 0 && date.getDay() !== 6) {
-            dates.push(date)
-          }
-        }
-        setAvailableDates(dates)
-      } finally {
-        setLoadingAvailability(false)
-      }
-    }
-    
-    fetchAvailability()
-  }, [showScheduleModal, scheduleType])
-
-  // Fetch time slots when date is selected
-  useEffect(() => {
-    const fetchTimeSlots = async () => {
-      if (!selectedScheduleDate) {
-        setTimeSlots([])
-        return
-      }
-      
-      setLoadingSlots(true)
-      setSelectedTimeSlot('')
-      
-      try {
-        const functions = getFirebaseFunctions()
-        const getSlots = httpsCallable(functions, 'getBookingTimeSlots')
-        
-        const result = await getSlots({
-          token: '__internal__',
-          date: selectedScheduleDate.toISOString().split('T')[0],
-          type: scheduleType
-        })
-        
-        if (result.data?.slots) {
-          setTimeSlots(result.data.slots)
-        }
-      } catch (err) {
-        console.error('Error fetching time slots:', err)
-        // Generate fallback slots
-        const slots = []
-        for (let h = 9; h < 17; h++) {
-          slots.push({ time: h.toString().padStart(2, '0') + ':00', available: true })
-          slots.push({ time: h.toString().padStart(2, '0') + ':30', available: true })
-        }
-        setTimeSlots(slots)
-      } finally {
-        setLoadingSlots(false)
-      }
-    }
-    
-    fetchTimeSlots()
-  }, [selectedScheduleDate, scheduleType])
-
-  // Load branches for direct scheduling
-  useEffect(() => {
-    const fetchBranches = async () => {
-      if (!showScheduleModal) return
-      setLoadingBranches(true)
-      try {
-        const branchesRef = collection(db, 'branches')
-        const snapshot = await getDocs(branchesRef)
-        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter((b) => b.isActive !== false)
-        setBranches(data)
-      } catch (err) {
-        console.error('Error fetching branches:', err)
-      } finally {
-        setLoadingBranches(false)
-      }
-    }
-    fetchBranches()
-  }, [db, showScheduleModal])
-
-  // Open schedule modal
-  const openScheduleModal = (type: 'interview' | 'trial') => {
-    setScheduleType(type)
-    setScheduleDate('')
-    setScheduleTime('')
-    setScheduleDuration(type === 'interview' ? 30 : 240)
-    setScheduleNotes('')
-    setSendScheduleConfirmation(true)
-    setScheduleError(null)
-    setSelectedBranchId(candidate?.branchId || '')
-    setSelectedScheduleDate(null)
-    setSelectedTimeSlot('')
-    setTimeSlots([])
-    setCurrentMonth(new Date())
-    setShowScheduleModal(true)
-  }
-
-  // Handle direct scheduling
-  const handleDirectSchedule = async () => {
-    if (!candidate || !selectedScheduleDate || !selectedTimeSlot) {
-      setScheduleError('Please select a date and time')
-      return
-    }
-    if (scheduleType === 'trial' && !selectedBranchId) {
-      setScheduleError('Please select a branch for the trial')
-      return
-    }
-    setScheduling(true)
-    setScheduleError(null)
-    try {
-      const functions = getFirebaseFunctions()
-      const scheduleDirectInterview = httpsCallable(functions, 'scheduleDirectInterview')
-      const selectedBranch = branches.find(b => b.id === selectedBranchId)
-      const result = await scheduleDirectInterview({
-        candidateId: candidate.id,
-        candidateName: `${candidate.firstName} ${candidate.lastName}`,
-        candidateEmail: candidate.email || undefined,
-        candidatePhone: candidate.phone || undefined,
-        type: scheduleType,
-        date: selectedScheduleDate.toISOString().split('T')[0],
-        time: selectedTimeSlot,
-        duration: scheduleDuration,
-        jobId: candidate.jobId || undefined,
-        jobTitle: candidate.jobTitle || undefined,
-        branchId: selectedBranchId || candidate.branchId || undefined,
-        branchName: selectedBranch?.name || candidate.branchName || undefined,
-        branchAddress: selectedBranch?.address || undefined,
-        notes: scheduleNotes || undefined,
-        sendConfirmation: sendScheduleConfirmation,
-      })
-      if (result.data.success) {
-        setCandidate(prev => prev ? { ...prev, status: result.data.newStatus } : null)
-        const interviewsRef = collection(db, 'interviews')
-        const q = query(interviewsRef, where('candidateId', '==', candidate.id), orderBy('scheduledDate', 'desc'))
-        const snapshot = await getDocs(q)
-        setCandidateInterviews(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
-        setShowScheduleModal(false)
-        alert((scheduleType === 'interview' ? 'Interview' : 'Trial') + ' scheduled successfully!' + (result.data.teamsJoinUrl ? ' Teams meeting created.' : ''))
-      }
-    } catch (err) {
-      console.error('Error scheduling:', err)
-      setScheduleError(err instanceof Error ? err.message : 'Failed to schedule. Please try again.')
-    } finally {
-      setScheduling(false)
-    }
-  }
-
-  // Load branches for direct scheduling
-  useEffect(() => {
-    const fetchBranches = async () => {
-      if (!showScheduleModal) return
-      setLoadingBranches(true)
-      try {
-        const branchesRef = collection(db, 'branches')
-        const snapshot = await getDocs(branchesRef)
-        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter((b) => b.isActive !== false)
-        setBranches(data)
-      } catch (err) {
-        console.error('Error fetching branches:', err)
-      } finally {
-        setLoadingBranches(false)
-      }
-    }
-    fetchBranches()
-  }, [db, showScheduleModal])
   const storage = getFirebaseStorage()
 
   // Log activity to Firestore
@@ -662,59 +428,6 @@ export function CandidateDetail() {
     fetchActivities()
   }, [db, id])
 
-  // Fetch scheduled interviews/trials for this candidate
-  useEffect(() => {
-    async function fetchCandidateInterviews() {
-      if (!id) return
-
-      try {
-        setLoadingInterviews(true)
-        
-        const interviewsRef = collection(db, 'interviews')
-        const interviewsQuery = query(
-          interviewsRef,
-          where('candidateId', '==', id),
-          orderBy('scheduledDate', 'desc')
-        )
-        
-        const snapshot = await getDocs(interviewsQuery)
-        const data = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }))
-        setCandidateInterviews(data)
-      } catch (err) {
-        console.error('Error fetching candidate interviews:', err)
-        // Try without ordering if index doesn't exist
-        try {
-          const interviewsRef = collection(db, 'interviews')
-          const interviewsQuery = query(
-            interviewsRef,
-            where('candidateId', '==', id)
-          )
-          const snapshot = await getDocs(interviewsQuery)
-          const data = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }))
-          // Sort client-side
-          data.sort((a: any, b: any) => {
-            const aDate = a.scheduledDate?.toDate?.()?.getTime() || 0
-            const bDate = b.scheduledDate?.toDate?.()?.getTime() || 0
-            return bDate - aDate
-          })
-          setCandidateInterviews(data)
-        } catch (e) {
-          console.error('Error fetching interviews (fallback):', e)
-        }
-      } finally {
-        setLoadingInterviews(false)
-      }
-    }
-
-    fetchCandidateInterviews()
-  }, [db, id])
-
   // Fetch linked candidates for application history
   useEffect(() => {
     async function fetchLinkedCandidates() {
@@ -766,191 +479,6 @@ export function CandidateDetail() {
 
     fetchLinkedCandidates()
   }, [db, candidate?.id, candidate?.linkedCandidateIds, candidate?.primaryRecordId])
-
-  // Fetch active jobs for assignment dropdown
-  useEffect(() => {
-    async function fetchJobs() {
-      try {
-        setLoadingJobs(true)
-        const jobsRef = collection(db, COLLECTIONS.JOBS)
-        const jobsQuery = query(
-          jobsRef,
-          where('status', '==', 'active'),
-          orderBy('createdAt', 'desc')
-        )
-        const snapshot = await getDocs(jobsQuery)
-        const data = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }))
-        setJobs(data)
-      } catch (err) {
-        console.error('Error fetching jobs:', err)
-        // Fallback without ordering
-        try {
-          const jobsRef = collection(db, COLLECTIONS.JOBS)
-          const jobsQuery = query(jobsRef, where('status', '==', 'active'))
-          const snapshot = await getDocs(jobsQuery)
-          const data = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }))
-          setJobs(data)
-        } catch (e) {
-          console.error('Error fetching jobs (fallback):', e)
-        }
-      } finally {
-        setLoadingJobs(false)
-      }
-    }
-
-    fetchJobs()
-  }, [db])
-
-  // Assign candidate to job
-  const handleAssignJob = async () => {
-    if (!candidate || !selectedJobId) return
-
-    try {
-      setAssigningJob(true)
-      
-      const selectedJob = jobs.find(j => j.id === selectedJobId)
-      if (!selectedJob) {
-        alert('Job not found')
-        return
-      }
-
-      const previousJobId = (candidate as any).jobId || null
-      const previousJobTitle = candidate.jobTitle || null
-
-      // Update candidate with job reference
-      const candidateRef = doc(db, COLLECTIONS.CANDIDATES, candidate.id)
-      await updateDoc(candidateRef, {
-        jobId: selectedJobId,
-        jobTitle: selectedJob.title,
-        branchId: selectedJob.branchId,
-        branchName: selectedJob.branchName,
-        updatedAt: serverTimestamp(),
-      })
-
-      // Update job's candidate count (increment)
-      const jobRef = doc(db, COLLECTIONS.JOBS, selectedJobId)
-      const jobDoc = await getDoc(jobRef)
-      if (jobDoc.exists()) {
-        const currentCount = jobDoc.data().candidateCount || 0
-        await updateDoc(jobRef, {
-          candidateCount: currentCount + 1,
-          updatedAt: serverTimestamp(),
-        })
-      }
-
-      // If candidate was previously assigned to a different job, decrement that job's count
-      if (previousJobId && previousJobId !== selectedJobId) {
-        try {
-          const prevJobRef = doc(db, COLLECTIONS.JOBS, previousJobId)
-          const prevJobDoc = await getDoc(prevJobRef)
-          if (prevJobDoc.exists()) {
-            const prevCount = prevJobDoc.data().candidateCount || 0
-            await updateDoc(prevJobRef, {
-              candidateCount: Math.max(0, prevCount - 1),
-              updatedAt: serverTimestamp(),
-            })
-          }
-        } catch (e) {
-          console.error('Error updating previous job count:', e)
-        }
-      }
-
-      // Log the activity
-      await logActivity(
-        candidate.id,
-        'updated',
-        `Assigned to job: ${selectedJob.title} at ${selectedJob.branchName}`,
-        previousJobTitle ? { jobId: previousJobId, jobTitle: previousJobTitle } : undefined,
-        { jobId: selectedJobId, jobTitle: selectedJob.title }
-      )
-
-      // Update local state
-      setCandidate(prev => prev ? {
-        ...prev,
-        jobId: selectedJobId,
-        jobTitle: selectedJob.title,
-        branchId: selectedJob.branchId,
-        branchName: selectedJob.branchName,
-      } as any : null)
-
-      setShowJobAssignModal(false)
-      setSelectedJobId('')
-    } catch (err) {
-      console.error('Error assigning job:', err)
-      alert('Failed to assign job. Please try again.')
-    } finally {
-      setAssigningJob(false)
-    }
-  }
-
-  // Remove candidate from job
-  const handleRemoveFromJob = async () => {
-    if (!candidate || !(candidate as any).jobId) return
-
-    if (!confirm('Are you sure you want to remove this candidate from the assigned job?')) {
-      return
-    }
-
-    try {
-      setAssigningJob(true)
-      
-      const previousJobId = (candidate as any).jobId
-      const previousJobTitle = candidate.jobTitle
-
-      // Update candidate to remove job reference
-      const candidateRef = doc(db, COLLECTIONS.CANDIDATES, candidate.id)
-      await updateDoc(candidateRef, {
-        jobId: null,
-        jobTitle: null,
-        updatedAt: serverTimestamp(),
-      })
-
-      // Decrement job's candidate count
-      if (previousJobId) {
-        try {
-          const jobRef = doc(db, COLLECTIONS.JOBS, previousJobId)
-          const jobDoc = await getDoc(jobRef)
-          if (jobDoc.exists()) {
-            const currentCount = jobDoc.data().candidateCount || 0
-            await updateDoc(jobRef, {
-              candidateCount: Math.max(0, currentCount - 1),
-              updatedAt: serverTimestamp(),
-            })
-          }
-        } catch (e) {
-          console.error('Error updating job count:', e)
-        }
-      }
-
-      // Log the activity
-      await logActivity(
-        candidate.id,
-        'updated',
-        `Removed from job: ${previousJobTitle}`,
-        { jobId: previousJobId, jobTitle: previousJobTitle },
-        { jobId: null, jobTitle: null }
-      )
-
-      // Update local state
-      setCandidate(prev => prev ? {
-        ...prev,
-        jobId: null,
-        jobTitle: null,
-      } as any : null)
-
-    } catch (err) {
-      console.error('Error removing from job:', err)
-      alert('Failed to remove from job. Please try again.')
-    } finally {
-      setAssigningJob(false)
-    }
-  }
 
   // Update status
   const handleStatusChange = async () => {
@@ -1234,7 +762,6 @@ export function CandidateDetail() {
         candidateId: string
         candidateName: string
         candidateEmail?: string
-        candidatePhone?: string
         type: 'interview' | 'trial'
         jobTitle?: string
         expiryDays?: number
@@ -1250,7 +777,6 @@ export function CandidateDetail() {
         candidateId: candidate.id,
         candidateName: `${candidate.firstName} ${candidate.lastName}`,
         candidateEmail: candidate.email,
-        candidatePhone: candidate.phone,
         type,
         jobTitle: candidate.jobTitle,
         expiryDays: 3,
@@ -1287,19 +813,14 @@ export function CandidateDetail() {
     // Check if template uses booking link placeholder
     const usesBookingLink = template.content.includes('{{interviewBookingLink}}')
     
-    // Generate booking link if needed and get the URL directly
-    let bookingUrl = generatedBookingLink
+    // Generate booking link if needed
     if (usesBookingLink && !generatedBookingLink) {
       const linkType = template.category === 'trial' ? 'trial' : 'interview'
-      bookingUrl = await generateBookingLinkForCandidate(linkType)
+      await generateBookingLinkForCandidate(linkType)
     }
     
     // Replace placeholders with candidate data
-    // Pass the booking URL directly since state update may not have completed
     const data = getPlaceholderData()
-    if (bookingUrl) {
-      data.interviewBookingLink = bookingUrl
-    }
     const result = replaceTemplatePlaceholders(template.content, data)
     setMessageContent(result.text)
   }
@@ -1317,10 +838,6 @@ export function CandidateDetail() {
       setSelectedTemplate(template)
       setIsEditingMessage(false)
       const data = getPlaceholderData()
-      // Use the returned bookingUrl directly since state may not have updated yet
-      if (bookingUrl) {
-        data.interviewBookingLink = bookingUrl
-      }
       const result = replaceTemplatePlaceholders(template.content, data)
       setMessageContent(result.text)
     } else {
@@ -1344,10 +861,6 @@ export function CandidateDetail() {
       setSelectedTemplate(template)
       setIsEditingMessage(false)
       const data = getPlaceholderData()
-      // Use the returned bookingUrl directly since state may not have updated yet
-      if (bookingUrl) {
-        data.interviewBookingLink = bookingUrl
-      }
       const result = replaceTemplatePlaceholders(template.content, data)
       setMessageContent(result.text)
     } else {
@@ -1408,10 +921,339 @@ export function CandidateDetail() {
     })
   }
 
-  // Send email
+  // ============================================================================
+  // EMAIL MODAL FUNCTIONS
+  // ============================================================================
+
+  // Open Email Modal
+  const openEmailModal = async () => {
+    setShowEmailModal(true)
+    setSelectedEmailTemplate(null)
+    setEmailSubject('')
+    setEmailContent('')
+    setIsEditingEmail(false)
+    setEmailCategoryFilter('all')
+    setEmailCopied(false)
+    setEmailGeneratedBookingLink(null)
+    
+    // Load templates if not already loaded
+    if (emailTemplates.length === 0) {
+      await loadEmailTemplates()
+    }
+  }
+
+  // Load Email templates from Firestore (uses same collection as WhatsApp but can be filtered)
+  const loadEmailTemplates = async () => {
+    setLoadingEmailTemplates(true)
+    try {
+      // First try to load from emailTemplates collection
+      const emailTemplatesRef = collection(db, 'emailTemplates')
+      let q = query(emailTemplatesRef, where('active', '==', true), orderBy('name'))
+      let snapshot = await getDocs(q)
+      
+      if (snapshot.empty) {
+        // Fallback: use whatsappTemplates if no dedicated email templates exist
+        const whatsappRef = collection(db, 'whatsappTemplates')
+        q = query(whatsappRef, where('active', '==', true), orderBy('name'))
+        snapshot = await getDocs(q)
+      }
+      
+      const loadedTemplates: EmailTemplate[] = []
+      snapshot.forEach(doc => {
+        const data = doc.data()
+        loadedTemplates.push({
+          id: doc.id,
+          name: data.name,
+          category: data.category,
+          subject: data.subject || `${data.category?.charAt(0).toUpperCase()}${data.category?.slice(1)} - Allied Pharmacies`,
+          content: data.content,
+          placeholders: data.placeholders || [],
+          active: data.active
+        } as EmailTemplate)
+      })
+      
+      setEmailTemplates(loadedTemplates)
+    } catch (error) {
+      console.error('Error loading email templates:', error)
+    } finally {
+      setLoadingEmailTemplates(false)
+    }
+  }
+
+  // Get placeholder data for email (same as WhatsApp)
+  const getEmailPlaceholderData = (): PlaceholderData => {
+    if (!candidate) return {}
+    
+    const candidateData = prepareCandidateData({
+      firstName: candidate.firstName,
+      lastName: candidate.lastName,
+      name: `${candidate.firstName} ${candidate.lastName}`,
+      email: candidate.email,
+      phone: candidate.phone,
+      jobTitle: candidate.jobTitle,
+      entity: candidate.entity || 'Allied Pharmacies'
+    })
+    
+    return combinePlaceholderData(candidateData, {
+      interviewBookingLink: emailGeneratedBookingLink || generatedBookingLink || '[Booking link will be generated]',
+      companyName: candidate.entity || 'Allied Pharmacies',
+      branchName: candidate.branchId || '',
+      branchAddress: ''
+    })
+  }
+
+  // Generate a booking link for email
+  const generateBookingLinkForEmail = async (type: 'interview' | 'trial'): Promise<string> => {
+    if (!candidate || !user) return ''
+    
+    // If we already generated one, return it
+    if (emailGeneratedBookingLink) return emailGeneratedBookingLink
+    if (generatedBookingLink) {
+      setEmailGeneratedBookingLink(generatedBookingLink)
+      return generatedBookingLink
+    }
+    
+    setGeneratingBookingLink(true)
+    try {
+      const functions = getFirebaseFunctions()
+      const createBookingLinkFn = httpsCallable<{
+        candidateId: string
+        candidateName: string
+        candidateEmail?: string
+        type: 'interview' | 'trial'
+        jobTitle?: string
+        expiryDays?: number
+        maxUses?: number
+      }, {
+        success: boolean
+        id: string
+        url: string
+        expiresAt: string
+      }>(functions, 'createBookingLink')
+      
+      const result = await createBookingLinkFn({
+        candidateId: candidate.id,
+        candidateName: `${candidate.firstName} ${candidate.lastName}`,
+        candidateEmail: candidate.email,
+        type,
+        jobTitle: candidate.jobTitle,
+        expiryDays: 3,
+        maxUses: 1,
+      })
+      
+      if (result.data.success) {
+        setEmailGeneratedBookingLink(result.data.url)
+        setGeneratedBookingLink(result.data.url) // Also set for WhatsApp
+        
+        // Log activity
+        logActivity(
+          candidate.id,
+          'booking_link_created',
+          `Generated ${type} booking link (expires ${new Date(result.data.expiresAt).toLocaleDateString()})`
+        )
+        
+        return result.data.url
+      }
+      
+      return ''
+    } catch (error) {
+      console.error('Error generating booking link:', error)
+      return ''
+    } finally {
+      setGeneratingBookingLink(false)
+    }
+  }
+
+  // Select an email template and fill placeholders
+  const handleSelectEmailTemplate = async (template: EmailTemplate) => {
+    setSelectedEmailTemplate(template)
+    setIsEditingEmail(false)
+    
+    // Check if template uses booking link placeholder
+    const usesBookingLink = template.content.includes('{{interviewBookingLink}}')
+    
+    // Generate booking link if needed
+    if (usesBookingLink && !emailGeneratedBookingLink && !generatedBookingLink) {
+      const linkType = template.category === 'trial' ? 'trial' : 'interview'
+      await generateBookingLinkForEmail(linkType)
+    }
+    
+    // Replace placeholders with candidate data
+    const data = getEmailPlaceholderData()
+    const subjectResult = replaceTemplatePlaceholders(template.subject, data)
+    const contentResult = replaceTemplatePlaceholders(template.content, data)
+    setEmailSubject(subjectResult.text)
+    setEmailContent(contentResult.text)
+  }
+
+  // Quick action: Email Interview invitation
+  const handleQuickEmailInterviewInvite = async () => {
+    // Generate booking link first
+    const bookingUrl = await generateBookingLinkForEmail('interview')
+    
+    const template = emailTemplates.find(t => 
+      t.category === 'interview' && t.name.toLowerCase().includes('invitation')
+    )
+    
+    const data = getEmailPlaceholderData()
+    
+    if (template) {
+      setSelectedEmailTemplate(template)
+      setIsEditingEmail(false)
+      const subjectResult = replaceTemplatePlaceholders(template.subject, data)
+      const contentResult = replaceTemplatePlaceholders(template.content, data)
+      setEmailSubject(subjectResult.text)
+      setEmailContent(contentResult.text)
+    } else {
+      // Fallback if no template found
+      setEmailSubject(`Interview Invitation - ${data.jobTitle} at Allied Pharmacies`)
+      setEmailContent(`Dear ${data.firstName},
+
+Thank you for applying for the ${data.jobTitle} position at Allied Pharmacies.
+
+We would like to invite you for an interview. Please use the following link to book a convenient time:
+
+${bookingUrl || data.interviewBookingLink}
+
+If you have any questions, please don't hesitate to contact us.
+
+Best regards,
+Allied Recruitment Team`)
+      setSelectedEmailTemplate(null)
+    }
+  }
+
+  // Quick action: Email Trial invitation
+  const handleQuickEmailTrialInvite = async () => {
+    // Generate booking link first
+    const bookingUrl = await generateBookingLinkForEmail('trial')
+    
+    const template = emailTemplates.find(t => 
+      t.category === 'trial' && t.name.toLowerCase().includes('invitation')
+    )
+    
+    const data = getEmailPlaceholderData()
+    
+    if (template) {
+      setSelectedEmailTemplate(template)
+      setIsEditingEmail(false)
+      const subjectResult = replaceTemplatePlaceholders(template.subject, data)
+      const contentResult = replaceTemplatePlaceholders(template.content, data)
+      setEmailSubject(subjectResult.text)
+      setEmailContent(contentResult.text)
+    } else {
+      // Fallback if no template found
+      setEmailSubject(`Trial Shift Invitation - Allied Pharmacies`)
+      setEmailContent(`Dear ${data.firstName},
+
+Congratulations! Following your successful interview, we would like to invite you for a trial shift at Allied Pharmacies.
+
+Please use this link to book your trial: ${bookingUrl || '[Booking link]'}
+
+What to bring:
+• GPhC registration (if applicable)
+• Photo ID
+• Smart professional attire
+
+If you have any questions, please don't hesitate to contact us.
+
+Best regards,
+Allied Recruitment Team`)
+      setSelectedEmailTemplate(null)
+    }
+  }
+
+  // Copy email content to clipboard
+  const handleCopyEmail = async () => {
+    try {
+      const fullContent = `Subject: ${emailSubject}\n\n${emailContent}`
+      await navigator.clipboard.writeText(fullContent)
+      setEmailCopied(true)
+      setTimeout(() => setEmailCopied(false), 2000)
+    } catch (error) {
+      console.error('Failed to copy:', error)
+    }
+  }
+
+  // Send email via Microsoft Graph API
+  const handleSendEmail = async () => {
+    if (!candidate?.email || !emailContent || !emailSubject) return
+    
+    setSendingEmail(true)
+    
+    try {
+      // Call the Microsoft Graph send email function
+      const functions = getFirebaseFunctions()
+      const sendEmailFn = httpsCallable<{
+        to: string
+        subject: string
+        body: string
+        candidateId: string
+        candidateName: string
+      }, {
+        success: boolean
+        messageId?: string
+        error?: string
+      }>(functions, 'sendEmail')
+      
+      const result = await sendEmailFn({
+        to: candidate.email,
+        subject: emailSubject,
+        body: emailContent,
+        candidateId: candidate.id,
+        candidateName: `${candidate.firstName} ${candidate.lastName}`
+      })
+      
+      if (result.data.success) {
+        // Log activity
+        await logActivity(
+          candidate.id,
+          'message_sent',
+          `Sent email: "${emailSubject}"${selectedEmailTemplate ? ` using template "${selectedEmailTemplate.name}"` : ''}`
+        )
+        
+        // Close modal
+        setShowEmailModal(false)
+        
+        // Show success message
+        alert('Email sent successfully!')
+      } else {
+        throw new Error(result.data.error || 'Failed to send email')
+      }
+    } catch (error: any) {
+      console.error('Error sending email:', error)
+      
+      // Fallback to mailto if Graph API fails
+      const fallback = window.confirm(
+        `Could not send email via Microsoft Graph.\n\nError: ${error.message}\n\nWould you like to open your email client instead?`
+      )
+      
+      if (fallback) {
+        const mailtoUrl = `mailto:${candidate.email}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailContent)}`
+        window.location.href = mailtoUrl
+        
+        // Log activity for fallback
+        await logActivity(
+          candidate.id,
+          'message_sent',
+          `Opened email client for: "${emailSubject}"${selectedEmailTemplate ? ` using template "${selectedEmailTemplate.name}"` : ''}`
+        )
+        
+        setShowEmailModal(false)
+      }
+    } finally {
+      setSendingEmail(false)
+    }
+  }
+
+  // Filter email templates by category
+  const filteredEmailTemplates = emailTemplates.filter(t => 
+    emailCategoryFilter === 'all' || t.category === emailCategoryFilter
+  )
+
+  // Legacy sendEmail - now opens modal
   const sendEmail = () => {
-    if (!candidate?.email) return
-    window.location.href = `mailto:${candidate.email}`
+    openEmailModal()
   }
 
   // Call phone
@@ -1928,80 +1770,29 @@ export function CandidateDetail() {
             </div>
           </Card>
 
-          {/* Notes & CV Summary Card */}
-          <Card className="detail-card notes-card">
-            <h2>Notes & Summary</h2>
-            
-            {/* CV Summary from AI Parsing */}
-            {candidate.cvParsedData && (
-              <div className="cv-summary-section">
-                {/* AI Badge & Summary Text */}
-                <div className="cv-summary-header">
-                  {candidate.cvParsedData.usedAI === true ? (
-                    <span className="parse-badge ai">🤖 AI Parsed</span>
-                  ) : (
-                    <span className="parse-badge regex">📝 Basic Parse</span>
-                  )}
-                  {candidate.cvParsedData.confidence?.overall != null && (
-                    <span className={`confidence-badge ${candidate.cvParsedData.confidence.overall >= 70 ? 'high' : candidate.cvParsedData.confidence.overall >= 40 ? 'medium' : 'low'}`}>
-                      {candidate.cvParsedData.confidence.overall}% confidence
-                    </span>
-                  )}
-                </div>
-
-                {/* Summary Text */}
-                {candidate.cvParsedData.summary && (
-                  <div className="cv-summary-text">
-                    <p>{candidate.cvParsedData.summary}</p>
-                  </div>
-                )}
-
-                {/* Experience Stats */}
-                {(candidate.cvParsedData.totalYearsExperience != null || candidate.cvParsedData.pharmacyYearsExperience != null) && (
-                  <div className="cv-experience-stats">
-                    {candidate.cvParsedData.totalYearsExperience != null && (
-                      <div className="exp-stat-card">
-                        <span className="exp-stat-value">{candidate.cvParsedData.totalYearsExperience}</span>
-                        <span className="exp-stat-label">Years Experience</span>
-                      </div>
-                    )}
-                    {candidate.cvParsedData.pharmacyYearsExperience != null && (
-                      <div className="exp-stat-card">
-                        <span className="exp-stat-value">{candidate.cvParsedData.pharmacyYearsExperience}</span>
-                        <span className="exp-stat-label">Years in Pharmacy</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Qualifications */}
-                {candidate.cvParsedData.qualifications?.length > 0 && (
-                  <div className="cv-qualifications-section">
-                    <span className="section-label">Qualifications</span>
-                    <div className="qual-tags">
-                      {candidate.cvParsedData.qualifications.map((qual: string, i: number) => (
-                        <span key={i} className="qual-tag">{qual}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
+          {/* Job Details Card */}
+          <Card className="detail-card">
+            <h2>Application Details</h2>
+            <div className="details-grid">
+              <div className="detail-item">
+                <span className="detail-label">Position Applied</span>
+                <span className="detail-value">{candidate.jobTitle || '-'}</span>
               </div>
-            )}
-
-            {/* User Notes */}
-            {candidate.notes && (
-              <div className="user-notes-section">
-                <span className="section-label">📝 Notes</span>
-                <p>{candidate.notes}</p>
+              <div className="detail-item">
+                <span className="detail-label">Branch</span>
+                <span className="detail-value">{candidate.branchName || '-'}</span>
               </div>
-            )}
-
-            {/* Empty State */}
-            {!candidate.cvParsedData && !candidate.notes && (
-              <div className="no-notes">
-                <p>No notes or CV summary available</p>
+              <div className="detail-item">
+                <span className="detail-label">Source</span>
+                <span className="detail-value">{candidate.source || '-'}</span>
               </div>
-            )}
+              <div className="detail-item">
+                <span className="detail-label">Current Status</span>
+                <Badge variant={STATUS_COLORS[candidate.status] as any}>
+                  {candidate.status.replace(/_/g, ' ')}
+                </Badge>
+              </div>
+            </div>
           </Card>
 
           {/* CV Card */}
@@ -2103,30 +1894,27 @@ export function CandidateDetail() {
             )}
           </Card>
 
-          {/* Application Details Card */}
+          {/* Notes Card */}
           <Card className="detail-card">
-            <h2>Application Details</h2>
-            
-            <div className="details-grid">
-              <div className="detail-item">
-                <span className="detail-label">Position Applied</span>
-                <span className="detail-value">{candidate.jobTitle || '-'}</span>
+            <h2>Notes</h2>
+            {/* CV Summary from AI Parsing */}
+            {candidate.cvParsedData?.summary && (
+              <div className="cv-summary-notes">
+                <h4>📄 CV Summary</h4>
+                <p>{candidate.cvParsedData.summary}</p>
               </div>
-              <div className="detail-item">
-                <span className="detail-label">Branch</span>
-                <span className="detail-value">{candidate.branchName || '-'}</span>
+            )}
+            {/* User Notes */}
+            {candidate.notes ? (
+              <div className="notes-content">
+                <h4>📝 Notes</h4>
+                <p>{candidate.notes}</p>
               </div>
-              <div className="detail-item">
-                <span className="detail-label">Source</span>
-                <span className="detail-value">{candidate.source || '-'}</span>
+            ) : !candidate.cvParsedData?.summary ? (
+              <div className="no-notes">
+                <p>No notes added yet</p>
               </div>
-              <div className="detail-item">
-                <span className="detail-label">Current Status</span>
-                <Badge variant={STATUS_COLORS[candidate.status] as any}>
-                  {candidate.status.replace(/_/g, ' ')}
-                </Badge>
-              </div>
-            </div>
+            ) : null}
           </Card>
         </div>
 
@@ -2142,96 +1930,16 @@ export function CandidateDetail() {
               }}>
                 Change Status
               </Button>
-              <Button variant="outline" fullWidth onClick={() => openScheduleModal('interview')}>
+              <Button variant="outline" fullWidth>
                 Schedule Interview
               </Button>
-              <Button variant="outline" fullWidth onClick={() => openScheduleModal('trial')}>
+              <Button variant="outline" fullWidth>
                 Schedule Trial
               </Button>
               <Button variant="outline" fullWidth onClick={openWhatsAppModal}>
                 Send WhatsApp
               </Button>
             </div>
-          </Card>
-
-          {/* Scheduled Interviews/Trials Card */}
-          <Card className="sidebar-card scheduled-appointments-card">
-            <h3>📅 Scheduled Appointments</h3>
-            {loadingInterviews ? (
-              <div className="loading-appointments">
-                <Spinner size="sm" />
-              </div>
-            ) : candidateInterviews.length === 0 ? (
-              <div className="no-appointments">
-                <p>No scheduled interviews or trials</p>
-              </div>
-            ) : (
-              <div className="appointments-list">
-                {candidateInterviews.map((interview: any) => {
-                  const scheduledDate = interview.scheduledDate?.toDate?.()
-                  const isUpcoming = scheduledDate && scheduledDate > new Date()
-                  const isPast = scheduledDate && scheduledDate <= new Date()
-                  
-                  return (
-                    <div 
-                      key={interview.id} 
-                      className={`appointment-item ${interview.type} ${interview.status} ${isUpcoming ? 'upcoming' : ''} ${isPast ? 'past' : ''}`}
-                    >
-                      <div className="appointment-type-badge">
-                        {interview.type === 'trial' ? '🏥 Trial' : '📅 Interview'}
-                      </div>
-                      <div className="appointment-details">
-                        <div className="appointment-datetime">
-                          {scheduledDate ? (
-                            <>
-                              <span className="appointment-date">
-                                {scheduledDate.toLocaleDateString('en-GB', { 
-                                  weekday: 'short', 
-                                  day: 'numeric', 
-                                  month: 'short',
-                                  year: 'numeric'
-                                })}
-                              </span>
-                              <span className="appointment-time">
-                                {scheduledDate.toLocaleTimeString('en-GB', { 
-                                  hour: '2-digit', 
-                                  minute: '2-digit' 
-                                })}
-                                {interview.duration && ` (${interview.duration >= 60 ? `${interview.duration / 60}h` : `${interview.duration}m`})`}
-                              </span>
-                            </>
-                          ) : (
-                            <span>Date not set</span>
-                          )}
-                        </div>
-                        {interview.branchName && (
-                          <div className="appointment-location">
-                            📍 {interview.branchName}
-                          </div>
-                        )}
-                        <div className="appointment-status">
-                          <span className={`status-badge ${interview.status}`}>
-                            {interview.status === 'scheduled' && isUpcoming ? '⏳ Upcoming' :
-                             interview.status === 'scheduled' && isPast ? '⚠️ Pending' :
-                             interview.status === 'completed' ? '✅ Completed' :
-                             interview.status === 'cancelled' ? '❌ Cancelled' :
-                             interview.status === 'no_show' ? '🚫 No Show' :
-                             interview.status}
-                          </span>
-                        </div>
-                      </div>
-                      <button 
-                        className="view-appointment-btn"
-                        onClick={() => navigate(`/interviews?highlight=${interview.id}`)}
-                        title="View in Calendar"
-                      >
-                        →
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
           </Card>
 
           {/* Skills Card */}
@@ -2347,26 +2055,20 @@ export function CandidateDetail() {
             )}
           </Card>
 
-          {/* Timestamps Card - Only show if dates exist */}
-          {(candidate.createdAt || candidate.updatedAt) && (
-            <Card className="sidebar-card">
-              <h3>Dates</h3>
-              <div className="timestamps">
-                {candidate.createdAt && formatDateTime(candidate.createdAt) !== '-' && (
-                  <div className="timestamp-item">
-                    <span className="timestamp-label">Created</span>
-                    <span className="timestamp-value">{formatDateTime(candidate.createdAt)}</span>
-                  </div>
-                )}
-                {candidate.updatedAt && formatDateTime(candidate.updatedAt) !== '-' && (
-                  <div className="timestamp-item">
-                    <span className="timestamp-label">Last Updated</span>
-                    <span className="timestamp-value">{formatDateTime(candidate.updatedAt)}</span>
-                  </div>
-                )}
+          {/* Timestamps Card */}
+          <Card className="sidebar-card">
+            <h3>Dates</h3>
+            <div className="timestamps">
+              <div className="timestamp-item">
+                <span className="timestamp-label">Created</span>
+                <span className="timestamp-value">{formatDateTime(candidate.createdAt)}</span>
               </div>
-            </Card>
-          )}
+              <div className="timestamp-item">
+                <span className="timestamp-label">Last Updated</span>
+                <span className="timestamp-value">{formatDateTime(candidate.updatedAt)}</span>
+              </div>
+            </div>
+          </Card>
         </div>
       </div>
 
@@ -2550,89 +2252,6 @@ export function CandidateDetail() {
               disabled={!newStatus || newStatus === candidate.status || updating}
             >
               {updating ? 'Updating...' : 'Update Status'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Job Assignment Modal */}
-      <Modal
-        isOpen={showJobAssignModal}
-        onClose={() => setShowJobAssignModal(false)}
-        title="Assign to Job"
-        size="md"
-      >
-        <div className="job-assign-modal">
-          <p className="modal-description">
-            Select an active job posting to assign this candidate to.
-          </p>
-          
-          {loadingJobs ? (
-            <div className="loading-jobs">
-              <Spinner size="sm" />
-              <span>Loading available jobs...</span>
-            </div>
-          ) : jobs.length === 0 ? (
-            <div className="no-jobs-available">
-              <p>No active jobs available.</p>
-              <Button variant="outline" onClick={() => navigate('/jobs')}>
-                Create a Job
-              </Button>
-            </div>
-          ) : (
-            <>
-              <div className="job-select-container">
-                <label htmlFor="job-select">Select Job</label>
-                <Select
-                  id="job-select"
-                  value={selectedJobId}
-                  onChange={(e) => setSelectedJobId(e.target.value)}
-                  options={[
-                    { value: '', label: 'Choose a job...' },
-                    ...jobs.map(job => ({
-                      value: job.id,
-                      label: `${job.title} - ${job.branchName} (${job.employmentType || 'Full-time'})`
-                    }))
-                  ]}
-                />
-              </div>
-
-              {selectedJobId && (
-                <div className="selected-job-preview">
-                  {(() => {
-                    const job = jobs.find(j => j.id === selectedJobId)
-                    if (!job) return null
-                    return (
-                      <>
-                        <h4>{job.title}</h4>
-                        <div className="job-preview-details">
-                          <span>📍 {job.branchName}</span>
-                          <span>💼 {job.employmentType || 'Full-time'}</span>
-                          {job.salaryMin && job.salaryMax && (
-                            <span>💰 £{(job.salaryMin / 1000).toFixed(0)}k - £{(job.salaryMax / 1000).toFixed(0)}k</span>
-                          )}
-                          {job.candidateCount !== undefined && (
-                            <span>👥 {job.candidateCount} candidate{job.candidateCount !== 1 ? 's' : ''}</span>
-                          )}
-                        </div>
-                      </>
-                    )
-                  })()}
-                </div>
-              )}
-            </>
-          )}
-
-          <div className="modal-actions">
-            <Button variant="outline" onClick={() => setShowJobAssignModal(false)}>
-              Cancel
-            </Button>
-            <Button 
-              variant="primary" 
-              onClick={handleAssignJob}
-              disabled={!selectedJobId || assigningJob}
-            >
-              {assigningJob ? 'Assigning...' : 'Assign to Job'}
             </Button>
           </div>
         </div>
@@ -2976,163 +2595,180 @@ export function CandidateDetail() {
         </div>
       </Modal>
 
-      
-      {/* Direct Scheduling Modal */}
+      {/* Email Modal */}
       <Modal
-        isOpen={showScheduleModal}
-        onClose={() => setShowScheduleModal(false)}
-        title={`Schedule ${scheduleType === 'interview' ? 'Interview' : 'Trial'}`}
+        isOpen={showEmailModal}
+        onClose={() => setShowEmailModal(false)}
+        title="Send Email"
         size="lg"
       >
-        <div className="schedule-modal" style={{ minHeight: '500px' }}>
-          <div style={{ marginBottom: '16px', padding: '12px', background: '#f5f5f5', borderRadius: '8px' }}>
-            <p style={{ margin: '4px 0' }}><strong>Candidate:</strong> {candidate?.firstName} {candidate?.lastName}</p>
-            {candidate?.email && <p style={{ margin: '4px 0' }}><strong>Email:</strong> {candidate.email}</p>}
-            {candidate?.jobTitle && <p style={{ margin: '4px 0' }}><strong>Position:</strong> {candidate.jobTitle}</p>}
+        <div className="whatsapp-modal email-modal">
+          {/* Recipient info header */}
+          <div className="whatsapp-recipient">
+            <div className="recipient-avatar" style={{ background: '#2563eb' }}>
+              {candidate?.firstName?.[0]}{candidate?.lastName?.[0]}
+            </div>
+            <div className="recipient-info">
+              <span className="recipient-name">{candidate?.firstName} {candidate?.lastName}</span>
+              <span className="recipient-phone">{candidate?.email}</span>
+            </div>
           </div>
 
-          {scheduleError && <div style={{ padding: '12px', background: '#fee', color: '#c00', borderRadius: '8px', marginBottom: '16px' }}>{scheduleError}</div>}
-
-          {loadingAvailability ? (
-            <div style={{ textAlign: 'center', padding: '40px' }}>
-              <Spinner size="md" />
-              <p>Loading availability...</p>
+          {/* Quick Actions */}
+          <div className="whatsapp-quick-actions">
+            <h4>Quick Actions</h4>
+            <div className="quick-action-buttons">
+              <button 
+                className="quick-action-btn"
+                onClick={handleQuickEmailInterviewInvite}
+                disabled={generatingBookingLink}
+              >
+                <span className="quick-action-icon">📅</span>
+                <span>{generatingBookingLink ? 'Generating link...' : 'Invite to Interview'}</span>
+              </button>
+              <button 
+                className="quick-action-btn"
+                onClick={handleQuickEmailTrialInvite}
+                disabled={generatingBookingLink}
+              >
+                <span className="quick-action-icon">📋</span>
+                <span>{generatingBookingLink ? 'Generating link...' : 'Invite to Trial'}</span>
+              </button>
             </div>
-          ) : (
-            <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
-              {/* Calendar */}
-              <div style={{ flex: '1', minWidth: '280px' }}>
-                <h4 style={{ marginBottom: '12px' }}>Select a Date</h4>
-                <div style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '16px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                    <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))} style={{ padding: '8px', cursor: 'pointer', border: '1px solid #ddd', borderRadius: '4px', background: 'white' }}>&lt;</button>
-                    <strong>{currentMonth.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</strong>
-                    <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))} style={{ padding: '8px', cursor: 'pointer', border: '1px solid #ddd', borderRadius: '4px', background: 'white' }}>&gt;</button>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center' }}>
-                    {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-                      <div key={i} style={{ padding: '8px', fontWeight: 'bold', color: '#666' }}>{d}</div>
-                    ))}
-                    {(() => {
-                      const firstDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1)
-                      const lastDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0)
-                      const days = []
-                      for (let i = 0; i < firstDay.getDay(); i++) {
-                        days.push(<div key={'empty-' + i} />)
-                      }
-                      for (let d = 1; d <= lastDay.getDate(); d++) {
-                        const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), d)
-                        const isAvailable = availableDates.some(ad => ad.toDateString() === date.toDateString())
-                        const isSelected = selectedScheduleDate?.toDateString() === date.toDateString()
-                        const isPast = date < new Date(new Date().setHours(0, 0, 0, 0))
-                        days.push(
-                          <button
-                            key={d}
-                            onClick={() => isAvailable && !isPast && setSelectedScheduleDate(date)}
-                            disabled={!isAvailable || isPast}
-                            style={{
-                              padding: '8px',
-                              border: isSelected ? '2px solid #0d9488' : '1px solid transparent',
-                              borderRadius: '4px',
-                              background: isSelected ? '#0d9488' : isAvailable && !isPast ? '#e6fffa' : '#f5f5f5',
-                              color: isSelected ? 'white' : isAvailable && !isPast ? '#0d9488' : '#999',
-                              cursor: isAvailable && !isPast ? 'pointer' : 'not-allowed',
-                              fontWeight: isSelected ? 'bold' : 'normal'
-                            }}
-                          >
-                            {d}
-                          </button>
-                        )
-                      }
-                      return days
-                    })()}
-                  </div>
-                </div>
-              </div>
+          </div>
 
-              {/* Time Slots */}
-              <div style={{ flex: '1', minWidth: '200px' }}>
-                <h4 style={{ marginBottom: '12px' }}>
-                  {selectedScheduleDate ? `Available Times - ${selectedScheduleDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}` : 'Select a date first'}
-                </h4>
-                {loadingSlots ? (
-                  <div style={{ textAlign: 'center', padding: '20px' }}><Spinner size="sm" /></div>
-                ) : selectedScheduleDate ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto' }}>
-                    {timeSlots.filter(s => s.available).length === 0 ? (
-                      <p style={{ color: '#666' }}>No available slots for this date</p>
-                    ) : (
-                      timeSlots.filter(s => s.available).map(slot => (
-                        <button
-                          key={slot.time}
-                          onClick={() => setSelectedTimeSlot(slot.time)}
-                          style={{
-                            padding: '12px 16px',
-                            border: selectedTimeSlot === slot.time ? '2px solid #0d9488' : '1px solid #ddd',
-                            borderRadius: '6px',
-                            background: selectedTimeSlot === slot.time ? '#0d9488' : 'white',
-                            color: selectedTimeSlot === slot.time ? 'white' : '#333',
-                            cursor: 'pointer',
-                            textAlign: 'left'
-                          }}
-                        >
-                          {slot.time} - {(() => {
-                            const [h, m] = slot.time.split(':').map(Number)
-                            const endMinutes = h * 60 + m + scheduleDuration
-                            return Math.floor(endMinutes / 60).toString().padStart(2, '0') + ':' + (endMinutes % 60).toString().padStart(2, '0')
-                          })()}
-                        </button>
-                      ))
-                    )}
-                  </div>
+          <div className="whatsapp-divider">
+            <span>or choose a template</span>
+          </div>
+
+          {/* Booking link generated indicator */}
+          {(emailGeneratedBookingLink || generatedBookingLink) && (
+            <div className="booking-link-generated">
+              ✅ Booking link generated and ready to send
+            </div>
+          )}
+
+          {/* Template Selection */}
+          <div className="template-selection">
+            <div className="template-header">
+              <h4>Choose a template</h4>
+              <Select
+                value={emailCategoryFilter}
+                onChange={(e) => setEmailCategoryFilter(e.target.value as TemplateCategory | 'all')}
+                options={[
+                  { value: 'all', label: 'All Categories' },
+                  ...TEMPLATE_CATEGORIES.map(c => ({ value: c.value, label: c.label }))
+                ]}
+              />
+            </div>
+
+            {loadingEmailTemplates ? (
+              <div className="template-loading">
+                <Spinner size="md" />
+              </div>
+            ) : (
+              <div className="template-grid">
+                {filteredEmailTemplates.length === 0 ? (
+                  <p className="no-templates">No templates available. Using default templates.</p>
                 ) : (
-                  <p style={{ color: '#666', padding: '20px', background: '#f9f9f9', borderRadius: '8px' }}>Please select a date from the calendar</p>
+                  filteredEmailTemplates.map(template => {
+                    const category = TEMPLATE_CATEGORIES.find(c => c.value === template.category)
+                    return (
+                      <button
+                        key={template.id}
+                        className={`template-option ${selectedEmailTemplate?.id === template.id ? 'selected' : ''}`}
+                        onClick={() => handleSelectEmailTemplate(template)}
+                      >
+                        <span 
+                          className="template-option-category"
+                          style={{ backgroundColor: `${category?.color}20`, color: category?.color }}
+                        >
+                          {category?.label}
+                        </span>
+                        <span className="template-option-name">{template.name}</span>
+                      </button>
+                    )
+                  })
                 )}
               </div>
+            )}
+          </div>
+
+          {/* Email Subject */}
+          {emailSubject && (
+            <div className="email-subject-section">
+              <label className="email-subject-label">Subject</label>
+              {isEditingEmail ? (
+                <Input
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                  className="email-subject-input"
+                />
+              ) : (
+                <div className="email-subject-preview">{emailSubject}</div>
+              )}
             </div>
           )}
 
-          {/* Additional Options */}
-          {selectedScheduleDate && selectedTimeSlot && (
-            <div style={{ marginTop: '24px', padding: '16px', background: '#f9f9f9', borderRadius: '8px' }}>
-              <div style={{ marginBottom: '16px' }}>
-                <p style={{ margin: '0 0 8px 0' }}><strong>Duration:</strong> {scheduleDuration} minutes</p>
+          {/* Message Preview/Edit */}
+          {emailContent && (
+            <div className="message-section">
+              <div className="message-header">
+                <h4>Message</h4>
+                <div className="message-actions">
+                  <button 
+                    className={`message-action-btn ${isEditingEmail ? 'active' : ''}`}
+                    onClick={() => setIsEditingEmail(!isEditingEmail)}
+                  >
+                    {isEditingEmail ? '👁 Preview' : '✏️ Edit'}
+                  </button>
+                </div>
               </div>
-              
-              {scheduleType === 'trial' && (
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', marginBottom: '4px', fontWeight: 500 }}>Branch *</label>
-                  <select value={selectedBranchId} onChange={(e) => setSelectedBranchId(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}>
-                    <option value="">Select a branch...</option>
-                    {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
-                  </select>
+
+              {isEditingEmail ? (
+                <Textarea
+                  value={emailContent}
+                  onChange={(e) => setEmailContent(e.target.value)}
+                  rows={10}
+                  className="message-editor"
+                />
+              ) : (
+                <div className="message-preview">
+                  {emailContent.split('\n').map((line, i) => (
+                    <p key={i}>
+                      {line ? renderLineWithPlaceholders(line) : '\u00A0'}
+                    </p>
+                  ))}
                 </div>
               )}
-              
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: 500 }}>Notes (optional)</label>
-                <textarea value={scheduleNotes} onChange={(e) => setScheduleNotes(e.target.value)} placeholder="Any additional notes..." rows={2} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }} />
-              </div>
-              
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <input type="checkbox" id="sendConfirmation" checked={sendScheduleConfirmation} onChange={(e) => setSendScheduleConfirmation(e.target.checked)} />
-                <label htmlFor="sendConfirmation">Send confirmation email to candidate</label>
-              </div>
-              
-              {scheduleType === 'interview' && (
-                <p style={{ fontSize: '14px', color: '#666', margin: '12px 0 0 0' }}>📅 A Microsoft Teams meeting will be created and added to your calendar</p>
+
+              {/* Unfilled placeholders warning */}
+              {emailContent.includes('{{') && (
+                <div className="unfilled-warning">
+                  ⚠️ Some placeholders couldn't be filled automatically. Please edit the message to complete them.
+                </div>
               )}
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
-            <Button variant="outline" onClick={() => setShowScheduleModal(false)} disabled={scheduling}>Cancel</Button>
+          {/* Modal Actions */}
+          <div className="whatsapp-modal-actions">
+            <Button variant="secondary" onClick={() => setShowEmailModal(false)}>
+              Cancel
+            </Button>
+            <Button 
+              variant="secondary" 
+              onClick={handleCopyEmail}
+              disabled={!emailContent}
+            >
+              {emailCopied ? '✓ Copied!' : '📋 Copy'}
+            </Button>
             <Button 
               variant="primary" 
-              onClick={handleDirectSchedule} 
-              disabled={scheduling || !selectedScheduleDate || !selectedTimeSlot || (scheduleType === 'trial' && !selectedBranchId)}
+              onClick={handleSendEmail}
+              disabled={!emailContent || !emailSubject || !candidate?.email || sendingEmail}
             >
-              {scheduling ? 'Scheduling...' : `Schedule ${scheduleType === 'interview' ? 'Interview' : 'Trial'}`}
+              {sendingEmail ? '📧 Sending...' : '📧 Send Email'}
             </Button>
           </div>
         </div>

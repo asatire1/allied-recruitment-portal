@@ -250,7 +250,7 @@ async function updateCandidateStatus(
 // ============================================================================
 
 export const getBookingAvailability = onCall<{ token: string }>(
-  { cors: true },
+  { cors: true, region: 'us-central1' },
   async (request) => {
     const { token } = request.data
     
@@ -347,22 +347,18 @@ export const getBookingAvailability = onCall<{ token: string }>(
 // ============================================================================
 
 export const getBookingTimeSlots = onCall<{ token: string; date: string; type?: 'interview' | 'trial' }>(
-  { cors: true },
+  { cors: true, region: 'us-central1' },
   async (request) => {
     const { token, date, type } = request.data
-
-    console.log('getBookingTimeSlots called with:', { date, type, hasToken: !!token })
-
+    
     if (!token || !date) {
       throw new HttpsError('invalid-argument', 'Token and date are required')
     }
-
+    
     // Skip validation for internal scheduling
     const linkDoc = token !== "__internal__" ? await validateToken(token) : null
     const linkData = linkDoc?.data() || {}
     const bookingType = type || linkData.type || 'interview'
-
-    console.log('Booking type determined:', bookingType, 'linkData.type:', linkData.type)
     
     // Get availability settings
     let settings: AvailabilitySettings
@@ -484,13 +480,13 @@ export const getBookingTimeSlots = onCall<{ token: string; date: string; type?: 
           return bufferedSlotStart < existingEnd && bufferedSlotEnd > existingStart
         })
         
-        // Check if slot falls within lunch block (skip for trials - they're 4 hours and will span lunch anyway)
-        const inLunchBlock = bookingType !== 'trial' && isInLunchBlock(timeStr, slotDuration, blocksSettings.lunchBlock)
-
+        // Check if slot falls within lunch block
+        const inLunchBlock = isInLunchBlock(timeStr, slotDuration, blocksSettings.lunchBlock)
+        
         // Determine availability and reason
         let available = meetsNotice && !hasConflict && !inLunchBlock
         let reason: string | undefined = undefined
-
+        
         if (!meetsNotice) {
           reason = 'Too short notice'
         } else if (hasConflict) {
@@ -509,9 +505,6 @@ export const getBookingTimeSlots = onCall<{ token: string; date: string; type?: 
       }
     }
     
-    const availableSlots = slots.filter(s => s.available).length
-    console.log(`Generated ${slots.length} total slots, ${availableSlots} available for ${date} (type: ${bookingType})`)
-
     return { slots, date }
   }
 )
@@ -523,6 +516,7 @@ export const getBookingTimeSlots = onCall<{ token: string; date: string; type?: 
 export const submitBooking = onCall<{ token: string; date: string; time: string }>(
   {
     cors: true,
+    region: 'us-central1',
     // Include Teams secrets so they're available
     secrets: [msClientId, msClientSecret, msTenantId, msOrganizerUserId],
   },
@@ -558,9 +552,9 @@ export const submitBooking = onCall<{ token: string; date: string; time: string 
     
     // Determine duration based on type (trials are always 4 hours, interviews use settings)
     const duration = linkData.type === 'trial' ? 240 : slotDuration
-
-    // Check if time falls within lunch block (skip for trials - they span lunch anyway)
-    if (linkData.type !== 'trial' && isInLunchBlock(time, duration, blocksSettings.lunchBlock)) {
+    
+    // Check if time falls within lunch block
+    if (isInLunchBlock(time, duration, blocksSettings.lunchBlock)) {
       throw new HttpsError('invalid-argument', 'Cannot book during lunch break')
     }
     

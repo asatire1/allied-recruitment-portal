@@ -211,7 +211,7 @@ async function updateCandidateStatus(candidateId, newStatus, reason) {
 // ============================================================================
 // P2.2: GET BOOKING AVAILABILITY
 // ============================================================================
-exports.getBookingAvailability = (0, https_1.onCall)({ cors: true, region: 'us-central1' }, async (request) => {
+exports.getBookingAvailability = (0, https_1.onCall)({ cors: true }, async (request) => {
     const { token } = request.data;
     if (!token) {
         throw new https_1.HttpsError('invalid-argument', 'Token is required');
@@ -296,7 +296,7 @@ exports.getBookingAvailability = (0, https_1.onCall)({ cors: true, region: 'us-c
 // ============================================================================
 // P2.3: GET TIME SLOTS FOR A DATE
 // ============================================================================
-exports.getBookingTimeSlots = (0, https_1.onCall)({ cors: true, region: 'us-central1' }, async (request) => {
+exports.getBookingTimeSlots = (0, https_1.onCall)({ cors: true }, async (request) => {
     const { token, date, type } = request.data;
     if (!token || !date) {
         throw new https_1.HttpsError('invalid-argument', 'Token and date are required');
@@ -409,8 +409,8 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({ cors: true, region: 'us-cent
                 const bufferedSlotEnd = new Date(slotEnd.getTime() + bufferTime * 60000);
                 return bufferedSlotStart < existingEnd && bufferedSlotEnd > existingStart;
             });
-            // Check if slot falls within lunch block
-            const inLunchBlock = isInLunchBlock(timeStr, slotDuration, blocksSettings.lunchBlock);
+            // Check if slot falls within lunch block (skip for trials - they're 4 hours and will span lunch anyway)
+            const inLunchBlock = bookingType !== 'trial' && isInLunchBlock(timeStr, slotDuration, blocksSettings.lunchBlock);
             // Determine availability and reason
             let available = meetsNotice && !hasConflict && !inLunchBlock;
             let reason = undefined;
@@ -438,7 +438,6 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({ cors: true, region: 'us-cent
 // ============================================================================
 exports.submitBooking = (0, https_1.onCall)({
     cors: true,
-    region: 'us-central1',
     // Include Teams secrets so they're available
     secrets: [teamsMeeting_1.msClientId, teamsMeeting_1.msClientSecret, teamsMeeting_1.msTenantId, teamsMeeting_1.msOrganizerUserId],
 }, async (request) => {
@@ -468,8 +467,8 @@ exports.submitBooking = (0, https_1.onCall)({
     }
     // Determine duration based on type (trials are always 4 hours, interviews use settings)
     const duration = linkData.type === 'trial' ? 240 : slotDuration;
-    // Check if time falls within lunch block
-    if (isInLunchBlock(time, duration, blocksSettings.lunchBlock)) {
+    // Check if time falls within lunch block (skip for trials - they span lunch anyway)
+    if (linkData.type !== 'trial' && isInLunchBlock(time, duration, blocksSettings.lunchBlock)) {
         throw new https_1.HttpsError('invalid-argument', 'Cannot book during lunch break');
     }
     // Parse date and time
