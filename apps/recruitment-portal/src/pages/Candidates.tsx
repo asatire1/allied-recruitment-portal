@@ -1372,9 +1372,8 @@ export function Candidates() {
 
         const docRef = await addDoc(collection(db, 'bookingLinks'), bookingLinkData)
 
-        // Build booking URL
-        const baseUrl = window.location.origin
-        const bookingUrl = `${baseUrl}/book/${token}`
+        // Build booking URL - use allied-booking.web.app for the booking page
+        const bookingUrl = `https://allied-booking.web.app/book/${token}`
 
         // Update candidate status to invite_sent
         const candidateRef = doc(db, COLLECTIONS.CANDIDATES, candidate.id)
