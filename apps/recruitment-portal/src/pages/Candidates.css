@@ -1023,12 +1023,66 @@
   overflow: hidden;
 }
 
+.multi-select-search {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--ios-separator);
+  position: relative;
+}
+
+.multi-select-search input {
+  width: 100%;
+  padding: 10px 32px 10px 12px;
+  border: 1px solid var(--ios-separator);
+  border-radius: var(--ios-radius-sm);
+  font-size: 14px;
+  background: var(--ios-bg-secondary);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.multi-select-search input:focus {
+  border-color: var(--ios-blue);
+}
+
+.multi-select-search input::placeholder {
+  color: var(--ios-tertiary-label);
+}
+
+.clear-search-btn {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--ios-tertiary-label);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.clear-search-btn:hover {
+  background: var(--ios-secondary-label);
+}
+
 .multi-select-header {
   padding: 10px 14px;
   border-bottom: 1px solid var(--ios-separator);
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   background: var(--ios-bg-secondary);
+}
+
+.selected-count {
+  font-size: 13px;
+  color: var(--ios-secondary-label);
 }
 
 .select-all-btn {

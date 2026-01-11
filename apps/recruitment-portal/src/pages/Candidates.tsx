@@ -209,6 +209,7 @@ export function Candidates() {
     return []
   })
   const [jobDropdownOpen, setJobDropdownOpen] = useState(false)
+  const [jobSearchTerm, setJobSearchTerm] = useState('')
   
   // Selected candidate for status change
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null)
@@ -2399,10 +2400,37 @@ Allied Recruitment Team`
                 <>
                   <div 
                     className="multi-select-backdrop" 
-                    onClick={() => setJobDropdownOpen(false)}
+                    onClick={() => {
+                      setJobDropdownOpen(false)
+                      setJobSearchTerm('')
+                    }}
                   />
                   <div className="multi-select-dropdown open">
+                    <div className="multi-select-search">
+                      <input
+                        type="text"
+                        placeholder="Search jobs..."
+                        value={jobSearchTerm}
+                        onChange={(e) => setJobSearchTerm(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        autoFocus
+                      />
+                      {jobSearchTerm && (
+                        <button 
+                          className="clear-search-btn"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setJobSearchTerm('')
+                          }}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
                     <div className="multi-select-header">
+                      <span className="selected-count">
+                        {jobFilter.length} selected
+                      </span>
                       <button 
                         className="select-all-btn"
                         onClick={() => setJobFilter([])}
@@ -2414,23 +2442,39 @@ Allied Recruitment Team`
                       {activeJobs.length === 0 ? (
                         <div className="multi-select-empty">No jobs available</div>
                       ) : (
-                        activeJobs.map(job => (
-                          <label key={job.id} className="multi-select-option">
-                            <input
-                              type="checkbox"
-                              checked={jobFilter.includes(job.id)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setJobFilter(prev => [...prev, job.id])
-                                } else {
-                                  setJobFilter(prev => prev.filter(id => id !== job.id))
-                                }
-                              }}
-                            />
-                            <span>{job.title}{job.branchName ? ` - ${job.branchName}` : ''}</span>
-                          </label>
-                        ))
+                        activeJobs
+                          .filter(job => {
+                            if (!jobSearchTerm) return true
+                            const search = jobSearchTerm.toLowerCase()
+                            return job.title.toLowerCase().includes(search) || 
+                                   job.branchName?.toLowerCase().includes(search)
+                          })
+                          .map(job => (
+                            <label key={job.id} className="multi-select-option">
+                              <input
+                                type="checkbox"
+                                checked={jobFilter.includes(job.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setJobFilter(prev => [...prev, job.id])
+                                  } else {
+                                    setJobFilter(prev => prev.filter(id => id !== job.id))
+                                  }
+                                }}
+                              />
+                              <span>{job.title}{job.branchName ? ` - ${job.branchName}` : ''}</span>
+                            </label>
+                          ))
                       )}
+                      {activeJobs.length > 0 && jobSearchTerm && 
+                        activeJobs.filter(job => {
+                          const search = jobSearchTerm.toLowerCase()
+                          return job.title.toLowerCase().includes(search) || 
+                                 job.branchName?.toLowerCase().includes(search)
+                        }).length === 0 && (
+                          <div className="multi-select-empty">No jobs match "{jobSearchTerm}"</div>
+                        )
+                      }
                     </div>
                   </div>
                 </>
