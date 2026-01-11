@@ -454,6 +454,8 @@ async function parseWithClaude(text: string, apiKey: string): Promise<ParsedCV> 
  */
 export const parseCV = onCall<ParseCVRequest, Promise<ParseCVResponse>>(
   {
+    cors: true,
+    region: 'europe-west2',
     timeoutSeconds: 60,
     memory: '512MiB',
     enforceAppCheck: false, // Enable in production
@@ -621,6 +623,8 @@ function hashToken(token: string): string {
  */
 export const createBookingLink = onCall<CreateBookingLinkRequest, Promise<CreateBookingLinkResponse>>(
   {
+    cors: true,
+    region: 'europe-west2',
     timeoutSeconds: 30,
     memory: '256MiB',
     enforceAppCheck: false, // Enable in production
@@ -741,6 +745,7 @@ interface ValidateBookingTokenResponse {
 export const validateBookingToken = onCall<ValidateBookingTokenRequest, Promise<ValidateBookingTokenResponse>>(
   {
     cors: true,
+    region: 'europe-west2',
     timeoutSeconds: 10,
     memory: '256MiB',
     enforceAppCheck: false, // Public function
@@ -848,6 +853,8 @@ interface MarkBookingUsedRequest {
 
 export const markBookingLinkUsed = onCall<MarkBookingUsedRequest, Promise<{ success: boolean }>>(
   {
+    cors: true,
+    region: 'europe-west2',
     timeoutSeconds: 10,
     memory: '256MiB',
     enforceAppCheck: false,
@@ -926,6 +933,8 @@ interface SendEmailResponse {
  */
 export const sendEmail = onCall<SendEmailRequest, Promise<SendEmailResponse>>(
   {
+    cors: true,
+    region: 'europe-west2',
     timeoutSeconds: 30,
     memory: '256MiB',
     secrets: [msClientId, msClientSecret, msTenantId, msOrganizerUserId],

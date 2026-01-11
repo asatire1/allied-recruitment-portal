@@ -298,6 +298,7 @@ exports.getBookingAvailability = (0, https_1.onCall)({ cors: true }, async (requ
 // ============================================================================
 exports.getBookingTimeSlots = (0, https_1.onCall)({ cors: true }, async (request) => {
     const { token, date, type } = request.data;
+    console.log('getBookingTimeSlots called with:', { date, type, hasToken: !!token });
     if (!token || !date) {
         throw new https_1.HttpsError('invalid-argument', 'Token and date are required');
     }
@@ -305,6 +306,7 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({ cors: true }, async (request
     const linkDoc = token !== "__internal__" ? await validateToken(token) : null;
     const linkData = linkDoc?.data() || {};
     const bookingType = type || linkData.type || 'interview';
+    console.log('Booking type determined:', bookingType, 'linkData.type:', linkData.type);
     // Get availability settings
     let settings;
     try {
@@ -431,6 +433,8 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({ cors: true }, async (request
             currentMinutes += slotInterval + bufferTime;
         }
     }
+    const availableSlots = slots.filter(s => s.available).length;
+    console.log(`Generated ${slots.length} total slots, ${availableSlots} available for ${date} (type: ${bookingType})`);
     return { slots, date };
 });
 // ============================================================================

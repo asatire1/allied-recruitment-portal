@@ -404,6 +404,8 @@ async function parseWithClaude(text, apiKey) {
  * Accepts a file URL from Firebase Storage and returns structured CV data
  */
 exports.parseCV = (0, https_1.onCall)({
+    cors: true,
+    region: 'europe-west2',
     timeoutSeconds: 60,
     memory: '512MiB',
     enforceAppCheck: false, // Enable in production
@@ -520,6 +522,8 @@ function hashToken(token) {
  * Token is only returned once; only the hash is stored in Firestore.
  */
 exports.createBookingLink = (0, https_1.onCall)({
+    cors: true,
+    region: 'europe-west2',
     timeoutSeconds: 30,
     memory: '256MiB',
     enforceAppCheck: false, // Enable in production
@@ -586,6 +590,7 @@ exports.createBookingLink = (0, https_1.onCall)({
 });
 exports.validateBookingToken = (0, https_1.onCall)({
     cors: true,
+    region: 'europe-west2',
     timeoutSeconds: 10,
     memory: '256MiB',
     enforceAppCheck: false, // Public function
@@ -668,6 +673,8 @@ exports.validateBookingToken = (0, https_1.onCall)({
     }
 });
 exports.markBookingLinkUsed = (0, https_1.onCall)({
+    cors: true,
+    region: 'europe-west2',
     timeoutSeconds: 10,
     memory: '256MiB',
     enforceAppCheck: false,
@@ -718,6 +725,8 @@ const msOrganizerUserId = (0, params_1.defineSecret)('MS_ORGANIZER_USER_ID');
  * and sends from the organizer user (recruitment@alliedpharmacies.co.uk).
  */
 exports.sendEmail = (0, https_1.onCall)({
+    cors: true,
+    region: 'europe-west2',
     timeoutSeconds: 30,
     memory: '256MiB',
     secrets: [msClientId, msClientSecret, msTenantId, msOrganizerUserId],
