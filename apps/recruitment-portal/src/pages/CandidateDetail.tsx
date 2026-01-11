@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { doc, getDoc, updateDoc, deleteDoc, addDoc, collection, query, where, orderBy, getDocs, serverTimestamp } from 'firebase/firestore'
+import { doc, getDoc, updateDoc, deleteDoc, addDoc, collection, query, where, orderBy, getDocs, serverTimestamp, limit } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
 import { httpsCallable } from 'firebase/functions'
 import { 
@@ -329,6 +329,8 @@ export function CandidateDetail() {
   const [meetingSummary, setMeetingSummary] = useState('')
   const [savingMeetingSummary, setSavingMeetingSummary] = useState(false)
   const [meetingSummarySaved, setMeetingSummarySaved] = useState(false)
+  const [fetchingCopilotSummary, setFetchingCopilotSummary] = useState(false)
+  const [latestInterview, setLatestInterview] = useState<any>(null)
 
   // Interview Feedback expanded state
   const [feedbackExpanded, setFeedbackExpanded] = useState(false)
@@ -1469,6 +1471,125 @@ Allied Recruitment Team`)
     }
   }, [candidate?.meetingSummary])
 
+  // Load latest interview for this candidate (to get onlineMeetingId)
+  useEffect(() => {
+    const loadLatestInterview = async () => {
+      if (!candidate?.id) return
+      
+      try {
+        const interviewsQuery = query(
+          collection(db, 'interviews'),
+          where('candidateId', '==', candidate.id),
+          orderBy('scheduledAt', 'desc'),
+          limit(1)
+        )
+        const snapshot = await getDocs(interviewsQuery)
+        if (!snapshot.empty) {
+          const interviewData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() }
+          setLatestInterview(interviewData)
+        }
+      } catch (error) {
+        console.error('Error loading latest interview:', error)
+      }
+    }
+    
+    loadLatestInterview()
+  }, [candidate?.id, db])
+
+  // Fetch Copilot meeting summary from Microsoft Graph
+  const handleFetchCopilotSummary = async () => {
+    if (!latestInterview?.onlineMeetingId) {
+      alert('No Teams meeting found for this candidate. The interview must have a Teams meeting link to fetch Copilot insights.')
+      return
+    }
+
+    setFetchingCopilotSummary(true)
+    try {
+      const functions = getFirebaseFunctions()
+      const fetchInsightsFn = httpsCallable<{
+        interviewId: string
+        onlineMeetingId: string
+      }, {
+        success: boolean
+        insights?: {
+          summary: string
+          keyPoints: string[]
+          actionItems: { text: string; owner?: string }[]
+        }
+        error?: string
+      }>(functions, 'fetchMeetingInsights')
+
+      const result = await fetchInsightsFn({
+        interviewId: latestInterview.id,
+        onlineMeetingId: latestInterview.onlineMeetingId,
+      })
+
+      if (result.data.success && result.data.insights) {
+        // Format the insights into a readable summary
+        let formattedSummary = ''
+        
+        if (result.data.insights.summary) {
+          formattedSummary += result.data.insights.summary + '\n\n'
+        }
+        
+        if (result.data.insights.keyPoints?.length > 0) {
+          formattedSummary += '📌 Key Points:\n'
+          result.data.insights.keyPoints.forEach(point => {
+            formattedSummary += `• ${point}\n`
+          })
+          formattedSummary += '\n'
+        }
+        
+        if (result.data.insights.actionItems?.length > 0) {
+          formattedSummary += '✅ Action Items:\n'
+          result.data.insights.actionItems.forEach(item => {
+            formattedSummary += `• ${item.text}${item.owner ? ` (${item.owner})` : ''}\n`
+          })
+        }
+
+        setMeetingSummary(formattedSummary.trim())
+        
+        // Auto-save after fetching
+        if (candidate) {
+          await updateDoc(doc(db, COLLECTIONS.CANDIDATES, candidate.id), {
+            meetingSummary: {
+              content: formattedSummary.trim(),
+              updatedAt: serverTimestamp(),
+              updatedBy: 'Copilot',
+              updatedByName: 'Microsoft Copilot',
+              source: 'copilot_auto',
+            },
+          })
+          
+          setCandidate(prev => prev ? {
+            ...prev,
+            meetingSummary: {
+              content: formattedSummary.trim(),
+              updatedAt: new Date(),
+              updatedBy: 'Copilot',
+              updatedByName: 'Microsoft Copilot',
+            },
+          } : null)
+
+          await logActivity(
+            candidate.id,
+            'updated',
+            'Meeting summary imported from Microsoft Copilot'
+          )
+        }
+        
+        alert('✓ Copilot meeting summary imported successfully!')
+      } else {
+        alert(result.data.error || 'Could not fetch meeting insights. The meeting may not have ended yet or transcription may not be enabled.')
+      }
+    } catch (error: any) {
+      console.error('Error fetching Copilot summary:', error)
+      alert(`Failed to fetch Copilot summary: ${error.message || 'Unknown error'}`)
+    } finally {
+      setFetchingCopilotSummary(false)
+    }
+  }
+
   // Filter email templates by category
   const filteredEmailTemplates = emailTemplates.filter(t => 
     emailCategoryFilter === 'all' || t.category === emailCategoryFilter
@@ -2142,9 +2263,36 @@ Allied Recruitment Team`)
 
                   {meetingSummaryExpanded && (
                     <div className="meeting-summary-content">
-                      <p className="meeting-summary-hint">
-                        Paste the AI-generated meeting summary from Microsoft Copilot or Teams below.
-                      </p>
+                      {/* Fetch from Copilot Button */}
+                      <div className="copilot-fetch-section">
+                        <Button
+                          variant="outline"
+                          onClick={handleFetchCopilotSummary}
+                          disabled={fetchingCopilotSummary || !latestInterview?.onlineMeetingId}
+                          className="fetch-copilot-btn"
+                        >
+                          {fetchingCopilotSummary ? (
+                            <>
+                              <Spinner size="sm" /> Fetching from Copilot...
+                            </>
+                          ) : (
+                            <>
+                              🤖 Fetch from Microsoft Copilot
+                            </>
+                          )}
+                        </Button>
+                        {!latestInterview?.onlineMeetingId && (
+                          <span className="copilot-hint">No Teams meeting found for this candidate</span>
+                        )}
+                        {latestInterview?.onlineMeetingId && (
+                          <span className="copilot-hint">✓ Teams meeting available</span>
+                        )}
+                      </div>
+
+                      <div className="copilot-divider">
+                        <span>or paste manually</span>
+                      </div>
+
                       <Textarea
                         value={meetingSummary}
                         onChange={(e) => setMeetingSummary(e.target.value)}
@@ -2164,18 +2312,18 @@ Example:
                           onClick={handleSaveMeetingSummary}
                           disabled={savingMeetingSummary || !meetingSummary.trim()}
                         >
-                      {savingMeetingSummary ? 'Saving...' : meetingSummarySaved ? '✓ Saved!' : 'Save Summary'}
-                    </Button>
-                    {candidate.meetingSummary?.updatedAt && (
-                      <span className="last-updated">
-                        Last updated by {candidate.meetingSummary.updatedByName} on {formatDate(candidate.meetingSummary.updatedAt)}
-                      </span>
-                    )}
-                  </div>
+                          {savingMeetingSummary ? 'Saving...' : meetingSummarySaved ? '✓ Saved!' : 'Save Summary'}
+                        </Button>
+                        {candidate.meetingSummary?.updatedAt && (
+                          <span className="last-updated">
+                            Last updated by {candidate.meetingSummary.updatedByName} on {formatDate(candidate.meetingSummary.updatedAt)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
             )}
           </Card>
 

@@ -1423,3 +1423,70 @@ button[data-variant="danger"] {
   padding-top: 20px;
   border-top: 1px solid var(--ios-separator);
 }
+
+/* ============================================================================
+   COPILOT FETCH SECTION
+   ============================================================================ */
+
+.copilot-fetch-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px;
+  background: linear-gradient(135deg, rgba(88, 86, 214, 0.08) 0%, rgba(175, 82, 222, 0.08) 100%);
+  border-radius: var(--ios-radius-md);
+  margin-bottom: 16px;
+}
+
+.fetch-copilot-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px !important;
+  background: linear-gradient(135deg, #5856d6 0%, #af52de 100%) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: var(--ios-radius-md) !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  cursor: pointer;
+  transition: all 0.2s ease !important;
+}
+
+.fetch-copilot-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(88, 86, 214, 0.4);
+}
+
+.fetch-copilot-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.copilot-hint {
+  font-size: 12px;
+  color: var(--ios-secondary-label);
+}
+
+.copilot-hint:first-letter {
+  text-transform: capitalize;
+}
+
+.copilot-divider {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: var(--ios-tertiary-label);
+  font-size: 13px;
+  margin: 8px 0 16px 0;
+}
+
+.copilot-divider::before,
+.copilot-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--ios-separator);
+}
