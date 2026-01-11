@@ -331,7 +331,26 @@ service cloud.firestore {
       allow create, update: if isRecruiterOrAdmin();
       allow delete: if isSuperAdmin();
     }
-    
+
+    // ============================================================
+    // EMAIL TEMPLATES COLLECTION
+    // ============================================================
+    match /emailTemplates/{templateId} {
+      allow read: if isRecruiterOrAdmin();
+      allow create, update: if isRecruiterOrAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    // ============================================================
+    // EMAIL TRACKING COLLECTION
+    // ============================================================
+    match /emailTracking/{trackingId} {
+      allow read: if isRecruiterOrAdmin();
+      allow create: if isRecruiterOrAdmin();
+      allow update: if true; // Allow tracking pixel/click updates
+      allow delete: if isSuperAdmin();
+    }
+
     // ============================================================
     // TRIAL FEEDBACK COLLECTION
     // ============================================================

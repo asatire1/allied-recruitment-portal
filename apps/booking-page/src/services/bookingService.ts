@@ -4,7 +4,7 @@
  */
 
 import { httpsCallable } from 'firebase/functions'
-import { functions } from '../lib/firebase'
+import { functions, functionsEU } from '../lib/firebase'
 
 // ============================================================================
 // TYPES
@@ -42,7 +42,7 @@ export type ValidationResult =
 export async function validateBookingToken(token: string): Promise<ValidationResult> {
   try {
     const validateToken = httpsCallable<{ token: string }, { valid: boolean; data?: BookingLinkData; error?: string }>(
-      functions, 
+      functionsEU,
       'validateBookingToken'
     )
     
