@@ -405,6 +405,9 @@ export function CandidateDetail() {
           id: candidateSnap.id,
           ...candidateSnap.data()
         } as Candidate)
+        
+        // Preload email templates for rejection emails
+        loadEmailTemplates()
       } catch (err) {
         console.error('Error fetching candidate:', err)
         setError('Failed to load candidate')
@@ -549,6 +552,48 @@ export function CandidateDetail() {
 
       setCandidate(prev => prev ? { ...prev, status: newStatus } : null)
       setShowStatusModal(false)
+      
+      // If status changed to rejected, prompt to send rejection email
+      if (newStatus === 'rejected') {
+        // Find rejection email template
+        const rejectionTemplate = emailTemplates.find(t => 
+          t.category === 'rejection' && t.active
+        )
+        
+        if (rejectionTemplate) {
+          // Pre-populate the email modal with rejection template
+          const data = getEmailPlaceholderData()
+          const processedSubject = replaceTemplatePlaceholders(rejectionTemplate.subject || '', data).text
+          const processedContent = replaceTemplatePlaceholders(rejectionTemplate.content, data).text
+          
+          setSelectedEmailTemplate(rejectionTemplate)
+          setEmailSubject(processedSubject)
+          setEmailContent(processedContent)
+          setEmailCategoryFilter('rejection')
+          
+          // Ask user if they want to send rejection email
+          const sendEmail = window.confirm(
+            'Candidate marked as rejected. Would you like to send a rejection email?'
+          )
+          
+          if (sendEmail) {
+            setShowEmailModal(true)
+          }
+        } else {
+          // No rejection template found, ask if they want to compose one
+          const composeEmail = window.confirm(
+            'Candidate marked as rejected. Would you like to send a rejection email?\n\n(No rejection template found - you can compose a custom email)'
+          )
+          
+          if (composeEmail) {
+            setEmailCategoryFilter('rejection')
+            setEmailSubject(`Your Application - ${candidate.jobTitle || 'Position'} at Allied Pharmacies`)
+            setEmailContent(`Dear ${candidate.firstName},\n\nThank you for your interest in the ${candidate.jobTitle || 'position'} at Allied Pharmacies.\n\nAfter careful consideration, we regret to inform you that we will not be progressing with your application at this time.\n\nWe appreciate your interest and wish you all the best in your job search.\n\nKind regards,\nAllied Pharmacies Recruitment Team`)
+            setShowEmailModal(true)
+          }
+        }
+      }
+      
       setNewStatus('')
     } catch (err) {
       console.error('Error updating status:', err)
