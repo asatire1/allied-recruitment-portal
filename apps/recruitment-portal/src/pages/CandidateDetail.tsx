@@ -2641,6 +2641,41 @@ Example:
               </div>
             ) : null}
           </Card>
+
+          {/* Activity Timeline - Inside main column */}
+          <Card className="detail-card activity-timeline-card">
+            <h2>Activity Timeline</h2>
+            {loadingActivities ? (
+              <div className="activity-loading">
+                <Spinner size="sm" />
+                <span>Loading activity...</span>
+              </div>
+            ) : activities.length === 0 ? (
+              <div className="activity-empty">
+                <p>No activity recorded yet</p>
+              </div>
+            ) : (
+              <div className="activity-list">
+                {activities.map((activity) => (
+                  <div key={activity.id} className="activity-item">
+                    <div className="activity-icon">
+                      {getActivityIcon(activity.action)}
+                    </div>
+                    <div className="activity-content">
+                      <div className="activity-description">
+                        {activity.description}
+                      </div>
+                      <div className="activity-meta">
+                        <span className="activity-user">{activity.userName}</span>
+                        <span className="activity-separator">•</span>
+                        <span className="activity-time">{formatDateTime(activity.createdAt)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
         </div>
 
         {/* Right Column - Sidebar */}
@@ -2904,41 +2939,6 @@ Example:
           )}
         </Card>
       )}
-
-      {/* Activity Timeline */}
-      <Card className="activity-timeline-card">
-        <h2>Activity Timeline</h2>
-        {loadingActivities ? (
-          <div className="activity-loading">
-            <Spinner size="sm" />
-            <span>Loading activity...</span>
-          </div>
-        ) : activities.length === 0 ? (
-          <div className="activity-empty">
-            <p>No activity recorded yet</p>
-          </div>
-        ) : (
-          <div className="activity-list">
-            {activities.map((activity) => (
-              <div key={activity.id} className="activity-item">
-                <div className="activity-icon">
-                  {getActivityIcon(activity.action)}
-                </div>
-                <div className="activity-content">
-                  <div className="activity-description">
-                    {activity.description}
-                  </div>
-                  <div className="activity-meta">
-                    <span className="activity-user">{activity.userName}</span>
-                    <span className="activity-separator">•</span>
-                    <span className="activity-time">{formatDateTime(activity.createdAt)}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
 
       {/* Status Change Modal */}
       <Modal
