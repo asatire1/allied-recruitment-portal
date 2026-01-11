@@ -291,6 +291,30 @@ export function CandidateDetail() {
   const [sendingEmail, setSendingEmail] = useState(false)
   const [emailGeneratedBookingLink, setEmailGeneratedBookingLink] = useState<string | null>(null)
 
+  // Feedback form state
+  const [feedbackRatings, setFeedbackRatings] = useState<Record<string, number>>({
+    communication: 0,
+    experience: 0,
+    attitude: 0,
+    availability: 0,
+    overall: 0,
+  })
+  const [feedbackNotes, setFeedbackNotes] = useState('')
+  const [savingFeedback, setSavingFeedback] = useState(false)
+  const [feedbackSaved, setFeedbackSaved] = useState(false)
+
+  // Feedback criteria labels
+  const FEEDBACK_CRITERIA = [
+    { key: 'communication', label: 'Communication Skills', icon: '💬' },
+    { key: 'experience', label: 'Relevant Experience', icon: '📋' },
+    { key: 'attitude', label: 'Attitude & Enthusiasm', icon: '✨' },
+    { key: 'availability', label: 'Availability & Flexibility', icon: '📅' },
+    { key: 'overall', label: 'Overall Impression', icon: '⭐' },
+  ]
+
+  // Check if feedback form should be editable
+  const canEditFeedback = candidate?.status === 'interview_complete' || candidate?.status === 'trial_complete'
+
   const db = getFirebaseDb()
   const storage = getFirebaseStorage()
 
@@ -1248,6 +1272,65 @@ Allied Recruitment Team`)
     }
   }
 
+  // Save feedback to candidate document
+  const handleSaveFeedback = async () => {
+    if (!candidate || !canEditFeedback) return
+
+    setSavingFeedback(true)
+    try {
+      const feedbackData = {
+        ratings: feedbackRatings,
+        notes: feedbackNotes,
+        submittedAt: serverTimestamp(),
+        submittedBy: user?.id || user?.email || 'Unknown',
+        submittedByName: user?.displayName || user?.email || 'Unknown',
+      }
+
+      await updateDoc(doc(db, COLLECTIONS.CANDIDATES, candidate.id), {
+        feedback: feedbackData,
+        status: 'screening', // Move to next stage after feedback
+        statusUpdatedAt: serverTimestamp(),
+      })
+
+      // Log activity
+      await logActivity(
+        candidate.id,
+        'feedback_submitted',
+        `Feedback submitted - Overall rating: ${feedbackRatings.overall}/5`
+      )
+
+      setFeedbackSaved(true)
+      
+      // Update local candidate state
+      setCandidate(prev => prev ? {
+        ...prev,
+        feedback: feedbackData as any,
+        status: 'screening',
+      } : null)
+
+      setTimeout(() => setFeedbackSaved(false), 3000)
+    } catch (error) {
+      console.error('Error saving feedback:', error)
+      alert('Failed to save feedback. Please try again.')
+    } finally {
+      setSavingFeedback(false)
+    }
+  }
+
+  // Load existing feedback when candidate loads
+  useEffect(() => {
+    if (candidate?.feedback) {
+      setFeedbackRatings(candidate.feedback.ratings || {
+        communication: 0,
+        experience: 0,
+        attitude: 0,
+        availability: 0,
+        overall: 0,
+      })
+      setFeedbackNotes(candidate.feedback.notes || '')
+    }
+  }, [candidate?.feedback])
+
   // Filter email templates by category
   const filteredEmailTemplates = emailTemplates.filter(t => 
     emailCategoryFilter === 'all' || t.category === emailCategoryFilter
@@ -1772,29 +1855,82 @@ Allied Recruitment Team`)
             </div>
           </Card>
 
-          {/* Job Details Card */}
-          <Card className="detail-card">
-            <h2>Application Details</h2>
-            <div className="details-grid">
-              <div className="detail-item">
-                <span className="detail-label">Position Applied</span>
-                <span className="detail-value">{candidate.jobTitle || '-'}</span>
+          {/* Feedback Card */}
+          <Card className="detail-card feedback-card">
+            <h2>Interview Feedback</h2>
+            {!canEditFeedback && !candidate.feedback ? (
+              <div className="feedback-locked">
+                <div className="locked-icon">🔒</div>
+                <p>Feedback will be available after the interview is completed</p>
+                <span className="current-status">Current status: {candidate.status.replace(/_/g, ' ')}</span>
               </div>
-              <div className="detail-item">
-                <span className="detail-label">Branch</span>
-                <span className="detail-value">{candidate.branchName || '-'}</span>
+            ) : (
+              <div className="feedback-form">
+                {/* Star Ratings */}
+                <div className="feedback-criteria-list">
+                  {FEEDBACK_CRITERIA.map(({ key, label, icon }) => (
+                    <div key={key} className="feedback-criterion">
+                      <div className="criterion-label">
+                        <span className="criterion-icon">{icon}</span>
+                        <span>{label}</span>
+                      </div>
+                      <div className="star-rating">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button
+                            key={star}
+                            type="button"
+                            className={`star-btn ${feedbackRatings[key] >= star ? 'active' : ''}`}
+                            onClick={() => canEditFeedback && setFeedbackRatings(prev => ({ ...prev, [key]: star }))}
+                            disabled={!canEditFeedback}
+                          >
+                            ★
+                          </button>
+                        ))}
+                        <span className="rating-value">
+                          {feedbackRatings[key] > 0 ? feedbackRatings[key] : '-'}/5
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Notes Section */}
+                <div className="feedback-notes-section">
+                  <label className="notes-label">Additional Notes</label>
+                  <Textarea
+                    value={feedbackNotes}
+                    onChange={(e) => setFeedbackNotes(e.target.value)}
+                    placeholder={canEditFeedback ? "Add any additional observations, strengths, concerns..." : "No notes added"}
+                    rows={4}
+                    disabled={!canEditFeedback}
+                    className="feedback-notes-input"
+                  />
+                </div>
+
+                {/* Save Button */}
+                {canEditFeedback && (
+                  <div className="feedback-actions">
+                    <Button
+                      variant="primary"
+                      onClick={handleSaveFeedback}
+                      disabled={savingFeedback || feedbackRatings.overall === 0}
+                    >
+                      {savingFeedback ? 'Saving...' : feedbackSaved ? '✓ Saved!' : 'Save Feedback'}
+                    </Button>
+                    {feedbackRatings.overall === 0 && (
+                      <span className="feedback-hint">Please rate "Overall Impression" to save</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Show submitted info if feedback exists */}
+                {candidate.feedback?.submittedAt && (
+                  <div className="feedback-submitted-info">
+                    ✓ Feedback submitted by {candidate.feedback.submittedByName || 'Unknown'} on {formatDate(candidate.feedback.submittedAt)}
+                  </div>
+                )}
               </div>
-              <div className="detail-item">
-                <span className="detail-label">Source</span>
-                <span className="detail-value">{candidate.source || '-'}</span>
-              </div>
-              <div className="detail-item">
-                <span className="detail-label">Current Status</span>
-                <Badge variant={STATUS_COLORS[candidate.status] as any}>
-                  {candidate.status.replace(/_/g, ' ')}
-                </Badge>
-              </div>
-            </div>
+            )}
           </Card>
 
           {/* CV Card */}

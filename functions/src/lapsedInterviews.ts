@@ -5,6 +5,8 @@
  * without being completed, and resolving them when appropriate.
  * 
  * Updated: Auto-resolve lapsed interviews when candidate status changes
+ * Updated: Run at 6am, 12pm, 6pm and midnight for faster status updates
+ * Updated: Auto-complete past interviews and update candidate status
  */
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
@@ -29,73 +31,174 @@ const AUTO_RESOLVE_STATUSES = [
 ]
 
 // ============================================================================
-// Mark Lapsed Interviews (Scheduled Function)
-// Runs daily at 6 AM to mark overdue interviews as lapsed
+// Process Past Interviews (Core Logic)
+// Marks past interviews as completed and updates candidate status
 // ============================================================================
 
-export const markLapsedInterviews = onSchedule(
+async function processPassedInterviews(): Promise<{ completed: number; lapsed: number; candidatesUpdated: number }> {
+  const now = new Date()
+  let completedCount = 0
+  let lapsedCount = 0
+  let candidatesUpdated = 0
+
+  try {
+    // Find interviews that are scheduled/confirmed but past their date+time
+    const interviewsSnapshot = await db
+      .collection('interviews')
+      .where('status', 'in', ['scheduled', 'confirmed'])
+      .where('scheduledDate', '<', admin.firestore.Timestamp.fromDate(now))
+      .get()
+
+    if (interviewsSnapshot.empty) {
+      logger.info('No past interviews to process')
+      return { completed: 0, lapsed: 0, candidatesUpdated: 0 }
+    }
+
+    const batch = db.batch()
+    const candidatesToUpdate = new Map<string, string>() // candidateId -> newStatus
+
+    for (const doc of interviewsSnapshot.docs) {
+      const interview = doc.data()
+      const scheduledDate = interview.scheduledDate?.toDate?.() || new Date(0)
+      const hoursSinceInterview = (now.getTime() - scheduledDate.getTime()) / (1000 * 60 * 60)
+      
+      // Check if candidate status should prevent processing
+      if (interview.candidateId) {
+        const candidateDoc = await db.collection('candidates').doc(interview.candidateId).get()
+        if (candidateDoc.exists) {
+          const candidate = candidateDoc.data()
+          if (candidate && AUTO_RESOLVE_STATUSES.includes(candidate.status)) {
+            // Auto-resolve instead of completing
+            batch.update(doc.ref, {
+              status: 'resolved',
+              resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+              resolvedReason: `Auto-resolved: candidate status is ${candidate.status}`,
+            })
+            lapsedCount++
+            continue
+          }
+        }
+      }
+
+      // If interview was less than 2 hours ago, mark as completed and update candidate
+      if (hoursSinceInterview < 48) {
+        batch.update(doc.ref, {
+          status: 'completed',
+          completedAt: admin.firestore.FieldValue.serverTimestamp(),
+          autoCompleted: true,
+        })
+        completedCount++
+
+        // Track candidate for status update
+        if (interview.candidateId && interview.type) {
+          const newStatus = interview.type === 'trial' ? 'trial_complete' : 'interview_complete'
+          candidatesToUpdate.set(interview.candidateId, newStatus)
+        }
+      } else {
+        // If more than 48 hours, mark as lapsed (needs manual resolution)
+        batch.update(doc.ref, {
+          status: 'lapsed',
+          lapsedAt: admin.firestore.FieldValue.serverTimestamp(),
+        })
+        lapsedCount++
+      }
+    }
+
+    await batch.commit()
+
+    // Update candidate statuses
+    for (const [candidateId, newStatus] of candidatesToUpdate) {
+      try {
+        const candidateRef = db.collection('candidates').doc(candidateId)
+        const candidateDoc = await candidateRef.get()
+        
+        if (candidateDoc.exists) {
+          const currentStatus = candidateDoc.data()?.status
+          // Only update if moving forward in the workflow
+          const statusOrder = ['new', 'screening', 'interview_scheduled', 'interview_complete', 'trial_scheduled', 'trial_complete', 'approved']
+          const currentIndex = statusOrder.indexOf(currentStatus)
+          const newIndex = statusOrder.indexOf(newStatus)
+          
+          if (newIndex > currentIndex || currentStatus === 'interview_scheduled' || currentStatus === 'trial_scheduled') {
+            await candidateRef.update({
+              status: newStatus,
+              statusUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              statusUpdatedBy: 'system',
+            })
+            candidatesUpdated++
+            logger.info(`Updated candidate ${candidateId} status to ${newStatus}`)
+          }
+        }
+      } catch (err) {
+        logger.error(`Failed to update candidate ${candidateId}:`, err)
+      }
+    }
+
+    return { completed: completedCount, lapsed: lapsedCount, candidatesUpdated }
+  } catch (error) {
+    logger.error('Error processing passed interviews:', error)
+    throw error
+  }
+}
+
+// ============================================================================
+// Scheduled Functions - Run at 6am, 12pm, 6pm, and midnight
+// ============================================================================
+
+export const processInterviews6am = onSchedule(
   {
     schedule: '0 6 * * *', // Daily at 6 AM
     timeZone: 'Europe/London',
     region: 'europe-west2',
   },
   async () => {
-    try {
-      const now = new Date()
-      const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-
-      // Find interviews that are scheduled but past their date
-      const interviewsSnapshot = await db
-        .collection('interviews')
-        .where('status', '==', 'scheduled')
-        .where('scheduledDate', '<', admin.firestore.Timestamp.fromDate(twentyFourHoursAgo))
-        .get()
-
-      if (interviewsSnapshot.empty) {
-        logger.info('No lapsed interviews found')
-        return
-      }
-
-      const batch = db.batch()
-      let count = 0
-
-      for (const doc of interviewsSnapshot.docs) {
-        const interview = doc.data()
-        
-        // Check if candidate status should prevent lapsing
-        if (interview.candidateId) {
-          const candidateDoc = await db.collection('candidates').doc(interview.candidateId).get()
-          if (candidateDoc.exists) {
-            const candidate = candidateDoc.data()
-            if (candidate && AUTO_RESOLVE_STATUSES.includes(candidate.status)) {
-              // Don't mark as lapsed, resolve it instead
-              batch.update(doc.ref, {
-                status: 'resolved',
-                resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
-                resolvedReason: `Auto-resolved: candidate status is ${candidate.status}`,
-              })
-              count++
-              continue
-            }
-          }
-        }
-
-        // Mark as lapsed
-        batch.update(doc.ref, {
-          status: 'lapsed',
-          lapsedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-        count++
-      }
-
-      await batch.commit()
-      logger.info(`Processed ${count} interviews (marked lapsed or auto-resolved)`)
-    } catch (error) {
-      logger.error('Error marking lapsed interviews:', error)
-      throw error
-    }
+    logger.info('Running 6am interview processing')
+    const result = await processPassedInterviews()
+    logger.info(`6am run: Completed ${result.completed}, Lapsed ${result.lapsed}, Candidates updated ${result.candidatesUpdated}`)
   }
 )
+
+export const processInterviews12pm = onSchedule(
+  {
+    schedule: '0 12 * * *', // Daily at 12 PM (noon)
+    timeZone: 'Europe/London',
+    region: 'europe-west2',
+  },
+  async () => {
+    logger.info('Running 12pm interview processing')
+    const result = await processPassedInterviews()
+    logger.info(`12pm run: Completed ${result.completed}, Lapsed ${result.lapsed}, Candidates updated ${result.candidatesUpdated}`)
+  }
+)
+
+export const processInterviews6pm = onSchedule(
+  {
+    schedule: '0 18 * * *', // Daily at 6 PM
+    timeZone: 'Europe/London',
+    region: 'europe-west2',
+  },
+  async () => {
+    logger.info('Running 6pm interview processing')
+    const result = await processPassedInterviews()
+    logger.info(`6pm run: Completed ${result.completed}, Lapsed ${result.lapsed}, Candidates updated ${result.candidatesUpdated}`)
+  }
+)
+
+export const processInterviewsMidnight = onSchedule(
+  {
+    schedule: '0 0 * * *', // Daily at midnight
+    timeZone: 'Europe/London',
+    region: 'europe-west2',
+  },
+  async () => {
+    logger.info('Running midnight interview processing')
+    const result = await processPassedInterviews()
+    logger.info(`Midnight run: Completed ${result.completed}, Lapsed ${result.lapsed}, Candidates updated ${result.candidatesUpdated}`)
+  }
+)
+
+// Keep the old function name for backwards compatibility (will be removed later)
+export const markLapsedInterviews = processInterviews6am
 
 // ============================================================================
 // Resolve Lapsed Interview (Manual)

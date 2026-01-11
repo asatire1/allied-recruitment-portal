@@ -35,15 +35,25 @@ export default function PendingFeedback() {
       const thirtyDaysAgo = new Date()
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
       
+      const now = new Date()
+      
+      // Query interviews that are completed OR past their scheduled date
+      // This catches both auto-completed and manually completed interviews
       const interviewsQuery = query(
         collection(db, 'interviews'),
-        where('status', '==', 'completed'),
+        where('status', 'in', ['completed', 'scheduled', 'confirmed']),
         where('scheduledAt', '>=', Timestamp.fromDate(thirtyDaysAgo)),
         orderBy('scheduledAt', 'desc')
       )
       
       const interviewsSnap = await getDocs(interviewsQuery)
-      const interviews = interviewsSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Interview[]
+      const allInterviews = interviewsSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Interview[]
+      
+      // Filter to only past interviews (scheduled time has passed)
+      const pastInterviews = allInterviews.filter(interview => {
+        const scheduledDate = interview.scheduledAt?.toDate?.() || new Date(0)
+        return scheduledDate < now
+      })
       
       const feedbackQuery = query(collection(db, 'interviewFeedback'), where('status', 'in', ['pending', 'draft']))
       const feedbackSnap = await getDocs(feedbackQuery)
@@ -53,10 +63,9 @@ export default function PendingFeedback() {
         feedbackMap.set(data.interviewId, data)
       })
       
-      const now = new Date()
       const items: PendingItem[] = []
       
-      for (const interview of interviews) {
+      for (const interview of pastInterviews) {
         const feedback = feedbackMap.get(interview.id)
         if (!interview.feedback?.submittedAt) {
           const interviewDate = interview.scheduledAt?.toDate?.() || new Date()

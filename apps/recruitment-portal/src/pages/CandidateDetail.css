@@ -917,3 +917,201 @@ button[data-variant="danger"] {
 .candidate-header, .detail-card, .sidebar-card {
   animation: fadeIn 0.3s ease-out;
 }
+
+/* ============================================================================
+   FEEDBACK FORM - iOS Style
+   ============================================================================ */
+
+.feedback-card {
+  /* Inherits from detail-card */
+}
+
+.feedback-locked {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--ios-tertiary-label);
+}
+
+.locked-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.feedback-locked p {
+  font-size: 15px;
+  margin: 0 0 8px 0;
+  color: var(--ios-secondary-label);
+}
+
+.feedback-locked .current-status {
+  font-size: 13px;
+  color: var(--ios-tertiary-label);
+  text-transform: capitalize;
+}
+
+.feedback-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.feedback-criteria-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: var(--ios-bg-secondary);
+  border-radius: var(--ios-radius-md);
+  overflow: hidden;
+}
+
+.feedback-criterion {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  background: var(--ios-bg-primary);
+  border-bottom: 1px solid var(--ios-separator);
+}
+
+.feedback-criterion:last-child {
+  border-bottom: none;
+}
+
+.criterion-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  color: var(--ios-label);
+}
+
+.criterion-icon {
+  font-size: 18px;
+}
+
+.star-rating {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.star-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: var(--ios-separator-opaque);
+  cursor: pointer;
+  padding: 2px;
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+
+.star-btn:hover:not(:disabled) {
+  transform: scale(1.15);
+}
+
+.star-btn.active {
+  color: #FFD700;
+  text-shadow: 0 0 4px rgba(255, 215, 0, 0.4);
+}
+
+.star-btn:disabled {
+  cursor: default;
+}
+
+.star-btn:disabled:not(.active) {
+  color: var(--ios-bg-tertiary);
+}
+
+.rating-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ios-secondary-label);
+  min-width: 32px;
+  text-align: right;
+  margin-left: 8px;
+}
+
+.feedback-notes-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notes-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ios-secondary-label);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.feedback-notes-input textarea {
+  padding: 14px 16px;
+  border: 1px solid var(--ios-separator);
+  border-radius: var(--ios-radius-md);
+  font-size: 15px;
+  color: var(--ios-label);
+  background: var(--ios-bg-primary);
+  resize: vertical;
+  min-height: 100px;
+}
+
+.feedback-notes-input textarea:focus {
+  outline: none;
+  border-color: var(--ios-teal);
+  box-shadow: 0 0 0 3px rgba(13, 79, 92, 0.15);
+}
+
+.feedback-notes-input textarea:disabled {
+  background: var(--ios-bg-secondary);
+  color: var(--ios-secondary-label);
+}
+
+.feedback-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-top: 8px;
+}
+
+.feedback-actions button {
+  padding: 12px 24px !important;
+  border-radius: var(--ios-radius-md) !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  background: linear-gradient(180deg, var(--ios-teal) 0%, #0a3f4a 100%) !important;
+  color: white !important;
+  border: none !important;
+  transition: all 0.2s ease !important;
+}
+
+.feedback-actions button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(13, 79, 92, 0.3);
+}
+
+.feedback-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.feedback-hint {
+  font-size: 13px;
+  color: var(--ios-tertiary-label);
+}
+
+.feedback-submitted-info {
+  padding: 12px 16px;
+  background: rgba(52, 199, 89, 0.1);
+  color: var(--ios-green);
+  border-radius: var(--ios-radius-md);
+  font-size: 13px;
+  font-weight: 500;
+}
