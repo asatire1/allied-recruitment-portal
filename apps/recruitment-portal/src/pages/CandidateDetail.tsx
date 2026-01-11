@@ -330,6 +330,9 @@ export function CandidateDetail() {
   const [savingMeetingSummary, setSavingMeetingSummary] = useState(false)
   const [meetingSummarySaved, setMeetingSummarySaved] = useState(false)
 
+  // Interview Feedback expanded state
+  const [feedbackExpanded, setFeedbackExpanded] = useState(false)
+
   const db = getFirebaseDb()
   const storage = getFirebaseStorage()
 
@@ -1990,161 +1993,177 @@ Allied Recruitment Team`)
             </div>
           </Card>
 
-          {/* Feedback Card - Multiple Feedbacks */}
+          {/* Feedback Card - Multiple Feedbacks - Collapsible */}
           <Card className="detail-card feedback-card">
-            <h2>Interview Feedback</h2>
-            
-            {/* Feedback Tabs */}
-            {allFeedbacks.length > 0 && (
-              <div className="feedback-tabs">
-                {allFeedbacks.map((fb, index) => {
-                  const fbDate = fb.submittedAt ? new Date(fb.submittedAt) : new Date()
-                  return (
-                    <button
-                      key={fb.id}
-                      className={`feedback-tab ${selectedFeedbackIndex === index ? 'active' : ''}`}
-                      onClick={() => handleSelectFeedback(index)}
-                    >
-                      <span className="tab-name">{fb.submittedByName?.split(' ')[0] || 'Unknown'}</span>
-                      <span className="tab-date">{fbDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
-                      <span className="tab-rating">⭐ {fb.ratings?.overall || '-'}</span>
-                    </button>
-                  )
-                })}
-                <button
-                  className={`feedback-tab add-new ${selectedFeedbackIndex === 'new' ? 'active' : ''}`}
-                  onClick={() => handleSelectFeedback('new')}
-                >
-                  <span className="tab-icon">+</span>
-                  <span className="tab-name">Add New</span>
-                </button>
+            <button 
+              className={`section-toggle ${feedbackExpanded ? 'expanded' : ''}`}
+              onClick={() => setFeedbackExpanded(!feedbackExpanded)}
+            >
+              <div className="toggle-left">
+                <span className="toggle-icon">📝</span>
+                <span className="toggle-title">Interview Feedback</span>
+                {allFeedbacks.length > 0 && (
+                  <span className="has-content-badge">{allFeedbacks.length} feedback{allFeedbacks.length !== 1 ? 's' : ''}</span>
+                )}
               </div>
-            )}
+              <span className={`toggle-arrow ${feedbackExpanded ? 'expanded' : ''}`}>
+                ▼
+              </span>
+            </button>
 
-            <div className="feedback-form">
-              {/* Viewing existing feedback indicator */}
-              {selectedFeedbackIndex !== 'new' && allFeedbacks[selectedFeedbackIndex as number] && (
-                <div className="viewing-feedback-info">
-                  📋 Viewing feedback from {allFeedbacks[selectedFeedbackIndex as number].submittedByName}
-                  {allFeedbacks[selectedFeedbackIndex as number].submittedAt && (
-                    <> on {new Date(allFeedbacks[selectedFeedbackIndex as number].submittedAt).toLocaleDateString('en-GB', { 
-                      day: 'numeric', 
-                      month: 'long', 
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}</>
-                  )}
-                </div>
-              )}
-
-              {/* Star Ratings */}
-              <div className="feedback-criteria-list">
-                {FEEDBACK_CRITERIA.map(({ key, label, icon }) => (
-                  <div key={key} className="feedback-criterion">
-                    <div className="criterion-label">
-                      <span className="criterion-icon">{icon}</span>
-                      <span>{label}</span>
-                    </div>
-                    <div className="star-rating">
-                      {[1, 2, 3, 4, 5].map((star) => (
+            {feedbackExpanded && (
+              <div className="feedback-expanded-content">
+                {/* Feedback Tabs */}
+                {allFeedbacks.length > 0 && (
+                  <div className="feedback-tabs">
+                    {allFeedbacks.map((fb, index) => {
+                      const fbDate = fb.submittedAt ? new Date(fb.submittedAt) : new Date()
+                      return (
                         <button
-                          key={star}
-                          type="button"
-                          className={`star-btn ${feedbackRatings[key] >= star ? 'active' : ''}`}
-                          onClick={() => selectedFeedbackIndex === 'new' && setFeedbackRatings(prev => ({ ...prev, [key]: star }))}
-                          disabled={selectedFeedbackIndex !== 'new'}
+                          key={fb.id}
+                          className={`feedback-tab ${selectedFeedbackIndex === index ? 'active' : ''}`}
+                          onClick={() => handleSelectFeedback(index)}
                         >
-                          ★
+                          <span className="tab-name">{fb.submittedByName?.split(' ')[0] || 'Unknown'}</span>
+                          <span className="tab-date">{fbDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                          <span className="tab-rating">⭐ {fb.ratings?.overall || '-'}</span>
                         </button>
-                      ))}
-                      <span className="rating-value">
-                        {feedbackRatings[key] > 0 ? feedbackRatings[key] : '-'}/5
-                      </span>
-                    </div>
+                      )
+                    })}
+                    <button
+                      className={`feedback-tab add-new ${selectedFeedbackIndex === 'new' ? 'active' : ''}`}
+                      onClick={() => handleSelectFeedback('new')}
+                    >
+                      <span className="tab-icon">+</span>
+                      <span className="tab-name">Add New</span>
+                    </button>
                   </div>
-                ))}
-              </div>
+                )}
 
-              {/* Notes Section */}
-              <div className="feedback-notes-section">
-                <label className="notes-label">Additional Notes</label>
-                <Textarea
-                  value={feedbackNotes}
-                  onChange={(e) => setFeedbackNotes(e.target.value)}
-                  placeholder={selectedFeedbackIndex === 'new' ? "Add any additional observations, strengths, concerns..." : "No notes added"}
-                  rows={4}
-                  disabled={selectedFeedbackIndex !== 'new'}
-                  className="feedback-notes-input"
-                />
-              </div>
+                <div className="feedback-form">
+                  {/* Viewing existing feedback indicator */}
+                  {selectedFeedbackIndex !== 'new' && allFeedbacks[selectedFeedbackIndex as number] && (
+                    <div className="viewing-feedback-info">
+                      📋 Viewing feedback from {allFeedbacks[selectedFeedbackIndex as number].submittedByName}
+                      {allFeedbacks[selectedFeedbackIndex as number].submittedAt && (
+                        <> on {new Date(allFeedbacks[selectedFeedbackIndex as number].submittedAt).toLocaleDateString('en-GB', { 
+                          day: 'numeric', 
+                          month: 'long', 
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}</>
+                      )}
+                    </div>
+                  )}
 
-              {/* Save Button - only show for new feedback */}
-              {selectedFeedbackIndex === 'new' && (
-                <div className="feedback-actions">
-                  <Button
-                    variant="primary"
-                    onClick={handleSaveFeedback}
-                    disabled={savingFeedback || feedbackRatings.overall === 0}
+                  {/* Star Ratings */}
+                  <div className="feedback-criteria-list">
+                    {FEEDBACK_CRITERIA.map(({ key, label, icon }) => (
+                      <div key={key} className="feedback-criterion">
+                        <div className="criterion-label">
+                          <span className="criterion-icon">{icon}</span>
+                          <span>{label}</span>
+                        </div>
+                        <div className="star-rating">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <button
+                              key={star}
+                              type="button"
+                              className={`star-btn ${feedbackRatings[key] >= star ? 'active' : ''}`}
+                              onClick={() => selectedFeedbackIndex === 'new' && setFeedbackRatings(prev => ({ ...prev, [key]: star }))}
+                              disabled={selectedFeedbackIndex !== 'new'}
+                            >
+                              ★
+                            </button>
+                          ))}
+                          <span className="rating-value">
+                            {feedbackRatings[key] > 0 ? feedbackRatings[key] : '-'}/5
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Notes Section */}
+                  <div className="feedback-notes-section">
+                    <label className="notes-label">Additional Notes</label>
+                    <Textarea
+                      value={feedbackNotes}
+                      onChange={(e) => setFeedbackNotes(e.target.value)}
+                      placeholder={selectedFeedbackIndex === 'new' ? "Add any additional observations, strengths, concerns..." : "No notes added"}
+                      rows={4}
+                      disabled={selectedFeedbackIndex !== 'new'}
+                      className="feedback-notes-input"
+                    />
+                  </div>
+
+                  {/* Save Button - only show for new feedback */}
+                  {selectedFeedbackIndex === 'new' && (
+                    <div className="feedback-actions">
+                      <Button
+                        variant="primary"
+                        onClick={handleSaveFeedback}
+                        disabled={savingFeedback || feedbackRatings.overall === 0}
+                      >
+                        {savingFeedback ? 'Saving...' : feedbackSaved ? '✓ Saved!' : 'Save Feedback'}
+                      </Button>
+                      {feedbackRatings.overall === 0 && (
+                        <span className="feedback-hint">Please rate "Overall Impression" to save</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* No feedbacks yet message */}
+                  {allFeedbacks.length === 0 && selectedFeedbackIndex === 'new' && (
+                    <div className="no-feedbacks-yet">
+                      <p>No feedback has been submitted yet. Be the first to add feedback!</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Collapsible Meeting Summary Section */}
+                <div className="meeting-summary-section">
+                  <button 
+                    className={`meeting-summary-toggle ${meetingSummaryExpanded ? 'expanded' : ''}`}
+                    onClick={() => setMeetingSummaryExpanded(!meetingSummaryExpanded)}
                   >
-                    {savingFeedback ? 'Saving...' : feedbackSaved ? '✓ Saved!' : 'Save Feedback'}
-                  </Button>
-                  {feedbackRatings.overall === 0 && (
-                    <span className="feedback-hint">Please rate "Overall Impression" to save</span>
-                  )}
-                </div>
-              )}
+                    <div className="toggle-left">
+                      <span className="toggle-icon">🤖</span>
+                      <span className="toggle-title">Meeting Summary (Copilot)</span>
+                      {candidate.meetingSummary?.content && (
+                        <span className="has-content-badge">Has content</span>
+                      )}
+                    </div>
+                    <span className={`toggle-arrow ${meetingSummaryExpanded ? 'expanded' : ''}`}>
+                      ▼
+                    </span>
+                  </button>
 
-              {/* No feedbacks yet message */}
-              {allFeedbacks.length === 0 && selectedFeedbackIndex === 'new' && (
-                <div className="no-feedbacks-yet">
-                  <p>No feedback has been submitted yet. Be the first to add feedback!</p>
-                </div>
-              )}
-            </div>
-
-            {/* Collapsible Meeting Summary Section */}
-            <div className="meeting-summary-section">
-              <button 
-                className={`meeting-summary-toggle ${meetingSummaryExpanded ? 'expanded' : ''}`}
-                onClick={() => setMeetingSummaryExpanded(!meetingSummaryExpanded)}
-              >
-                <div className="toggle-left">
-                  <span className="toggle-icon">🤖</span>
-                  <span className="toggle-title">Meeting Summary (Copilot)</span>
-                  {candidate.meetingSummary?.content && (
-                    <span className="has-content-badge">Has content</span>
-                  )}
-                </div>
-                <span className={`toggle-arrow ${meetingSummaryExpanded ? 'expanded' : ''}`}>
-                  ▼
-                </span>
-              </button>
-
-              {meetingSummaryExpanded && (
-                <div className="meeting-summary-content">
-                  <p className="meeting-summary-hint">
-                    Paste the AI-generated meeting summary from Microsoft Copilot or Teams below.
-                  </p>
-                  <Textarea
-                    value={meetingSummary}
-                    onChange={(e) => setMeetingSummary(e.target.value)}
-                    placeholder="Paste meeting summary from Copilot here...
+                  {meetingSummaryExpanded && (
+                    <div className="meeting-summary-content">
+                      <p className="meeting-summary-hint">
+                        Paste the AI-generated meeting summary from Microsoft Copilot or Teams below.
+                      </p>
+                      <Textarea
+                        value={meetingSummary}
+                        onChange={(e) => setMeetingSummary(e.target.value)}
+                        placeholder="Paste meeting summary from Copilot here...
 
 Example:
 - Key discussion points
 - Candidate's responses
 - Action items
 - Overall assessment from the meeting"
-                    rows={8}
-                    className="meeting-summary-input"
-                  />
-                  <div className="meeting-summary-actions">
-                    <Button
-                      variant="primary"
-                      onClick={handleSaveMeetingSummary}
-                      disabled={savingMeetingSummary || !meetingSummary.trim()}
-                    >
+                        rows={8}
+                        className="meeting-summary-input"
+                      />
+                      <div className="meeting-summary-actions">
+                        <Button
+                          variant="primary"
+                          onClick={handleSaveMeetingSummary}
+                          disabled={savingMeetingSummary || !meetingSummary.trim()}
+                        >
                       {savingMeetingSummary ? 'Saving...' : meetingSummarySaved ? '✓ Saved!' : 'Save Summary'}
                     </Button>
                     {candidate.meetingSummary?.updatedAt && (
@@ -2156,6 +2175,8 @@ Example:
                 </div>
               )}
             </div>
+          </div>
+            )}
           </Card>
 
           {/* CV Card */}

@@ -1367,3 +1367,59 @@ button[data-variant="danger"] {
   font-size: 12px;
   color: var(--ios-tertiary-label);
 }
+
+/* ============================================================================
+   COLLAPSIBLE SECTION TOGGLE - Shared Style
+   ============================================================================ */
+
+.section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 16px 20px;
+  background: var(--ios-bg-secondary);
+  border: none;
+  border-radius: var(--ios-radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 0;
+}
+
+.section-toggle:hover {
+  background: var(--ios-bg-tertiary);
+}
+
+.section-toggle.expanded {
+  border-radius: var(--ios-radius-md) var(--ios-radius-md) 0 0;
+  margin-bottom: 0;
+}
+
+.feedback-expanded-content {
+  padding: 20px;
+  padding-top: 16px;
+  background: var(--ios-bg-primary);
+  border: 1px solid var(--ios-separator);
+  border-top: none;
+  border-radius: 0 0 var(--ios-radius-md) var(--ios-radius-md);
+  animation: slideDown 0.2s ease;
+}
+
+.feedback-card {
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.feedback-card .section-toggle {
+  border-radius: var(--ios-radius-lg);
+}
+
+.feedback-card .section-toggle.expanded {
+  border-radius: var(--ios-radius-lg) var(--ios-radius-lg) 0 0;
+}
+
+.feedback-expanded-content .meeting-summary-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--ios-separator);
+}
