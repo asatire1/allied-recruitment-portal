@@ -211,7 +211,11 @@ async function updateCandidateStatus(candidateId, newStatus, reason) {
 // ============================================================================
 // P2.2: GET BOOKING AVAILABILITY
 // ============================================================================
-exports.getBookingAvailability = (0, https_1.onCall)({ cors: true }, async (request) => {
+exports.getBookingAvailability = (0, https_1.onCall)({
+    cors: true,
+    enforceAppCheck: false, // Allow public access from booking page
+    invoker: 'public', // Allow unauthenticated invocations
+}, async (request) => {
     const { token } = request.data;
     if (!token) {
         throw new https_1.HttpsError('invalid-argument', 'Token is required');
@@ -296,7 +300,11 @@ exports.getBookingAvailability = (0, https_1.onCall)({ cors: true }, async (requ
 // ============================================================================
 // P2.3: GET TIME SLOTS FOR A DATE
 // ============================================================================
-exports.getBookingTimeSlots = (0, https_1.onCall)({ cors: true }, async (request) => {
+exports.getBookingTimeSlots = (0, https_1.onCall)({
+    cors: true,
+    enforceAppCheck: false, // Allow public access from booking page
+    invoker: 'public', // Allow unauthenticated invocations
+}, async (request) => {
     const { token, date, type } = request.data;
     console.log('getBookingTimeSlots called with:', { date, type, hasToken: !!token });
     if (!token || !date) {
@@ -474,6 +482,8 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({ cors: true }, async (request
 // ============================================================================
 exports.submitBooking = (0, https_1.onCall)({
     cors: true,
+    enforceAppCheck: false, // Allow public access from booking page
+    invoker: 'public', // Allow unauthenticated invocations
     // Include Teams secrets so they're available
     secrets: [teamsMeeting_1.msClientId, teamsMeeting_1.msClientSecret, teamsMeeting_1.msTenantId, teamsMeeting_1.msOrganizerUserId],
 }, async (request) => {

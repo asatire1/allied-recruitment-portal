@@ -250,7 +250,11 @@ async function updateCandidateStatus(
 // ============================================================================
 
 export const getBookingAvailability = onCall<{ token: string }>(
-  { cors: true },
+  {
+    cors: true,
+    enforceAppCheck: false, // Allow public access from booking page
+    invoker: 'public', // Allow unauthenticated invocations
+  },
   async (request) => {
     const { token } = request.data
     
@@ -347,7 +351,11 @@ export const getBookingAvailability = onCall<{ token: string }>(
 // ============================================================================
 
 export const getBookingTimeSlots = onCall<{ token: string; date: string; type?: 'interview' | 'trial' }>(
-  { cors: true },
+  {
+    cors: true,
+    enforceAppCheck: false, // Allow public access from booking page
+    invoker: 'public', // Allow unauthenticated invocations
+  },
   async (request) => {
     const { token, date, type } = request.data
 
@@ -560,6 +568,8 @@ export const getBookingTimeSlots = onCall<{ token: string; date: string; type?: 
 export const submitBooking = onCall<{ token: string; date: string; time: string }>(
   {
     cors: true,
+    enforceAppCheck: false, // Allow public access from booking page
+    invoker: 'public', // Allow unauthenticated invocations
     // Include Teams secrets so they're available
     secrets: [msClientId, msClientSecret, msTenantId, msOrganizerUserId],
   },
