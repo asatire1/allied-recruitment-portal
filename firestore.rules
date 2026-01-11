@@ -272,6 +272,15 @@ service cloud.firestore {
     }
     
     // ============================================================
+    // SLOT LOCKS COLLECTION (Prevent double-booking)
+    // ============================================================
+    match /slotLocks/{slotId} {
+      // Only Cloud Functions can manage slot locks
+      allow read: if isRecruiterOrAdmin();
+      allow create, update, delete: if false; // Managed by Cloud Functions only
+    }
+
+    // ============================================================
     // BOOKING LINKS COLLECTION (R6.3-R6.11)
     // ============================================================
     match /bookingLinks/{linkId} {
