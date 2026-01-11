@@ -331,7 +331,6 @@ exports.getBookingAvailability = (0, https_1.onCall)({
         };
     }
     console.log('getBookingAvailability - final schedule:', JSON.stringify(settings.schedule));
-    console.log('getBookingAvailability - advanceBookingDays:', settings.advanceBookingDays, 'minNoticeHours:', settings.minNoticeHours);
     // Get booking blocks settings (bank holidays)
     const blocksSettings = await getBookingBlocksSettings();
     // Get fully booked dates (dates where all slots are taken)
@@ -363,38 +362,9 @@ exports.getBookingAvailability = (0, https_1.onCall)({
             }
         });
     }
-    // Query interviews in the booking window
-    const now = new Date();
-    const maxDate = new Date(now);
-    maxDate.setDate(maxDate.getDate() + settings.advanceBookingDays);
-    try {
-        const interviewsSnapshot = await db
-            .collection('interviews')
-            .where('scheduledDate', '>=', admin.firestore.Timestamp.fromDate(now))
-            .where('scheduledDate', '<=', admin.firestore.Timestamp.fromDate(maxDate))
-            .where('status', 'in', ['scheduled', 'confirmed'])
-            .get();
-        // Group by date and count
-        const bookingsByDate = {};
-        interviewsSnapshot.docs.forEach(doc => {
-            const data = doc.data();
-            const date = data.scheduledDate?.toDate?.();
-            if (date) {
-                const dateStr = date.toISOString().split('T')[0];
-                bookingsByDate[dateStr] = (bookingsByDate[dateStr] || 0) + 1;
-            }
-        });
-        // Mark dates as fully booked if they exceed threshold
-        // For simplicity, we consider a date fully booked if it has 8+ bookings
-        Object.entries(bookingsByDate).forEach(([dateStr, count]) => {
-            if (count >= 8) {
-                fullyBookedDates.push(dateStr);
-            }
-        });
-    }
-    catch (error) {
-        console.error('Failed to get bookings:', error);
-    }
+    // Note: We no longer mark dates as "fully booked" based on booking count.
+    // Availability is determined by actual time slot availability when the user
+    // selects a date. This allows unlimited bookings per day as long as slots exist.
     return {
         settings: {
             schedule: settings.schedule,
