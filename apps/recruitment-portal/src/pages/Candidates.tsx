@@ -2373,7 +2373,16 @@ Allied Recruitment Team`
             />
           </div>
           <div className="filter-item job-filter-multi">
-            <div className="multi-select-wrapper">
+            <div className="multi-select-wrapper" ref={(el) => {
+              if (el && jobDropdownOpen) {
+                const rect = el.getBoundingClientRect()
+                const dropdown = el.querySelector('.multi-select-dropdown') as HTMLElement
+                if (dropdown) {
+                  dropdown.style.top = `${rect.bottom + 4}px`
+                  dropdown.style.left = `${rect.left}px`
+                }
+              }
+            }}>
               <button 
                 className="multi-select-trigger"
                 onClick={() => setJobDropdownOpen(!jobDropdownOpen)}
@@ -2402,22 +2411,26 @@ Allied Recruitment Team`
                       </button>
                     </div>
                     <div className="multi-select-options">
-                      {activeJobs.map(job => (
-                        <label key={job.id} className="multi-select-option">
-                          <input
-                            type="checkbox"
-                            checked={jobFilter.includes(job.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setJobFilter(prev => [...prev, job.id])
-                              } else {
-                                setJobFilter(prev => prev.filter(id => id !== job.id))
-                              }
-                            }}
-                          />
-                          <span>{job.title}{job.branchName ? ` - ${job.branchName}` : ''}</span>
-                        </label>
-                      ))}
+                      {activeJobs.length === 0 ? (
+                        <div className="multi-select-empty">No jobs available</div>
+                      ) : (
+                        activeJobs.map(job => (
+                          <label key={job.id} className="multi-select-option">
+                            <input
+                              type="checkbox"
+                              checked={jobFilter.includes(job.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setJobFilter(prev => [...prev, job.id])
+                                } else {
+                                  setJobFilter(prev => prev.filter(id => id !== job.id))
+                                }
+                              }}
+                            />
+                            <span>{job.title}{job.branchName ? ` - ${job.branchName}` : ''}</span>
+                          </label>
+                        ))
+                      )}
                     </div>
                   </div>
                 </>
