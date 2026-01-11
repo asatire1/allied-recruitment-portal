@@ -4,7 +4,7 @@
  */
 
 import { httpsCallable } from 'firebase/functions'
-import { functions, functionsEU } from '../lib/firebase'
+import { functionsEU } from '../lib/firebase'
 
 // ============================================================================
 // TYPES
@@ -181,7 +181,7 @@ export async function submitBooking(
 ): Promise<SubmitBookingResult> {
   try {
     const submitBookingFn = httpsCallable<SubmitBookingRequest, SubmitBookingResponse>(
-      functions,
+      functionsEU,
       'submitBooking'
     )
     

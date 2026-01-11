@@ -5,7 +5,7 @@
  */
 
 import { httpsCallable } from 'firebase/functions'
-import { functions } from '../lib/firebase'
+import { functionsEU } from '../lib/firebase'
 
 // ============================================================================
 // TYPES
@@ -66,7 +66,7 @@ export interface GetTimeSlotsResponse {
 export async function getAvailability(token: string): Promise<GetAvailabilityResponse> {
   try {
     const getAvailabilityFn = httpsCallable<{ token: string }, GetAvailabilityResponse>(
-      functions,
+      functionsEU,
       'getBookingAvailability'
     )
     
@@ -92,7 +92,7 @@ export async function getTimeSlots(
 ): Promise<TimeSlot[]> {
   try {
     const getTimeSlotsFn = httpsCallable<GetTimeSlotsRequest, GetTimeSlotsResponse>(
-      functions,
+      functionsEU,
       'getBookingTimeSlots'
     )
     
