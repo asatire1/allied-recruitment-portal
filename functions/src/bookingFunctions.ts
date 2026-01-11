@@ -430,17 +430,49 @@ export const getBookingTimeSlots = onCall<{ token: string; date: string; type?: 
     const dayEnd = new Date(selectedDate)
     dayEnd.setHours(23, 59, 59, 999)
     
-    let existingBookings: admin.firestore.QuerySnapshot
+    // Query existing bookings - check BOTH scheduledDate and scheduledAt fields
+    // (legacy interviews may use scheduledAt, new ones use scheduledDate)
+    let allBookingDocs: admin.firestore.DocumentData[] = []
     try {
-      existingBookings = await db
+      console.log(`Querying interviews for date: ${date}`)
+      console.log(`Day range: ${dayStart.toISOString()} to ${dayEnd.toISOString()}`)
+
+      // Query for scheduledDate field (new format)
+      const bookingsWithScheduledDate = await db
         .collection('interviews')
         .where('scheduledDate', '>=', admin.firestore.Timestamp.fromDate(dayStart))
         .where('scheduledDate', '<=', admin.firestore.Timestamp.fromDate(dayEnd))
         .where('status', 'in', ['scheduled', 'confirmed'])
         .get()
+
+      // Query for scheduledAt field (legacy format)
+      const bookingsWithScheduledAt = await db
+        .collection('interviews')
+        .where('scheduledAt', '>=', admin.firestore.Timestamp.fromDate(dayStart))
+        .where('scheduledAt', '<=', admin.firestore.Timestamp.fromDate(dayEnd))
+        .where('status', 'in', ['scheduled', 'confirmed'])
+        .get()
+
+      // Combine results, avoiding duplicates by ID
+      const seenIds = new Set<string>()
+      bookingsWithScheduledDate.docs.forEach(doc => {
+        seenIds.add(doc.id)
+        allBookingDocs.push({ id: doc.id, ...doc.data() })
+      })
+      bookingsWithScheduledAt.docs.forEach(doc => {
+        if (!seenIds.has(doc.id)) {
+          allBookingDocs.push({ id: doc.id, ...doc.data() })
+        }
+      })
+
+      console.log(`Found ${allBookingDocs.length} existing bookings for ${date}`)
+      allBookingDocs.forEach(booking => {
+        const dateField = booking.scheduledDate || booking.scheduledAt
+        console.log(`  - Booking: ${booking.id}, time: ${dateField?.toDate?.()?.toISOString()}, status: ${booking.status}, duration: ${booking.duration}`)
+      })
     } catch (error) {
       console.error('Failed to get existing bookings:', error)
-      existingBookings = { docs: [] } as any
+      allBookingDocs = []
     }
     
     // Generate time slots
@@ -468,19 +500,19 @@ export const getBookingTimeSlots = onCall<{ token: string; date: string; type?: 
         // Check minimum notice
         const meetsNotice = slotStart >= minNoticeTime
         
-        // Check for conflicts with existing bookings
-        const hasConflict = existingBookings.docs.some(doc => {
-          const data = doc.data()
-          const existingStart = data.scheduledDate?.toDate?.()
+        // Check for conflicts with existing bookings (supports both scheduledDate and scheduledAt)
+        const hasConflict = allBookingDocs.some(booking => {
+          // Support both field names
+          const existingStart = (booking.scheduledDate || booking.scheduledAt)?.toDate?.()
           if (!existingStart) return false
-          
-          const existingDuration = data.duration || 30
+
+          const existingDuration = booking.duration || 30
           const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000)
-          
+
           // Add buffer time to check
           const bufferedSlotStart = new Date(slotStart.getTime() - bufferTime * 60000)
           const bufferedSlotEnd = new Date(slotEnd.getTime() + bufferTime * 60000)
-          
+
           return bufferedSlotStart < existingEnd && bufferedSlotEnd > existingStart
         })
         
@@ -669,25 +701,46 @@ export const submitBooking = onCall<{ token: string; date: string; time: string 
       }
 
       // Also check for overlapping bookings (different start times but overlapping duration)
-      // Query interviews that could potentially overlap
+      // Query interviews that could potentially overlap - check BOTH field names
       const dayStart = new Date(scheduledDate)
       dayStart.setHours(0, 0, 0, 0)
       const dayEnd = new Date(scheduledDate)
       dayEnd.setHours(23, 59, 59, 999)
 
-      const existingBookingsSnapshot = await db
+      // Query for scheduledDate field (new format)
+      const bookingsWithScheduledDate = await db
         .collection('interviews')
         .where('scheduledDate', '>=', admin.firestore.Timestamp.fromDate(dayStart))
         .where('scheduledDate', '<=', admin.firestore.Timestamp.fromDate(dayEnd))
         .where('status', 'in', ['scheduled', 'confirmed'])
         .get()
 
-      const hasOverlap = existingBookingsSnapshot.docs.some(doc => {
-        const data = doc.data()
-        const existingStart = data.scheduledDate?.toDate?.()
+      // Query for scheduledAt field (legacy format)
+      const bookingsWithScheduledAt = await db
+        .collection('interviews')
+        .where('scheduledAt', '>=', admin.firestore.Timestamp.fromDate(dayStart))
+        .where('scheduledAt', '<=', admin.firestore.Timestamp.fromDate(dayEnd))
+        .where('status', 'in', ['scheduled', 'confirmed'])
+        .get()
+
+      // Combine results
+      const allBookings: admin.firestore.DocumentData[] = []
+      const seenIds = new Set<string>()
+      bookingsWithScheduledDate.docs.forEach(doc => {
+        seenIds.add(doc.id)
+        allBookings.push({ id: doc.id, ...doc.data() })
+      })
+      bookingsWithScheduledAt.docs.forEach(doc => {
+        if (!seenIds.has(doc.id)) {
+          allBookings.push({ id: doc.id, ...doc.data() })
+        }
+      })
+
+      const hasOverlap = allBookings.some(booking => {
+        const existingStart = (booking.scheduledDate || booking.scheduledAt)?.toDate?.()
         if (!existingStart) return false
 
-        const existingDuration = data.duration || 30
+        const existingDuration = booking.duration || 30
         const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000)
 
         // Check overlap: new booking overlaps if it starts before existing ends AND ends after existing starts
