@@ -468,12 +468,11 @@ export function EmailTemplatesTab({ userId }: EmailTemplatesTabProps) {
         <Select
           value={templateCategoryFilter}
           onChange={(e) => setTemplateCategoryFilter(e.target.value as TemplateCategory | 'all')}
-        >
-          <option value="all">All Categories</option>
-          {TEMPLATE_CATEGORIES.map(cat => (
-            <option key={cat.value} value={cat.value}>{cat.label}</option>
-          ))}
-        </Select>
+          options={[
+            { value: 'all', label: 'All Categories' },
+            ...TEMPLATE_CATEGORIES.map(cat => ({ value: cat.value, label: cat.label }))
+          ]}
+        />
         <Button variant="outline" onClick={() => setShowPlaceholderHelp(true)}>
           📋 Placeholders
         </Button>
@@ -554,11 +553,8 @@ export function EmailTemplatesTab({ userId }: EmailTemplatesTabProps) {
             <Select
               value={templateForm.category}
               onChange={(e) => setTemplateForm(prev => ({ ...prev, category: e.target.value as TemplateCategory }))}
-            >
-              {TEMPLATE_CATEGORIES.map(cat => (
-                <option key={cat.value} value={cat.value}>{cat.label}</option>
-              ))}
-            </Select>
+              options={TEMPLATE_CATEGORIES.map(cat => ({ value: cat.value, label: cat.label }))}
+            />
           </div>
 
           <div className="form-group">
