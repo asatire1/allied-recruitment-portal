@@ -129,6 +129,14 @@ export function DatePicker({
   onDateSelect,
   fullyBookedDates = []
 }: DatePickerProps) {
+  // Debug: Log props on mount/update
+  console.warn('[DatePicker] Props:', {
+    schedule,
+    advanceBookingDays,
+    minNoticeHours,
+    fullyBookedDates: fullyBookedDates.length + ' dates'
+  })
+
   // Current view month/year
   const [viewDate, setViewDate] = useState(() => {
     const today = new Date()
@@ -138,15 +146,23 @@ export function DatePicker({
   // Calculate date constraints
   const constraints = useMemo(() => {
     const now = new Date()
-    
+
     // Earliest bookable date (respects minimum notice)
     const minDate = new Date(now.getTime() + minNoticeHours * 60 * 60 * 1000)
-    
+
     // Latest bookable date
     const maxDate = new Date(now)
     maxDate.setDate(maxDate.getDate() + advanceBookingDays)
-    
-    return { minDate: startOfDay(minDate), maxDate: startOfDay(maxDate), today: startOfDay(now) }
+
+    const result = { minDate: startOfDay(minDate), maxDate: startOfDay(maxDate), today: startOfDay(now) }
+    console.warn('[DatePicker] Constraints:', {
+      now: now.toISOString(),
+      minDate: toISODateString(result.minDate),
+      maxDate: toISODateString(result.maxDate),
+      advanceBookingDays,
+      minNoticeHours
+    })
+    return result
   }, [advanceBookingDays, minNoticeHours])
 
   // Get calendar days for current view
@@ -166,25 +182,31 @@ export function DatePicker({
    */
   const isDateAvailable = (date: Date): boolean => {
     const dateStart = startOfDay(date)
-    
+    const dateStr = toISODateString(date)
+
     // Check if within booking window
     if (dateStart < constraints.minDate || dateStart > constraints.maxDate) {
       return false
     }
-    
+
     // Check if day of week is enabled in schedule
     const dayName = DAYS_FULL[date.getDay()] as keyof WeeklySchedule
     const daySchedule = schedule[dayName]
-    
+
     if (!daySchedule?.enabled || !daySchedule.slots?.length) {
+      // Debug: Log which days are failing the schedule check
+      if (date.getMonth() === constraints.today.getMonth() ||
+          date.getMonth() === constraints.today.getMonth() + 1) {
+        console.warn(`[DatePicker] ${dateStr} unavailable: schedule[${dayName}] =`, daySchedule)
+      }
       return false
     }
-    
+
     // Check if fully booked
-    if (fullyBookedSet.has(toISODateString(date))) {
+    if (fullyBookedSet.has(dateStr)) {
       return false
     }
-    
+
     return true
   }
 

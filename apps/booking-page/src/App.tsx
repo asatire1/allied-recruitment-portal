@@ -103,14 +103,28 @@ function App() {
 
   const loadAvailability = async () => {
     if (tokenState.status !== 'valid') return
-    
+
     setIsLoadingAvailability(true)
     setLoadError(null)
-    
+
     try {
       const result = await getAvailability(tokenState.token)
+      console.warn('[Booking] Availability loaded:', {
+        schedule: result.settings.schedule,
+        advanceBookingDays: result.settings.advanceBookingDays,
+        minNoticeHours: result.settings.minNoticeHours,
+        fullyBookedDates: result.fullyBookedDates,
+        blockedDates: result.blockedDates
+      })
       setAvailability(result.settings)
-      setFullyBookedDates(result.fullyBookedDates)
+      // Merge fullyBookedDates with blockedDates (bank holidays, custom blocked dates)
+      const allBlockedDates = [
+        ...result.fullyBookedDates,
+        ...(result.blockedDates || [])
+      ]
+      // Remove duplicates
+      const uniqueBlockedDates = [...new Set(allBlockedDates)]
+      setFullyBookedDates(uniqueBlockedDates)
     } catch (error) {
       console.error('Failed to load availability:', error)
       // Use default settings as fallback

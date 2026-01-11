@@ -407,6 +407,7 @@ export const getBookingAvailability = onCall<{ token: string }>(
     }
 
     console.log('getBookingAvailability - final schedule:', JSON.stringify(settings.schedule))
+    console.log('getBookingAvailability - advanceBookingDays:', settings.advanceBookingDays, 'minNoticeHours:', settings.minNoticeHours)
 
     // Get booking blocks settings (bank holidays)
     const blocksSettings = await getBookingBlocksSettings()

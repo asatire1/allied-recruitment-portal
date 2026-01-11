@@ -44,6 +44,7 @@ export interface TimeSlot {
 export interface GetAvailabilityResponse {
   settings: AvailabilitySettings
   fullyBookedDates: string[]  // ISO date strings
+  blockedDates?: string[]     // Bank holidays + custom blocked dates
 }
 
 export interface GetTimeSlotsRequest {

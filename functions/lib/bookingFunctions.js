@@ -57,23 +57,96 @@ function hashToken(token) {
     return crypto.createHash('sha256').update(token).digest('hex');
 }
 const DAYS_FULL = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-function getDefaultSettings() {
+function getDefaultTrialSettings() {
     return {
-        schedule: {
-            monday: { enabled: true, slots: [{ start: '09:00', end: '17:00' }] },
-            tuesday: { enabled: true, slots: [{ start: '09:00', end: '17:00' }] },
-            wednesday: { enabled: true, slots: [{ start: '09:00', end: '17:00' }] },
-            thursday: { enabled: true, slots: [{ start: '09:00', end: '17:00' }] },
-            friday: { enabled: true, slots: [{ start: '09:00', end: '17:00' }] },
-            saturday: { enabled: false, slots: [] },
-            sunday: { enabled: false, slots: [] }
-        },
+        trialDuration: 240, // 4 hours
+        bufferTime: 30,
+        maxAdvanceBooking: 21,
+        minNoticeHours: 48,
+        maxTrialsPerDay: 2,
+        slots: [
+            { dayOfWeek: 0, startTime: '09:00', endTime: '13:00', enabled: false }, // Sunday
+            { dayOfWeek: 1, startTime: '09:00', endTime: '17:00', enabled: true }, // Monday
+            { dayOfWeek: 2, startTime: '09:00', endTime: '17:00', enabled: true }, // Tuesday
+            { dayOfWeek: 3, startTime: '09:00', endTime: '17:00', enabled: true }, // Wednesday
+            { dayOfWeek: 4, startTime: '09:00', endTime: '17:00', enabled: true }, // Thursday
+            { dayOfWeek: 5, startTime: '09:00', endTime: '17:00', enabled: true }, // Friday
+            { dayOfWeek: 6, startTime: '09:00', endTime: '13:00', enabled: false }, // Saturday
+        ],
+        blockedDates: []
+    };
+}
+// Convert trial slots to weekly schedule format for compatibility
+function convertTrialSlotsToSchedule(slots) {
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const schedule = {};
+    for (const slot of slots) {
+        const dayName = dayNames[slot.dayOfWeek];
+        schedule[dayName] = {
+            enabled: slot.enabled,
+            slots: slot.enabled ? [{ start: slot.startTime, end: slot.endTime }] : []
+        };
+    }
+    return schedule;
+}
+async function getTrialAvailabilitySettings() {
+    try {
+        const settingsDoc = await db.collection('settings').doc('trialAvailability').get();
+        if (settingsDoc.exists) {
+            const data = settingsDoc.data();
+            return {
+                trialDuration: data?.trialDuration || 240,
+                bufferTime: data?.bufferTime || 30,
+                maxAdvanceBooking: data?.maxAdvanceBooking || 21,
+                minNoticeHours: data?.minNoticeHours || 48,
+                maxTrialsPerDay: data?.maxTrialsPerDay || 2,
+                slots: data?.slots || getDefaultTrialSettings().slots,
+                blockedDates: data?.blockedDates || []
+            };
+        }
+    }
+    catch (error) {
+        console.error('Failed to get trial settings:', error);
+    }
+    return getDefaultTrialSettings();
+}
+function getDefaultInterviewSettings() {
+    return {
         slotDuration: 30,
         bufferTime: 15,
-        advanceBookingDays: 14,
+        maxAdvanceBooking: 14,
         minNoticeHours: 24,
-        enabled: true
+        slots: [
+            { dayOfWeek: 0, startTime: '09:00', endTime: '17:00', enabled: false }, // Sunday
+            { dayOfWeek: 1, startTime: '09:00', endTime: '17:00', enabled: true }, // Monday
+            { dayOfWeek: 2, startTime: '09:00', endTime: '17:00', enabled: true }, // Tuesday
+            { dayOfWeek: 3, startTime: '09:00', endTime: '17:00', enabled: true }, // Wednesday
+            { dayOfWeek: 4, startTime: '09:00', endTime: '17:00', enabled: true }, // Thursday
+            { dayOfWeek: 5, startTime: '09:00', endTime: '17:00', enabled: true }, // Friday
+            { dayOfWeek: 6, startTime: '09:00', endTime: '17:00', enabled: false }, // Saturday
+        ],
+        blockedDates: []
     };
+}
+async function getInterviewAvailabilitySettings() {
+    try {
+        const settingsDoc = await db.collection('settings').doc('interviewAvailability').get();
+        if (settingsDoc.exists) {
+            const data = settingsDoc.data();
+            return {
+                slotDuration: data?.slotDuration || 30,
+                bufferTime: data?.bufferTime || 15,
+                maxAdvanceBooking: data?.maxAdvanceBooking || 14,
+                minNoticeHours: data?.minNoticeHours || 24,
+                slots: data?.slots || getDefaultInterviewSettings().slots,
+                blockedDates: data?.blockedDates || []
+            };
+        }
+    }
+    catch (error) {
+        console.error('Failed to get interview settings:', error);
+    }
+    return getDefaultInterviewSettings();
 }
 // Default UK bank holidays for 2025 and 2026
 function getDefaultBankHolidays() {
@@ -213,6 +286,7 @@ async function updateCandidateStatus(candidateId, newStatus, reason) {
 // ============================================================================
 exports.getBookingAvailability = (0, https_1.onCall)({
     cors: true,
+    region: 'europe-west2',
     enforceAppCheck: false, // Allow public access from booking page
     invoker: 'public', // Allow unauthenticated invocations
 }, async (request) => {
@@ -220,39 +294,75 @@ exports.getBookingAvailability = (0, https_1.onCall)({
     if (!token) {
         throw new https_1.HttpsError('invalid-argument', 'Token is required');
     }
-    // Skip validation for internal scheduling
+    // Validate token and get booking type
+    let bookingType = 'interview';
     if (token !== "__internal__") {
-        await validateToken(token);
-    } //
-    // Get availability settings
+        const linkDoc = await validateToken(token);
+        const linkData = linkDoc.data();
+        bookingType = linkData?.type || 'interview';
+    }
+    console.log('getBookingAvailability - bookingType:', bookingType);
+    // Get availability settings based on booking type
     let settings;
-    try {
-        const settingsDoc = await db.collection('settings').doc('interviewAvailability').get();
-        if (settingsDoc.exists) {
-            const data = settingsDoc.data();
-            settings = {
-                schedule: data?.schedule || getDefaultSettings().schedule,
-                slotDuration: data?.slotDuration || 30,
-                bufferTime: data?.bufferTime || 15,
-                advanceBookingDays: data?.advanceBookingDays || 14,
-                minNoticeHours: data?.minNoticeHours || 24,
-                enabled: data?.enabled !== false
-            };
-        }
-        else {
-            settings = getDefaultSettings();
-        }
+    if (bookingType === 'trial') {
+        // Read from trialAvailability settings
+        const trialSettings = await getTrialAvailabilitySettings();
+        console.log('getBookingAvailability - trialSettings:', JSON.stringify(trialSettings.slots));
+        settings = {
+            schedule: convertTrialSlotsToSchedule(trialSettings.slots),
+            slotDuration: trialSettings.trialDuration, // 240 minutes (4 hours)
+            bufferTime: trialSettings.bufferTime,
+            advanceBookingDays: trialSettings.maxAdvanceBooking,
+            minNoticeHours: trialSettings.minNoticeHours,
+            enabled: true
+        };
     }
-    catch (error) {
-        console.error('Failed to get settings:', error);
-        settings = getDefaultSettings();
+    else {
+        // Read from interviewAvailability settings (also uses slots array format)
+        const interviewSettings = await getInterviewAvailabilitySettings();
+        console.log('getBookingAvailability - interviewSettings:', JSON.stringify(interviewSettings.slots));
+        settings = {
+            schedule: convertTrialSlotsToSchedule(interviewSettings.slots),
+            slotDuration: interviewSettings.slotDuration,
+            bufferTime: interviewSettings.bufferTime,
+            advanceBookingDays: interviewSettings.maxAdvanceBooking,
+            minNoticeHours: interviewSettings.minNoticeHours,
+            enabled: true
+        };
     }
+    console.log('getBookingAvailability - final schedule:', JSON.stringify(settings.schedule));
+    console.log('getBookingAvailability - advanceBookingDays:', settings.advanceBookingDays, 'minNoticeHours:', settings.minNoticeHours);
     // Get booking blocks settings (bank holidays)
     const blocksSettings = await getBookingBlocksSettings();
     // Get fully booked dates (dates where all slots are taken)
     const fullyBookedDates = [];
     // Add bank holidays to blocked dates
     const blockedDates = [...blocksSettings.bankHolidays];
+    // Add type-specific blocked dates
+    if (bookingType === 'trial') {
+        const trialSettings = await getTrialAvailabilitySettings();
+        trialSettings.blockedDates.forEach(ts => {
+            const date = ts?.toDate?.();
+            if (date) {
+                const dateStr = date.toISOString().split('T')[0];
+                if (!blockedDates.includes(dateStr)) {
+                    blockedDates.push(dateStr);
+                }
+            }
+        });
+    }
+    else {
+        const interviewSettings = await getInterviewAvailabilitySettings();
+        interviewSettings.blockedDates.forEach(ts => {
+            const date = ts?.toDate?.();
+            if (date) {
+                const dateStr = date.toISOString().split('T')[0];
+                if (!blockedDates.includes(dateStr)) {
+                    blockedDates.push(dateStr);
+                }
+            }
+        });
+    }
     // Query interviews in the booking window
     const now = new Date();
     const maxDate = new Date(now);
@@ -302,6 +412,7 @@ exports.getBookingAvailability = (0, https_1.onCall)({
 // ============================================================================
 exports.getBookingTimeSlots = (0, https_1.onCall)({
     cors: true,
+    region: 'europe-west2',
     enforceAppCheck: false, // Allow public access from booking page
     invoker: 'public', // Allow unauthenticated invocations
 }, async (request) => {
@@ -315,33 +426,36 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({
     const linkData = linkDoc?.data() || {};
     const bookingType = type || linkData.type || 'interview';
     console.log('Booking type determined:', bookingType, 'linkData.type:', linkData.type);
-    // Get availability settings
+    // Get availability settings based on booking type
     let settings;
-    try {
-        const settingsDoc = await db.collection('settings').doc('interviewAvailability').get();
-        console.log('getBookingTimeSlots - Settings doc exists:', settingsDoc.exists);
-        if (settingsDoc.exists) {
-            const data = settingsDoc.data();
-            console.log('getBookingTimeSlots - Raw slotDuration:', data?.slotDuration);
-            settings = {
-                schedule: data?.schedule || getDefaultSettings().schedule,
-                slotDuration: data?.slotDuration || 30,
-                bufferTime: data?.bufferTime || 15,
-                advanceBookingDays: data?.advanceBookingDays || 14,
-                minNoticeHours: data?.minNoticeHours || 24,
-                enabled: data?.enabled !== false
-            };
-            console.log('getBookingTimeSlots - Final slotDuration:', settings.slotDuration);
-        }
-        else {
-            settings = getDefaultSettings();
-            console.log('getBookingTimeSlots - No settings doc, using defaults');
-        }
+    if (bookingType === 'trial') {
+        // Read from trialAvailability settings
+        const trialSettings = await getTrialAvailabilitySettings();
+        console.log('getBookingTimeSlots - Using trial settings:', JSON.stringify(trialSettings.slots));
+        settings = {
+            schedule: convertTrialSlotsToSchedule(trialSettings.slots),
+            slotDuration: trialSettings.trialDuration, // 240 minutes (4 hours)
+            bufferTime: trialSettings.bufferTime,
+            advanceBookingDays: trialSettings.maxAdvanceBooking,
+            minNoticeHours: trialSettings.minNoticeHours,
+            enabled: true
+        };
     }
-    catch (error) {
-        console.error('Failed to get settings:', error);
-        settings = getDefaultSettings();
+    else {
+        // Read from interviewAvailability settings (also uses slots array format)
+        const interviewSettings = await getInterviewAvailabilitySettings();
+        console.log('getBookingTimeSlots - Using interview settings:', JSON.stringify(interviewSettings.slots));
+        settings = {
+            schedule: convertTrialSlotsToSchedule(interviewSettings.slots),
+            slotDuration: interviewSettings.slotDuration,
+            bufferTime: interviewSettings.bufferTime,
+            advanceBookingDays: interviewSettings.maxAdvanceBooking,
+            minNoticeHours: interviewSettings.minNoticeHours,
+            enabled: true
+        };
     }
+    console.log('getBookingTimeSlots - Final schedule:', JSON.stringify(settings.schedule));
+    console.log('getBookingTimeSlots - slotDuration:', settings.slotDuration, 'bufferTime:', settings.bufferTime);
     // Get booking blocks settings
     const blocksSettings = await getBookingBlocksSettings();
     // Check if date is a bank holiday
@@ -362,12 +476,12 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({
     if (!daySchedule?.enabled || !daySchedule.slots?.length) {
         return { slots: [], date };
     }
-    // Determine slot duration based on booking type
-    // Interviews: 30 mins, Trials: 4 hours (240 mins)
-    const slotDuration = bookingType === 'trial' ? 240 : (settings.slotDuration || 30);
+    // Use duration from settings (already set correctly for trials/interviews)
+    const slotDuration = settings.slotDuration || (bookingType === 'trial' ? 240 : 30);
     const bufferTime = settings.bufferTime || 15;
     const minNoticeHours = settings.minNoticeHours || 24;
-    // For trials, we use larger intervals between start times
+    console.log(`getBookingTimeSlots - Using slotDuration: ${slotDuration}, bufferTime: ${bufferTime}, minNoticeHours: ${minNoticeHours}`);
+    // For trials, we use larger intervals between start times (1 hour)
     const slotInterval = bookingType === 'trial' ? 60 : slotDuration;
     // Get existing bookings for this date
     const dayStart = new Date(selectedDate);
@@ -393,23 +507,27 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({
             .where('scheduledAt', '>=', admin.firestore.Timestamp.fromDate(dayStart))
             .where('scheduledAt', '<=', admin.firestore.Timestamp.fromDate(dayEnd))
             .get();
-        // Combine results, avoiding duplicates by ID, and filter for active statuses
+        // Combine results, avoiding duplicates by ID, and filter for:
+        // 1. Active statuses only
+        // 2. Same booking type only (trials don't conflict with interviews and vice versa)
         const activeStatuses = ['scheduled', 'confirmed'];
         const seenIds = new Set();
         bookingsWithScheduledDate.docs.forEach(doc => {
             const data = doc.data();
-            if (activeStatuses.includes(data.status)) {
+            // Only include bookings of the same type
+            if (activeStatuses.includes(data.status) && data.type === bookingType) {
                 seenIds.add(doc.id);
                 allBookingDocs.push({ id: doc.id, ...data });
             }
         });
         bookingsWithScheduledAt.docs.forEach(doc => {
             const data = doc.data();
-            if (!seenIds.has(doc.id) && activeStatuses.includes(data.status)) {
+            // Only include bookings of the same type
+            if (!seenIds.has(doc.id) && activeStatuses.includes(data.status) && data.type === bookingType) {
                 allBookingDocs.push({ id: doc.id, ...data });
             }
         });
-        console.log(`Found ${allBookingDocs.length} existing bookings for ${date}`);
+        console.log(`Found ${allBookingDocs.length} existing ${bookingType} bookings for ${date} (filtered by type)`);
         allBookingDocs.forEach(booking => {
             const dateField = booking.scheduledDate || booking.scheduledAt;
             console.log(`  - Booking: ${booking.id}, time: ${dateField?.toDate?.()?.toISOString()}, status: ${booking.status}, duration: ${booking.duration}`);
@@ -484,6 +602,7 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({
 // ============================================================================
 exports.submitBooking = (0, https_1.onCall)({
     cors: true,
+    region: 'europe-west2',
     enforceAppCheck: false, // Allow public access from booking page
     invoker: 'public', // Allow unauthenticated invocations
     // Include Teams secrets so they're available
@@ -620,20 +739,24 @@ exports.submitBooking = (0, https_1.onCall)({
             .where('scheduledAt', '>=', admin.firestore.Timestamp.fromDate(dayStart))
             .where('scheduledAt', '<=', admin.firestore.Timestamp.fromDate(dayEnd))
             .get();
-        // Combine results and filter for active statuses
+        // Combine results and filter for:
+        // 1. Active statuses only
+        // 2. Same booking type only (trials don't conflict with interviews and vice versa)
         const activeStatuses = ['scheduled', 'confirmed'];
         const allBookings = [];
         const seenIds = new Set();
         bookingsWithScheduledDate.docs.forEach(doc => {
             const data = doc.data();
-            if (activeStatuses.includes(data.status)) {
+            // Only check conflicts with same booking type
+            if (activeStatuses.includes(data.status) && data.type === linkData.type) {
                 seenIds.add(doc.id);
                 allBookings.push({ id: doc.id, ...data });
             }
         });
         bookingsWithScheduledAt.docs.forEach(doc => {
             const data = doc.data();
-            if (!seenIds.has(doc.id) && activeStatuses.includes(data.status)) {
+            // Only check conflicts with same booking type
+            if (!seenIds.has(doc.id) && activeStatuses.includes(data.status) && data.type === linkData.type) {
                 allBookings.push({ id: doc.id, ...data });
             }
         });
