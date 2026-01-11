@@ -1487,6 +1487,19 @@ Allied Recruitment Team`)
         if (!snapshot.empty) {
           const interviewData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() }
           setLatestInterview(interviewData)
+          
+          // Auto-fetch Copilot summary if:
+          // 1. Interview has a Teams meeting ID
+          // 2. Interview has ended (scheduledAt is in the past)
+          // 3. No meeting summary exists yet OR it wasn't from Copilot
+          const scheduledAt = interviewData.scheduledAt?.toDate?.() || new Date(interviewData.scheduledAt)
+          const hasEnded = scheduledAt < new Date()
+          const hasCopilotSummary = candidate.meetingSummary?.source === 'copilot_auto'
+          
+          if (interviewData.onlineMeetingId && hasEnded && !hasCopilotSummary) {
+            // Auto-fetch in background (don't block UI)
+            autoFetchCopilotSummary(interviewData)
+          }
         }
       } catch (error) {
         console.error('Error loading latest interview:', error)
@@ -1496,7 +1509,91 @@ Allied Recruitment Team`)
     loadLatestInterview()
   }, [candidate?.id, db])
 
-  // Fetch Copilot meeting summary from Microsoft Graph
+  // Auto-fetch Copilot summary (silent, no alerts)
+  const autoFetchCopilotSummary = async (interview: any) => {
+    if (!interview?.onlineMeetingId || !candidate) return
+
+    setFetchingCopilotSummary(true)
+    try {
+      const functions = getFirebaseFunctions()
+      const fetchInsightsFn = httpsCallable<{
+        interviewId: string
+        onlineMeetingId: string
+      }, {
+        success: boolean
+        insights?: {
+          summary: string
+          keyPoints: string[]
+          actionItems: { text: string; owner?: string }[]
+        }
+        error?: string
+      }>(functions, 'fetchMeetingInsights')
+
+      const result = await fetchInsightsFn({
+        interviewId: interview.id,
+        onlineMeetingId: interview.onlineMeetingId,
+      })
+
+      if (result.data.success && result.data.insights) {
+        // Format the insights into a readable summary
+        let formattedSummary = ''
+        
+        if (result.data.insights.summary) {
+          formattedSummary += result.data.insights.summary + '\n\n'
+        }
+        
+        if (result.data.insights.keyPoints?.length > 0) {
+          formattedSummary += '📌 Key Points:\n'
+          result.data.insights.keyPoints.forEach(point => {
+            formattedSummary += `• ${point}\n`
+          })
+          formattedSummary += '\n'
+        }
+        
+        if (result.data.insights.actionItems?.length > 0) {
+          formattedSummary += '✅ Action Items:\n'
+          result.data.insights.actionItems.forEach(item => {
+            formattedSummary += `• ${item.text}${item.owner ? ` (${item.owner})` : ''}\n`
+          })
+        }
+
+        if (formattedSummary.trim()) {
+          setMeetingSummary(formattedSummary.trim())
+          
+          // Auto-save
+          await updateDoc(doc(db, COLLECTIONS.CANDIDATES, candidate.id), {
+            meetingSummary: {
+              content: formattedSummary.trim(),
+              updatedAt: serverTimestamp(),
+              updatedBy: 'Copilot',
+              updatedByName: 'Microsoft Copilot (Auto)',
+              source: 'copilot_auto',
+            },
+          })
+          
+          setCandidate(prev => prev ? {
+            ...prev,
+            meetingSummary: {
+              content: formattedSummary.trim(),
+              updatedAt: new Date(),
+              updatedBy: 'Copilot',
+              updatedByName: 'Microsoft Copilot (Auto)',
+              source: 'copilot_auto',
+            },
+          } : null)
+
+          console.log('Auto-fetched Copilot meeting summary')
+        }
+      }
+    } catch (error) {
+      // Silent fail for auto-fetch - don't bother user
+      console.log('Auto-fetch Copilot summary not available:', error)
+    } finally {
+      setFetchingCopilotSummary(false)
+    }
+  }
+
+  // Fetch Copilot meeting summary from Microsoft Graph (manual button)
   const handleFetchCopilotSummary = async () => {
     if (!latestInterview?.onlineMeetingId) {
       alert('No Teams meeting found for this candidate. The interview must have a Teams meeting link to fetch Copilot insights.')
@@ -2252,8 +2349,15 @@ Allied Recruitment Team`)
                     <div className="toggle-left">
                       <span className="toggle-icon">🤖</span>
                       <span className="toggle-title">Meeting Summary (Copilot)</span>
-                      {candidate.meetingSummary?.content && (
-                        <span className="has-content-badge">Has content</span>
+                      {fetchingCopilotSummary && (
+                        <span className="fetching-badge">
+                          <Spinner size="sm" /> Fetching...
+                        </span>
+                      )}
+                      {!fetchingCopilotSummary && candidate.meetingSummary?.content && (
+                        <span className="has-content-badge">
+                          {candidate.meetingSummary?.source === 'copilot_auto' ? '✓ Auto-imported' : 'Has content'}
+                        </span>
                       )}
                     </div>
                     <span className={`toggle-arrow ${meetingSummaryExpanded ? 'expanded' : ''}`}>
@@ -2275,6 +2379,10 @@ Allied Recruitment Team`)
                             <>
                               <Spinner size="sm" /> Fetching from Copilot...
                             </>
+                          ) : candidate.meetingSummary?.source === 'copilot_auto' ? (
+                            <>
+                              🔄 Refresh from Copilot
+                            </>
                           ) : (
                             <>
                               🤖 Fetch from Microsoft Copilot
@@ -2284,8 +2392,11 @@ Allied Recruitment Team`)
                         {!latestInterview?.onlineMeetingId && (
                           <span className="copilot-hint">No Teams meeting found for this candidate</span>
                         )}
-                        {latestInterview?.onlineMeetingId && (
-                          <span className="copilot-hint">✓ Teams meeting available</span>
+                        {latestInterview?.onlineMeetingId && !candidate.meetingSummary?.source && (
+                          <span className="copilot-hint">✓ Teams meeting available - will auto-fetch after meeting ends</span>
+                        )}
+                        {candidate.meetingSummary?.source === 'copilot_auto' && (
+                          <span className="copilot-hint copilot-success">✓ Auto-imported from Microsoft Copilot</span>
                         )}
                       </div>
 
