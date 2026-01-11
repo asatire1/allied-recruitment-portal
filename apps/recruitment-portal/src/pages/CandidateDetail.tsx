@@ -981,7 +981,7 @@ export function CandidateDetail() {
   }
 
   // Get placeholder data for email (same as WhatsApp)
-  const getEmailPlaceholderData = (): PlaceholderData => {
+  const getEmailPlaceholderData = (bookingUrl?: string): PlaceholderData => {
     if (!candidate) return {}
     
     const candidateData = prepareCandidateData({
@@ -995,7 +995,7 @@ export function CandidateDetail() {
     })
     
     return combinePlaceholderData(candidateData, {
-      interviewBookingLink: emailGeneratedBookingLink || generatedBookingLink || '[Booking link will be generated]',
+      interviewBookingLink: bookingUrl || emailGeneratedBookingLink || generatedBookingLink || '[Booking link will be generated]',
       companyName: candidate.entity || 'Allied Pharmacies',
       branchName: candidate.branchId || '',
       branchAddress: ''
@@ -1095,7 +1095,8 @@ export function CandidateDetail() {
       t.category === 'interview' && t.name.toLowerCase().includes('invitation')
     )
     
-    const data = getEmailPlaceholderData()
+    // Pass bookingUrl directly to avoid state timing issues
+    const data = getEmailPlaceholderData(bookingUrl)
     
     if (template) {
       setSelectedEmailTemplate(template)
@@ -1132,7 +1133,8 @@ Allied Recruitment Team`)
       t.category === 'trial' && t.name.toLowerCase().includes('invitation')
     )
     
-    const data = getEmailPlaceholderData()
+    // Pass bookingUrl directly to avoid state timing issues
+    const data = getEmailPlaceholderData(bookingUrl)
     
     if (template) {
       setSelectedEmailTemplate(template)
