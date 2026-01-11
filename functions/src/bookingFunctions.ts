@@ -87,25 +87,6 @@ function hashToken(token: string): string {
 
 const DAYS_FULL = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
 
-function getDefaultSettings(): AvailabilitySettings {
-  return {
-    schedule: {
-      monday: { enabled: true, slots: [{ start: '09:00', end: '17:00' }] },
-      tuesday: { enabled: true, slots: [{ start: '09:00', end: '17:00' }] },
-      wednesday: { enabled: true, slots: [{ start: '09:00', end: '17:00' }] },
-      thursday: { enabled: true, slots: [{ start: '09:00', end: '17:00' }] },
-      friday: { enabled: true, slots: [{ start: '09:00', end: '17:00' }] },
-      saturday: { enabled: false, slots: [] },
-      sunday: { enabled: false, slots: [] }
-    },
-    slotDuration: 30,
-    bufferTime: 15,
-    advanceBookingDays: 14,
-    minNoticeHours: 24,
-    enabled: true
-  }
-}
-
 function getDefaultTrialSettings(): TrialAvailabilitySettings {
   return {
     trialDuration: 240, // 4 hours
@@ -161,6 +142,55 @@ async function getTrialAvailabilitySettings(): Promise<TrialAvailabilitySettings
     console.error('Failed to get trial settings:', error)
   }
   return getDefaultTrialSettings()
+}
+
+// Interview settings stored in same format as trials (slots array)
+interface InterviewAvailabilitySettings {
+  slotDuration: number
+  bufferTime: number
+  maxAdvanceBooking: number
+  minNoticeHours: number
+  slots: TrialSlot[]
+  blockedDates: FirebaseFirestore.Timestamp[]
+}
+
+function getDefaultInterviewSettings(): InterviewAvailabilitySettings {
+  return {
+    slotDuration: 30,
+    bufferTime: 15,
+    maxAdvanceBooking: 14,
+    minNoticeHours: 24,
+    slots: [
+      { dayOfWeek: 0, startTime: '09:00', endTime: '17:00', enabled: false }, // Sunday
+      { dayOfWeek: 1, startTime: '09:00', endTime: '17:00', enabled: true },  // Monday
+      { dayOfWeek: 2, startTime: '09:00', endTime: '17:00', enabled: true },  // Tuesday
+      { dayOfWeek: 3, startTime: '09:00', endTime: '17:00', enabled: true },  // Wednesday
+      { dayOfWeek: 4, startTime: '09:00', endTime: '17:00', enabled: true },  // Thursday
+      { dayOfWeek: 5, startTime: '09:00', endTime: '17:00', enabled: true },  // Friday
+      { dayOfWeek: 6, startTime: '09:00', endTime: '17:00', enabled: false }, // Saturday
+    ],
+    blockedDates: []
+  }
+}
+
+async function getInterviewAvailabilitySettings(): Promise<InterviewAvailabilitySettings> {
+  try {
+    const settingsDoc = await db.collection('settings').doc('interviewAvailability').get()
+    if (settingsDoc.exists) {
+      const data = settingsDoc.data()
+      return {
+        slotDuration: data?.slotDuration || 30,
+        bufferTime: data?.bufferTime || 15,
+        maxAdvanceBooking: data?.maxAdvanceBooking || 14,
+        minNoticeHours: data?.minNoticeHours || 24,
+        slots: data?.slots || getDefaultInterviewSettings().slots,
+        blockedDates: data?.blockedDates || []
+      }
+    }
+  } catch (error) {
+    console.error('Failed to get interview settings:', error)
+  }
+  return getDefaultInterviewSettings()
 }
 
 // Default UK bank holidays for 2025 and 2026
@@ -363,25 +393,16 @@ export const getBookingAvailability = onCall<{ token: string }>(
         enabled: true
       }
     } else {
-      // Read from interviewAvailability settings
-      try {
-        const settingsDoc = await db.collection('settings').doc('interviewAvailability').get()
-        if (settingsDoc.exists) {
-          const data = settingsDoc.data()
-          settings = {
-            schedule: data?.schedule || getDefaultSettings().schedule,
-            slotDuration: data?.slotDuration || 30,
-            bufferTime: data?.bufferTime || 15,
-            advanceBookingDays: data?.advanceBookingDays || 14,
-            minNoticeHours: data?.minNoticeHours || 24,
-            enabled: data?.enabled !== false
-          }
-        } else {
-          settings = getDefaultSettings()
-        }
-      } catch (error) {
-        console.error('Failed to get settings:', error)
-        settings = getDefaultSettings()
+      // Read from interviewAvailability settings (also uses slots array format)
+      const interviewSettings = await getInterviewAvailabilitySettings()
+      console.log('getBookingAvailability - interviewSettings:', JSON.stringify(interviewSettings.slots))
+      settings = {
+        schedule: convertTrialSlotsToSchedule(interviewSettings.slots),
+        slotDuration: interviewSettings.slotDuration,
+        bufferTime: interviewSettings.bufferTime,
+        advanceBookingDays: interviewSettings.maxAdvanceBooking,
+        minNoticeHours: interviewSettings.minNoticeHours,
+        enabled: true
       }
     }
 
@@ -396,10 +417,21 @@ export const getBookingAvailability = onCall<{ token: string }>(
     // Add bank holidays to blocked dates
     const blockedDates: string[] = [...blocksSettings.bankHolidays]
 
-    // For trials, also add trial-specific blocked dates
+    // Add type-specific blocked dates
     if (bookingType === 'trial') {
       const trialSettings = await getTrialAvailabilitySettings()
       trialSettings.blockedDates.forEach(ts => {
+        const date = ts?.toDate?.()
+        if (date) {
+          const dateStr = date.toISOString().split('T')[0]
+          if (!blockedDates.includes(dateStr)) {
+            blockedDates.push(dateStr)
+          }
+        }
+      })
+    } else {
+      const interviewSettings = await getInterviewAvailabilitySettings()
+      interviewSettings.blockedDates.forEach(ts => {
         const date = ts?.toDate?.()
         if (date) {
           const dateStr = date.toISOString().split('T')[0]
@@ -502,33 +534,21 @@ export const getBookingTimeSlots = onCall<{ token: string; date: string; type?: 
         enabled: true
       }
     } else {
-      // Read from interviewAvailability settings
-      try {
-        const settingsDoc = await db.collection('settings').doc('interviewAvailability').get()
-        console.log('getBookingTimeSlots - Settings doc exists:', settingsDoc.exists)
-        if (settingsDoc.exists) {
-          const data = settingsDoc.data()
-          console.log('getBookingTimeSlots - Raw slotDuration:', data?.slotDuration)
-          settings = {
-            schedule: data?.schedule || getDefaultSettings().schedule,
-            slotDuration: data?.slotDuration || 30,
-            bufferTime: data?.bufferTime || 15,
-            advanceBookingDays: data?.advanceBookingDays || 14,
-            minNoticeHours: data?.minNoticeHours || 24,
-            enabled: data?.enabled !== false
-          }
-          console.log('getBookingTimeSlots - Final slotDuration:', settings.slotDuration)
-        } else {
-          settings = getDefaultSettings()
-          console.log('getBookingTimeSlots - No settings doc, using defaults')
-        }
-      } catch (error) {
-        console.error('Failed to get settings:', error)
-        settings = getDefaultSettings()
+      // Read from interviewAvailability settings (also uses slots array format)
+      const interviewSettings = await getInterviewAvailabilitySettings()
+      console.log('getBookingTimeSlots - Using interview settings:', JSON.stringify(interviewSettings.slots))
+      settings = {
+        schedule: convertTrialSlotsToSchedule(interviewSettings.slots),
+        slotDuration: interviewSettings.slotDuration,
+        bufferTime: interviewSettings.bufferTime,
+        advanceBookingDays: interviewSettings.maxAdvanceBooking,
+        minNoticeHours: interviewSettings.minNoticeHours,
+        enabled: true
       }
     }
 
     console.log('getBookingTimeSlots - Final schedule:', JSON.stringify(settings.schedule))
+    console.log('getBookingTimeSlots - slotDuration:', settings.slotDuration, 'bufferTime:', settings.bufferTime)
     
     // Get booking blocks settings
     const blocksSettings = await getBookingBlocksSettings()
