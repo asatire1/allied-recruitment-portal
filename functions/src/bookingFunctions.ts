@@ -581,35 +581,6 @@ export const submitBooking = onCall<{ token: string; date: string; time: string 
     
     const endTime = new Date(scheduledDate.getTime() + duration * 60000)
     
-    // Check for conflicts (double-booking prevention)
-    const dayStart = new Date(scheduledDate)
-    dayStart.setHours(0, 0, 0, 0)
-    const dayEnd = new Date(scheduledDate)
-    dayEnd.setHours(23, 59, 59, 999)
-    
-    const existingBookings = await db
-      .collection('interviews')
-      .where('scheduledDate', '>=', admin.firestore.Timestamp.fromDate(dayStart))
-      .where('scheduledDate', '<=', admin.firestore.Timestamp.fromDate(dayEnd))
-      .where('status', 'in', ['scheduled', 'confirmed'])
-      .get()
-    
-    const hasConflict = existingBookings.docs.some(doc => {
-      const data = doc.data()
-      const existingStart = data.scheduledDate?.toDate?.()
-      if (!existingStart) return false
-      
-      const existingDuration = data.duration || 30
-      const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000)
-      
-      // Check overlap
-      return scheduledDate < existingEnd && endTime > existingStart
-    })
-    
-    if (hasConflict) {
-      throw new HttpsError('already-exists', 'This time slot has just been booked. Please select another time.')
-    }
-    
     // Generate confirmation code
     const confirmationCode = `AP-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`
     
@@ -667,35 +638,107 @@ export const submitBooking = onCall<{ token: string; date: string; time: string 
       interviewData.meetingType = 'teams'
     }
     
-    // Use transaction to ensure atomicity
+    // Use transaction to ensure atomicity and prevent double-booking
     const interviewRef = db.collection('interviews').doc()
-    
+
+    // Create a slot lock document ID based on date and time
+    // This prevents race conditions where two users book the same slot
+    const slotLockId = `${date}_${time.replace(':', '')}`
+    const slotLockRef = db.collection('slotLocks').doc(slotLockId)
+
     await db.runTransaction(async (transaction) => {
-      // Re-check booking link status
-      if (linkDoc) { const freshLinkDoc = await transaction.get(linkDoc.ref)
-      const freshLinkData = freshLinkDoc.data()
-      
-      if (!freshLinkData || freshLinkData.status !== 'active') {
-        throw new HttpsError('not-found', 'Booking link is no longer valid')
+      // =========================================================================
+      // CHECK FOR SLOT CONFLICTS INSIDE TRANSACTION
+      // =========================================================================
+
+      // Check if slot lock exists (another booking for exact same time)
+      const slotLockDoc = await transaction.get(slotLockRef)
+      if (slotLockDoc.exists) {
+        const lockData = slotLockDoc.data()
+        // Check if the lock is still valid (interview exists and is scheduled/confirmed)
+        if (lockData?.interviewId) {
+          const existingInterviewRef = db.collection('interviews').doc(lockData.interviewId)
+          const existingInterviewDoc = await transaction.get(existingInterviewRef)
+          if (existingInterviewDoc.exists) {
+            const existingStatus = existingInterviewDoc.data()?.status
+            if (existingStatus === 'scheduled' || existingStatus === 'confirmed') {
+              throw new HttpsError('already-exists', 'This time slot has just been booked. Please select another time.')
+            }
+          }
+        }
       }
-      
-      if ((freshLinkData.useCount || 0) >= (freshLinkData.maxUses || 1)) {
+
+      // Also check for overlapping bookings (different start times but overlapping duration)
+      // Query interviews that could potentially overlap
+      const dayStart = new Date(scheduledDate)
+      dayStart.setHours(0, 0, 0, 0)
+      const dayEnd = new Date(scheduledDate)
+      dayEnd.setHours(23, 59, 59, 999)
+
+      const existingBookingsSnapshot = await db
+        .collection('interviews')
+        .where('scheduledDate', '>=', admin.firestore.Timestamp.fromDate(dayStart))
+        .where('scheduledDate', '<=', admin.firestore.Timestamp.fromDate(dayEnd))
+        .where('status', 'in', ['scheduled', 'confirmed'])
+        .get()
+
+      const hasOverlap = existingBookingsSnapshot.docs.some(doc => {
+        const data = doc.data()
+        const existingStart = data.scheduledDate?.toDate?.()
+        if (!existingStart) return false
+
+        const existingDuration = data.duration || 30
+        const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000)
+
+        // Check overlap: new booking overlaps if it starts before existing ends AND ends after existing starts
+        return scheduledDate < existingEnd && endTime > existingStart
+      })
+
+      if (hasOverlap) {
+        throw new HttpsError('already-exists', 'This time slot conflicts with an existing booking. Please select another time.')
+      }
+
+      // =========================================================================
+      // RE-CHECK BOOKING LINK STATUS
+      // =========================================================================
+      if (linkDoc) {
+        const freshLinkDoc = await transaction.get(linkDoc.ref)
+        const freshLinkData = freshLinkDoc.data()
+
+        if (!freshLinkData || freshLinkData.status !== 'active') {
+          throw new HttpsError('not-found', 'Booking link is no longer valid')
+        }
+
+        if ((freshLinkData.useCount || 0) >= (freshLinkData.maxUses || 1)) {
           throw new HttpsError('not-found', 'This booking link has already been used')
         }
       }
-      
+
+      // =========================================================================
+      // CREATE SLOT LOCK AND INTERVIEW
+      // =========================================================================
+
+      // Create slot lock to prevent race conditions
+      transaction.set(slotLockRef, {
+        date,
+        time,
+        interviewId: interviewRef.id,
+        candidateId: linkData.candidateId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      })
+
       // Create interview
       transaction.set(interviewRef, interviewData)
-      
+
       // Update booking link (only for external bookings)
       if (linkDoc) {
         transaction.update(linkDoc.ref, {
-        status: 'used',
-        useCount: admin.firestore.FieldValue.increment(1),
-        usedAt: admin.firestore.FieldValue.serverTimestamp(),
-        interviewId: interviewRef.id,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      })
+          status: 'used',
+          useCount: admin.firestore.FieldValue.increment(1),
+          usedAt: admin.firestore.FieldValue.serverTimestamp(),
+          interviewId: interviewRef.id,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        })
       }
     })
     
