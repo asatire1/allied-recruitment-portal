@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { BookingBlocksSettings } from '../components/BookingBlocksSettings'
 import { 
   WhatsAppTemplatesTab, 
+  EmailTemplatesTab,
   EntitiesTab, 
   JobTitlesTab,
   InterviewAvailabilityTab,
@@ -32,6 +33,7 @@ const SETTINGS_TABS: SettingsTab[] = [
   { id: 'interview-availability', label: 'Interview Availability', icon: '📅' },
   { id: 'trial-availability', label: 'Trial Availability', icon: '🏥' },
   { id: 'booking-blocks', label: 'Booking Restrictions', icon: '🚫' },
+  { id: 'email-templates', label: 'Email Templates', icon: '✉️' },
   { id: 'whatsapp-templates', label: 'WhatsApp Templates', icon: '💬' },
   { id: 'locations', label: 'Locations', icon: '📍' },
   { id: 'general', label: 'General', icon: '⚙️' },
@@ -104,6 +106,7 @@ export function Settings() {
           {activeTab === 'interview-availability' && <InterviewAvailabilityTab userId={user?.id} />}
           {activeTab === 'trial-availability' && <TrialAvailabilityTab userId={user?.id} />}
           {activeTab === 'booking-blocks' && renderBookingBlocksTab()}
+          {activeTab === 'email-templates' && <EmailTemplatesTab userId={user?.id} />}
           {activeTab === 'whatsapp-templates' && <WhatsAppTemplatesTab userId={user?.id} />}
           {activeTab === 'locations' && <LocationsTab userId={user?.id} />}
           {activeTab === 'general' && renderGeneralTab()}
