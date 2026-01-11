@@ -473,8 +473,10 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({
             currentMinutes += slotInterval + bufferTime;
         }
     }
-    const availableSlots = slots.filter(s => s.available).length;
-    console.log(`Generated ${slots.length} total slots, ${availableSlots} available for ${date} (type: ${bookingType})`);
+    const availableSlots = slots.filter(s => s.available);
+    console.log(`Generated ${slots.length} total slots, ${availableSlots.length} available for ${date} (type: ${bookingType})`);
+    console.log(`Available slots: ${availableSlots.map(s => s.time).join(', ') || 'none'}`);
+    console.log(`Unavailable slots: ${slots.filter(s => !s.available).map(s => `${s.time}(${s.reason})`).join(', ')}`);
     return { slots, date };
 });
 // ============================================================================
