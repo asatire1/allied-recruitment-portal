@@ -46,6 +46,7 @@ export function TrialAvailabilityTab({ userId }: TrialAvailabilityTabProps) {
     maxAdvanceBooking: 21,
     minNoticeHours: 48,
     maxTrialsPerDay: 2,
+    bookingLinkExpiryDays: 7,
     slots: [...DEFAULT_TRIAL_AVAILABILITY.slots] as AvailabilitySlot[],
   })
   const [blockedDates, setBlockedDates] = useState<string[]>([])
@@ -71,6 +72,7 @@ export function TrialAvailabilityTab({ userId }: TrialAvailabilityTabProps) {
             maxAdvanceBooking: data.maxAdvanceBooking || 21,
             minNoticeHours: data.minNoticeHours || 48,
             maxTrialsPerDay: data.maxTrialsPerDay || 2,
+            bookingLinkExpiryDays: (data as any).bookingLinkExpiryDays || 7,
             slots: data.slots || [...DEFAULT_TRIAL_AVAILABILITY.slots],
           })
           // Convert timestamps to date strings
@@ -87,6 +89,7 @@ export function TrialAvailabilityTab({ userId }: TrialAvailabilityTabProps) {
             maxAdvanceBooking: DEFAULT_TRIAL_AVAILABILITY.maxAdvanceBooking,
             minNoticeHours: DEFAULT_TRIAL_AVAILABILITY.minNoticeHours,
             maxTrialsPerDay: DEFAULT_TRIAL_AVAILABILITY.maxTrialsPerDay,
+            bookingLinkExpiryDays: 7,
             slots: [...DEFAULT_TRIAL_AVAILABILITY.slots],
           })
         }
@@ -265,6 +268,20 @@ export function TrialAvailabilityTab({ userId }: TrialAvailabilityTabProps) {
                   max={10}
                 />
                 <span className="form-help">Maximum trial shifts per day</span>
+              </div>
+              <div className="form-group">
+                <label>Booking Link Expiry (days)</label>
+                <Input
+                  type="number"
+                  value={form.bookingLinkExpiryDays}
+                  onChange={(e) => setForm(prev => ({
+                    ...prev,
+                    bookingLinkExpiryDays: parseInt(e.target.value) || 7
+                  }))}
+                  min={1}
+                  max={30}
+                />
+                <span className="form-help">How long trial booking links remain valid</span>
               </div>
             </div>
           </Card>

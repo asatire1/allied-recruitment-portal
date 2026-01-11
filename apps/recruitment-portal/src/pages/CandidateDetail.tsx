@@ -277,7 +277,8 @@ export function CandidateDetail() {
   const [messageCopied, setMessageCopied] = useState(false)
   const [generatedBookingLink, setGeneratedBookingLink] = useState<string | null>(null)
   const [generatingBookingLink, setGeneratingBookingLink] = useState(false)
-  const [bookingLinkExpiryDays, setBookingLinkExpiryDays] = useState(7) // Default 7 days
+  const [interviewExpiryDays, setInterviewExpiryDays] = useState(7) // Default 7 days
+  const [trialExpiryDays, setTrialExpiryDays] = useState(7) // Default 7 days
 
   // Email Modal state
   const [showEmailModal, setShowEmailModal] = useState(false)
@@ -419,6 +420,35 @@ export function CandidateDetail() {
 
     fetchCandidate()
   }, [db, id])
+
+  // Load booking link expiry settings
+  useEffect(() => {
+    const loadExpirySettings = async () => {
+      try {
+        // Load interview expiry
+        const interviewDoc = await getDoc(doc(db, 'settings', 'interviewAvailability'))
+        if (interviewDoc.exists()) {
+          const data = interviewDoc.data()
+          if (data.bookingLinkExpiryDays) {
+            setInterviewExpiryDays(data.bookingLinkExpiryDays)
+          }
+        }
+        
+        // Load trial expiry
+        const trialDoc = await getDoc(doc(db, 'settings', 'trialAvailability'))
+        if (trialDoc.exists()) {
+          const data = trialDoc.data()
+          if (data.bookingLinkExpiryDays) {
+            setTrialExpiryDays(data.bookingLinkExpiryDays)
+          }
+        }
+      } catch (error) {
+        console.error('Error loading expiry settings:', error)
+      }
+    }
+    
+    loadExpirySettings()
+  }, [db])
 
   // Fetch activity logs
   useEffect(() => {
@@ -845,7 +875,8 @@ export function CandidateDetail() {
     // If we already generated one, return it
     if (generatedBookingLink) return generatedBookingLink
     
-    const expiry = expiryDays || bookingLinkExpiryDays
+    // Use type-specific expiry from settings, or override if provided
+    const expiry = expiryDays || (type === 'trial' ? trialExpiryDays : interviewExpiryDays)
     
     setGeneratingBookingLink(true)
     try {
@@ -1105,7 +1136,8 @@ export function CandidateDetail() {
       return generatedBookingLink
     }
     
-    const expiry = expiryDays || bookingLinkExpiryDays
+    // Use type-specific expiry from settings, or override if provided
+    const expiry = expiryDays || (type === 'trial' ? trialExpiryDays : interviewExpiryDays)
     
     setGeneratingBookingLink(true)
     try {
@@ -3305,24 +3337,6 @@ Example:
               <span className="recipient-name">{candidate?.firstName} {candidate?.lastName}</span>
               <span className="recipient-phone">{candidate?.email}</span>
             </div>
-          </div>
-
-          {/* Booking Link Expiry Setting */}
-          <div className="booking-link-expiry-setting">
-            <label>Booking Link Expires In:</label>
-            <Select
-              value={bookingLinkExpiryDays.toString()}
-              onChange={(e) => setBookingLinkExpiryDays(parseInt(e.target.value))}
-              options={[
-                { value: '1', label: '1 day' },
-                { value: '2', label: '2 days' },
-                { value: '3', label: '3 days' },
-                { value: '5', label: '5 days' },
-                { value: '7', label: '7 days' },
-                { value: '14', label: '14 days' },
-                { value: '30', label: '30 days' },
-              ]}
-            />
           </div>
 
           {/* Quick Actions */}

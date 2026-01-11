@@ -45,6 +45,7 @@ export function InterviewAvailabilityTab({ userId }: InterviewAvailabilityTabPro
     bufferTime: 15,
     maxAdvanceBooking: 14,
     minNoticeHours: 24,
+    bookingLinkExpiryDays: 7,
     slots: [...DEFAULT_INTERVIEW_AVAILABILITY.slots] as AvailabilitySlot[],
   })
   const [blockedDates, setBlockedDates] = useState<string[]>([])
@@ -69,6 +70,7 @@ export function InterviewAvailabilityTab({ userId }: InterviewAvailabilityTabPro
             bufferTime: data.bufferTime || 15,
             maxAdvanceBooking: data.maxAdvanceBooking || 14,
             minNoticeHours: data.minNoticeHours || 24,
+            bookingLinkExpiryDays: (data as any).bookingLinkExpiryDays || 7,
             slots: data.slots || [...DEFAULT_INTERVIEW_AVAILABILITY.slots],
           })
           // Convert timestamps to date strings
@@ -84,6 +86,7 @@ export function InterviewAvailabilityTab({ userId }: InterviewAvailabilityTabPro
             bufferTime: DEFAULT_INTERVIEW_AVAILABILITY.bufferTime,
             maxAdvanceBooking: DEFAULT_INTERVIEW_AVAILABILITY.maxAdvanceBooking,
             minNoticeHours: DEFAULT_INTERVIEW_AVAILABILITY.minNoticeHours,
+            bookingLinkExpiryDays: 7,
             slots: [...DEFAULT_INTERVIEW_AVAILABILITY.slots],
           })
         }
@@ -258,6 +261,20 @@ export function InterviewAvailabilityTab({ userId }: InterviewAvailabilityTabPro
                   max={168}
                 />
                 <span className="form-help">Minimum hours notice required</span>
+              </div>
+              <div className="form-group">
+                <label>Booking Link Expiry (days)</label>
+                <Input
+                  type="number"
+                  value={form.bookingLinkExpiryDays}
+                  onChange={(e) => setForm(prev => ({
+                    ...prev,
+                    bookingLinkExpiryDays: parseInt(e.target.value) || 7
+                  }))}
+                  min={1}
+                  max={30}
+                />
+                <span className="form-help">How long interview booking links remain valid</span>
               </div>
             </div>
           </Card>
