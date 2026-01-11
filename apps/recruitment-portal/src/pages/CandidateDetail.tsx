@@ -277,6 +277,7 @@ export function CandidateDetail() {
   const [messageCopied, setMessageCopied] = useState(false)
   const [generatedBookingLink, setGeneratedBookingLink] = useState<string | null>(null)
   const [generatingBookingLink, setGeneratingBookingLink] = useState(false)
+  const [bookingLinkExpiryDays, setBookingLinkExpiryDays] = useState(7) // Default 7 days
 
   // Email Modal state
   const [showEmailModal, setShowEmailModal] = useState(false)
@@ -838,11 +839,13 @@ export function CandidateDetail() {
   }
 
   // Generate a booking link for the candidate via Cloud Function
-  const generateBookingLinkForCandidate = async (type: 'interview' | 'trial'): Promise<string> => {
+  const generateBookingLinkForCandidate = async (type: 'interview' | 'trial', expiryDays?: number): Promise<string> => {
     if (!candidate || !user) return ''
     
     // If we already generated one, return it
     if (generatedBookingLink) return generatedBookingLink
+    
+    const expiry = expiryDays || bookingLinkExpiryDays
     
     setGeneratingBookingLink(true)
     try {
@@ -868,7 +871,7 @@ export function CandidateDetail() {
         candidateEmail: candidate.email,
         type,
         jobTitle: candidate.jobTitle,
-        expiryDays: 3,
+        expiryDays: expiry,
         maxUses: 1,
       })
       
@@ -879,7 +882,7 @@ export function CandidateDetail() {
         logActivity(
           candidate.id,
           'create',
-          `Generated ${type} booking link (expires ${new Date(result.data.expiresAt).toLocaleDateString()})`
+          `Generated ${type} booking link (expires in ${expiry} days - ${new Date(result.data.expiresAt).toLocaleDateString()})`
         )
         
         return result.data.url
@@ -1092,7 +1095,7 @@ export function CandidateDetail() {
   }
 
   // Generate a booking link for email
-  const generateBookingLinkForEmail = async (type: 'interview' | 'trial'): Promise<string> => {
+  const generateBookingLinkForEmail = async (type: 'interview' | 'trial', expiryDays?: number): Promise<string> => {
     if (!candidate || !user) return ''
     
     // If we already generated one, return it
@@ -1101,6 +1104,8 @@ export function CandidateDetail() {
       setEmailGeneratedBookingLink(generatedBookingLink)
       return generatedBookingLink
     }
+    
+    const expiry = expiryDays || bookingLinkExpiryDays
     
     setGeneratingBookingLink(true)
     try {
@@ -1126,7 +1131,7 @@ export function CandidateDetail() {
         candidateEmail: candidate.email,
         type,
         jobTitle: candidate.jobTitle,
-        expiryDays: 3,
+        expiryDays: expiry,
         maxUses: 1,
       })
       
@@ -1138,7 +1143,7 @@ export function CandidateDetail() {
         logActivity(
           candidate.id,
           'booking_link_created',
-          `Generated ${type} booking link (expires ${new Date(result.data.expiresAt).toLocaleDateString()})`
+          `Generated ${type} booking link (expires in ${expiry} days - ${new Date(result.data.expiresAt).toLocaleDateString()})`
         )
         
         return result.data.url
@@ -3300,6 +3305,24 @@ Example:
               <span className="recipient-name">{candidate?.firstName} {candidate?.lastName}</span>
               <span className="recipient-phone">{candidate?.email}</span>
             </div>
+          </div>
+
+          {/* Booking Link Expiry Setting */}
+          <div className="booking-link-expiry-setting">
+            <label>Booking Link Expires In:</label>
+            <Select
+              value={bookingLinkExpiryDays.toString()}
+              onChange={(e) => setBookingLinkExpiryDays(parseInt(e.target.value))}
+              options={[
+                { value: '1', label: '1 day' },
+                { value: '2', label: '2 days' },
+                { value: '3', label: '3 days' },
+                { value: '5', label: '5 days' },
+                { value: '7', label: '7 days' },
+                { value: '14', label: '14 days' },
+                { value: '30', label: '30 days' },
+              ]}
+            />
           </div>
 
           {/* Quick Actions */}

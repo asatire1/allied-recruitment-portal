@@ -1507,3 +1507,35 @@ button[data-variant="danger"] {
 .copilot-success {
   color: var(--ios-green) !important;
 }
+
+/* ============================================================================
+   BOOKING LINK EXPIRY SETTING
+   ============================================================================ */
+
+.booking-link-expiry-setting {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: var(--ios-radius-md);
+  margin-bottom: 16px;
+}
+
+.booking-link-expiry-setting label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ios-label);
+  white-space: nowrap;
+}
+
+.booking-link-expiry-setting select {
+  flex: 1;
+  max-width: 150px;
+  padding: 8px 12px;
+  border: 1px solid var(--ios-separator);
+  border-radius: var(--ios-radius-sm);
+  font-size: 14px;
+  background: var(--ios-bg-primary);
+}
