@@ -159,7 +159,7 @@ export function initializeFirebase(): {
   auth = getAuth(app)
   db = getFirestore(app)
   storage = getStorage(app)
-  functions = getFunctions(app, 'us-central1') // Default region
+  functions = getFunctions(app, 'europe-west2') // Match Cloud Functions region
 
   // Connect to emulators if in development mode
   if (shouldUseEmulators()) {
