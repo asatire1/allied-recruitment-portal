@@ -432,36 +432,41 @@ export const getBookingTimeSlots = onCall<{ token: string; date: string; type?: 
     
     // Query existing bookings - check BOTH scheduledDate and scheduledAt fields
     // (legacy interviews may use scheduledAt, new ones use scheduledDate)
+    // Note: Using separate queries and filtering status in-memory to avoid composite index requirement
     let allBookingDocs: admin.firestore.DocumentData[] = []
     try {
       console.log(`Querying interviews for date: ${date}`)
       console.log(`Day range: ${dayStart.toISOString()} to ${dayEnd.toISOString()}`)
 
-      // Query for scheduledDate field (new format)
+      // Query for scheduledDate field (new format) - filter status in memory
       const bookingsWithScheduledDate = await db
         .collection('interviews')
         .where('scheduledDate', '>=', admin.firestore.Timestamp.fromDate(dayStart))
         .where('scheduledDate', '<=', admin.firestore.Timestamp.fromDate(dayEnd))
-        .where('status', 'in', ['scheduled', 'confirmed'])
         .get()
 
-      // Query for scheduledAt field (legacy format)
+      // Query for scheduledAt field (legacy format) - filter status in memory
       const bookingsWithScheduledAt = await db
         .collection('interviews')
         .where('scheduledAt', '>=', admin.firestore.Timestamp.fromDate(dayStart))
         .where('scheduledAt', '<=', admin.firestore.Timestamp.fromDate(dayEnd))
-        .where('status', 'in', ['scheduled', 'confirmed'])
         .get()
 
-      // Combine results, avoiding duplicates by ID
+      // Combine results, avoiding duplicates by ID, and filter for active statuses
+      const activeStatuses = ['scheduled', 'confirmed']
       const seenIds = new Set<string>()
+
       bookingsWithScheduledDate.docs.forEach(doc => {
-        seenIds.add(doc.id)
-        allBookingDocs.push({ id: doc.id, ...doc.data() })
+        const data = doc.data()
+        if (activeStatuses.includes(data.status)) {
+          seenIds.add(doc.id)
+          allBookingDocs.push({ id: doc.id, ...data })
+        }
       })
       bookingsWithScheduledAt.docs.forEach(doc => {
-        if (!seenIds.has(doc.id)) {
-          allBookingDocs.push({ id: doc.id, ...doc.data() })
+        const data = doc.data()
+        if (!seenIds.has(doc.id) && activeStatuses.includes(data.status)) {
+          allBookingDocs.push({ id: doc.id, ...data })
         }
       })
 
@@ -702,37 +707,42 @@ export const submitBooking = onCall<{ token: string; date: string; time: string 
 
       // Also check for overlapping bookings (different start times but overlapping duration)
       // Query interviews that could potentially overlap - check BOTH field names
+      // Note: Filtering status in-memory to avoid composite index requirement
       const dayStart = new Date(scheduledDate)
       dayStart.setHours(0, 0, 0, 0)
       const dayEnd = new Date(scheduledDate)
       dayEnd.setHours(23, 59, 59, 999)
 
-      // Query for scheduledDate field (new format)
+      // Query for scheduledDate field (new format) - filter status in memory
       const bookingsWithScheduledDate = await db
         .collection('interviews')
         .where('scheduledDate', '>=', admin.firestore.Timestamp.fromDate(dayStart))
         .where('scheduledDate', '<=', admin.firestore.Timestamp.fromDate(dayEnd))
-        .where('status', 'in', ['scheduled', 'confirmed'])
         .get()
 
-      // Query for scheduledAt field (legacy format)
+      // Query for scheduledAt field (legacy format) - filter status in memory
       const bookingsWithScheduledAt = await db
         .collection('interviews')
         .where('scheduledAt', '>=', admin.firestore.Timestamp.fromDate(dayStart))
         .where('scheduledAt', '<=', admin.firestore.Timestamp.fromDate(dayEnd))
-        .where('status', 'in', ['scheduled', 'confirmed'])
         .get()
 
-      // Combine results
+      // Combine results and filter for active statuses
+      const activeStatuses = ['scheduled', 'confirmed']
       const allBookings: admin.firestore.DocumentData[] = []
       const seenIds = new Set<string>()
+
       bookingsWithScheduledDate.docs.forEach(doc => {
-        seenIds.add(doc.id)
-        allBookings.push({ id: doc.id, ...doc.data() })
+        const data = doc.data()
+        if (activeStatuses.includes(data.status)) {
+          seenIds.add(doc.id)
+          allBookings.push({ id: doc.id, ...data })
+        }
       })
       bookingsWithScheduledAt.docs.forEach(doc => {
-        if (!seenIds.has(doc.id)) {
-          allBookings.push({ id: doc.id, ...doc.data() })
+        const data = doc.data()
+        if (!seenIds.has(doc.id) && activeStatuses.includes(data.status)) {
+          allBookings.push({ id: doc.id, ...data })
         }
       })
 
