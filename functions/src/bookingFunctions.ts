@@ -593,25 +593,29 @@ export const getBookingTimeSlots = onCall<{ token: string; date: string; type?: 
         .where('scheduledAt', '<=', admin.firestore.Timestamp.fromDate(dayEnd))
         .get()
 
-      // Combine results, avoiding duplicates by ID, and filter for active statuses
+      // Combine results, avoiding duplicates by ID, and filter for:
+      // 1. Active statuses only
+      // 2. Same booking type only (trials don't conflict with interviews and vice versa)
       const activeStatuses = ['scheduled', 'confirmed']
       const seenIds = new Set<string>()
 
       bookingsWithScheduledDate.docs.forEach(doc => {
         const data = doc.data()
-        if (activeStatuses.includes(data.status)) {
+        // Only include bookings of the same type
+        if (activeStatuses.includes(data.status) && data.type === bookingType) {
           seenIds.add(doc.id)
           allBookingDocs.push({ id: doc.id, ...data })
         }
       })
       bookingsWithScheduledAt.docs.forEach(doc => {
         const data = doc.data()
-        if (!seenIds.has(doc.id) && activeStatuses.includes(data.status)) {
+        // Only include bookings of the same type
+        if (!seenIds.has(doc.id) && activeStatuses.includes(data.status) && data.type === bookingType) {
           allBookingDocs.push({ id: doc.id, ...data })
         }
       })
 
-      console.log(`Found ${allBookingDocs.length} existing bookings for ${date}`)
+      console.log(`Found ${allBookingDocs.length} existing ${bookingType} bookings for ${date} (filtered by type)`)
       allBookingDocs.forEach(booking => {
         const dateField = booking.scheduledDate || booking.scheduledAt
         console.log(`  - Booking: ${booking.id}, time: ${dateField?.toDate?.()?.toISOString()}, status: ${booking.status}, duration: ${booking.duration}`)
@@ -873,21 +877,25 @@ export const submitBooking = onCall<{ token: string; date: string; time: string 
         .where('scheduledAt', '<=', admin.firestore.Timestamp.fromDate(dayEnd))
         .get()
 
-      // Combine results and filter for active statuses
+      // Combine results and filter for:
+      // 1. Active statuses only
+      // 2. Same booking type only (trials don't conflict with interviews and vice versa)
       const activeStatuses = ['scheduled', 'confirmed']
       const allBookings: admin.firestore.DocumentData[] = []
       const seenIds = new Set<string>()
 
       bookingsWithScheduledDate.docs.forEach(doc => {
         const data = doc.data()
-        if (activeStatuses.includes(data.status)) {
+        // Only check conflicts with same booking type
+        if (activeStatuses.includes(data.status) && data.type === linkData.type) {
           seenIds.add(doc.id)
           allBookings.push({ id: doc.id, ...data })
         }
       })
       bookingsWithScheduledAt.docs.forEach(doc => {
         const data = doc.data()
-        if (!seenIds.has(doc.id) && activeStatuses.includes(data.status)) {
+        // Only check conflicts with same booking type
+        if (!seenIds.has(doc.id) && activeStatuses.includes(data.status) && data.type === linkData.type) {
           allBookings.push({ id: doc.id, ...data })
         }
       })
