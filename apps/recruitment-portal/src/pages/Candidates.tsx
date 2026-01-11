@@ -195,7 +195,20 @@ export function Candidates() {
   // Filters - initialize from URL params
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<CandidateStatus | 'all' | 'all_including_rejected'>('all')
-  const [jobFilter, setJobFilter] = useState<string>('all')
+  const [jobFilter, setJobFilter] = useState<string[]>(() => {
+    // Load saved job filters from localStorage
+    try {
+      const saved = localStorage.getItem('candidatesJobFilter')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed)) return parsed
+      }
+    } catch (e) {
+      console.error('Error loading saved job filter:', e)
+    }
+    return []
+  })
+  const [jobDropdownOpen, setJobDropdownOpen] = useState(false)
   
   // Selected candidate for status change
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null)
@@ -296,6 +309,16 @@ export function Candidates() {
     }
     loadActiveJobs()
   }, [db])
+  
+  // Save job filter to localStorage when it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('candidatesJobFilter', JSON.stringify(jobFilter))
+    } catch (e) {
+      console.error('Error saving job filter:', e)
+    }
+  }, [jobFilter])
+  
   const storage = getFirebaseStorage()
   const functions = getFirebaseFunctions()
 
@@ -483,9 +506,19 @@ export function Candidates() {
         }
       }
 
-      // Job filter
-      if (jobFilter !== 'all') {
-        if (candidate.jobId !== jobFilter) {
+      // Job filter - check multiple fields since candidates can be linked by jobId, assignedJobId, or jobTitle
+      if (jobFilter.length > 0) {
+        const matchesAnyJob = jobFilter.some(filterId => {
+          const matchesJobId = candidate.jobId === filterId
+          const matchesAssignedJobId = candidate.assignedJobId === filterId
+          // Also check if the job title matches (for backwards compatibility)
+          const selectedJob = activeJobs.find(j => j.id === filterId)
+          const matchesJobTitle = selectedJob && candidate.jobTitle === selectedJob.title
+          
+          return matchesJobId || matchesAssignedJobId || matchesJobTitle
+        })
+        
+        if (!matchesAnyJob) {
           return false
         }
       }
@@ -523,7 +556,7 @@ export function Candidates() {
       const dateB = b.createdAt?.toDate?.()?.getTime() || 0
       return dateB - dateA
     })
-  }, [candidates, statusFilter, searchTerm, jobFilter])
+  }, [candidates, statusFilter, searchTerm, jobFilter, activeJobs])
 
   // Count of rejected candidates (for showing in filter)
   const rejectedCount = useMemo(() => {
@@ -2339,21 +2372,60 @@ Allied Recruitment Team`
               options={STATUS_OPTIONS}
             />
           </div>
-          <div className="filter-item">
-            <Select
-              value={jobFilter}
-              onChange={(e) => setJobFilter(e.target.value)}
-              options={[
-                { value: 'all', label: 'All Jobs' },
-                ...activeJobs.map(job => ({
-                  value: job.id,
-                  label: job.title + (job.branchName ? ' - ' + job.branchName : '')
-                }))
-              ]}
-            />
+          <div className="filter-item job-filter-multi">
+            <div className="multi-select-wrapper">
+              <button 
+                className="multi-select-trigger"
+                onClick={() => setJobDropdownOpen(!jobDropdownOpen)}
+              >
+                {jobFilter.length === 0 
+                  ? 'All Jobs' 
+                  : jobFilter.length === 1 
+                    ? activeJobs.find(j => j.id === jobFilter[0])?.title || '1 Job'
+                    : `${jobFilter.length} Jobs Selected`
+                }
+                <span className={`dropdown-arrow ${jobDropdownOpen ? 'open' : ''}`}>▼</span>
+              </button>
+              {jobDropdownOpen && (
+                <>
+                  <div 
+                    className="multi-select-backdrop" 
+                    onClick={() => setJobDropdownOpen(false)}
+                  />
+                  <div className="multi-select-dropdown open">
+                    <div className="multi-select-header">
+                      <button 
+                        className="select-all-btn"
+                        onClick={() => setJobFilter([])}
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                    <div className="multi-select-options">
+                      {activeJobs.map(job => (
+                        <label key={job.id} className="multi-select-option">
+                          <input
+                            type="checkbox"
+                            checked={jobFilter.includes(job.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setJobFilter(prev => [...prev, job.id])
+                              } else {
+                                setJobFilter(prev => prev.filter(id => id !== job.id))
+                              }
+                            }}
+                          />
+                          <span>{job.title}{job.branchName ? ` - ${job.branchName}` : ''}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
-        {(searchTerm || statusFilter !== 'all') && (
+        {(searchTerm || statusFilter !== 'all' || jobFilter.length > 0) && (
           <div className="active-filters">
             <span className="filter-label">Active filters:</span>
             {searchTerm && (
@@ -2368,15 +2440,17 @@ Allied Recruitment Team`
                 <button onClick={() => setStatusFilter('all')}>×</button>
               </span>
             )}
-            {jobFilter !== 'all' && (
+            {jobFilter.length > 0 && (
               <span className="filter-tag">
-                Job: {activeJobs.find(j => j.id === jobFilter)?.title || jobFilter}
-                <button onClick={() => setJobFilter('all')}>×</button>
+                Jobs: {jobFilter.length === 1 
+                  ? activeJobs.find(j => j.id === jobFilter[0])?.title 
+                  : `${jobFilter.length} selected`}
+                <button onClick={() => setJobFilter([])}>×</button>
               </span>
             )}
             <button 
               className="clear-all-filters"
-              onClick={() => { setSearchTerm(''); setStatusFilter('all'); setJobFilter('all'); }}
+              onClick={() => { setSearchTerm(''); setStatusFilter('all'); setJobFilter([]); }}
             >
               Clear all
             </button>

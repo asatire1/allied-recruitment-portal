@@ -198,7 +198,14 @@ export function JobDetail() {
           }
         })
         
-        setCandidates(Array.from(uniqueCandidates.values()))
+        // Sort candidates by createdAt (most recent first)
+        const sortedCandidates = Array.from(uniqueCandidates.values()).sort((a, b) => {
+          const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt) || new Date(0)
+          const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt) || new Date(0)
+          return dateB.getTime() - dateA.getTime()
+        })
+        
+        setCandidates(sortedCandidates)
       } catch (err) {
         console.error('Error fetching job:', err)
         setError('Failed to load job')

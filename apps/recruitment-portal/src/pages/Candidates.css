@@ -956,3 +956,133 @@
   font-weight: 500;
   text-align: center;
 }
+
+/* ============================================================================
+   MULTI-SELECT JOB FILTER
+   ============================================================================ */
+
+.job-filter-multi {
+  position: relative;
+}
+
+.multi-select-wrapper {
+  position: relative;
+}
+
+.multi-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 180px;
+  padding: 10px 14px;
+  border: 1px solid var(--ios-separator);
+  border-radius: var(--ios-radius-md);
+  background: var(--ios-bg-primary);
+  font-size: 14px;
+  color: var(--ios-label);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.multi-select-trigger:hover {
+  border-color: var(--ios-blue);
+}
+
+.multi-select-trigger .dropdown-arrow {
+  font-size: 10px;
+  color: var(--ios-secondary-label);
+  transition: transform 0.2s ease;
+}
+
+.multi-select-dropdown.open + .multi-select-trigger .dropdown-arrow,
+.multi-select-wrapper:focus-within .dropdown-arrow {
+  transform: rotate(180deg);
+}
+
+.multi-select-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 280px;
+  background: var(--ios-bg-primary);
+  border: 1px solid var(--ios-separator);
+  border-radius: var(--ios-radius-md);
+  box-shadow: var(--ios-shadow-lg);
+  z-index: 1000;
+  display: none;
+  max-height: 320px;
+  overflow: hidden;
+}
+
+.multi-select-dropdown.open {
+  display: block;
+}
+
+.multi-select-header {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ios-separator);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.select-all-btn {
+  font-size: 12px;
+  color: var(--ios-blue);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.select-all-btn:hover {
+  text-decoration: underline;
+}
+
+.multi-select-options {
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.multi-select-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.multi-select-option:hover {
+  background: var(--ios-bg-tertiary);
+}
+
+.multi-select-option input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  accent-color: var(--ios-blue);
+  cursor: pointer;
+}
+
+.multi-select-option span {
+  font-size: 14px;
+  color: var(--ios-label);
+  flex: 1;
+}
+
+.multi-select-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 999;
+}
+
+.dropdown-arrow.open {
+  transform: rotate(180deg);
+}
