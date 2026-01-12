@@ -168,9 +168,9 @@ export const fetchMeetingInsights = onCall<FetchMeetingInsightsRequest>(
       const token = await getMsGraphToken()
       const organizerUserId = msOrganizerUserId.value()
 
-      // Fetch AI insights from Copilot
-      const insightsResponse = await fetch(
-        `https://graph.microsoft.com/beta/copilot/users/${organizerUserId}/onlineMeetings/${onlineMeetingId}/aiInsights`,
+      // Step 1: Get list of AI insight IDs for this meeting
+      const insightsListResponse = await fetch(
+        `https://graph.microsoft.com/v1.0/copilot/users/${organizerUserId}/onlineMeetings/${onlineMeetingId}/aiInsights`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -179,22 +179,55 @@ export const fetchMeetingInsights = onCall<FetchMeetingInsightsRequest>(
         }
       )
 
-      if (!insightsResponse.ok) {
-        const status = insightsResponse.status
+      if (!insightsListResponse.ok) {
+        const status = insightsListResponse.status
         if (status === 404) {
           return { success: false, error: 'Meeting insights not yet available. Try again after the meeting ends.' }
         }
         if (status === 403) {
-          const errorBody = await insightsResponse.text()
+          const errorBody = await insightsListResponse.text()
           logger.error('Copilot 403 error details:', errorBody)
           return { success: false, error: `No Copilot summary available. Check Teams for a "Recap" on this meeting. (Details: ${errorBody.substring(0, 200)})` }
         }
-        const error = await insightsResponse.text()
-        logger.error('Failed to fetch meeting insights:', error)
+        const error = await insightsListResponse.text()
+        logger.error('Failed to fetch meeting insights list:', error)
         return { success: false, error: 'Failed to fetch meeting insights' }
       }
 
-      const insightsData = await insightsResponse.json()
+      const insightsList = await insightsListResponse.json()
+      logger.info('Copilot insights list:', JSON.stringify(insightsList, null, 2).substring(0, 2000))
+
+      // Check if there are any insight objects
+      if (!insightsList.value || insightsList.value.length === 0) {
+        return { success: false, error: 'No AI insights available for this meeting yet. The meeting may need transcription enabled, or insights may still be processing (can take up to 4 hours).' }
+      }
+
+      // Step 2: Get the most recent insight's full details (use the first/latest one)
+      const latestInsight = insightsList.value[0]
+      const aiInsightId = latestInsight.id
+      
+      logger.info(`Fetching full insight details for ID: ${aiInsightId}`)
+
+      const insightDetailResponse = await fetch(
+        `https://graph.microsoft.com/v1.0/copilot/users/${organizerUserId}/onlineMeetings/${onlineMeetingId}/aiInsights/${aiInsightId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      )
+
+      if (!insightDetailResponse.ok) {
+        const error = await insightDetailResponse.text()
+        logger.error('Failed to fetch insight details:', error)
+        return { success: false, error: 'Failed to fetch meeting insight details' }
+      }
+
+      const insightsData = await insightDetailResponse.json()
+      
+      // Log the full response structure for debugging
+      logger.info('Copilot insight detail response:', JSON.stringify(insightsData, null, 2).substring(0, 5000))
 
       // Parse the insights into a structured format
       const insights = {
@@ -205,26 +238,91 @@ export const fetchMeetingInsights = onCall<FetchMeetingInsightsRequest>(
         sentiment: null as 'positive' | 'neutral' | 'negative' | null,
       }
 
-      // Process AI notes
-      if (insightsData.value && Array.isArray(insightsData.value)) {
-        for (const note of insightsData.value) {
-          if (note.contentType === 'meetingNotes' && note.content) {
-            insights.summary = note.content.substring(0, 2000) // Limit length
+      // Process meetingNotes array (Microsoft's actual format)
+      if (insightsData.meetingNotes && Array.isArray(insightsData.meetingNotes)) {
+        logger.info(`Processing ${insightsData.meetingNotes.length} meeting notes`)
+        
+        const summaryParts: string[] = []
+        for (const note of insightsData.meetingNotes) {
+          // Add main note
+          if (note.title) {
+            summaryParts.push(`**${note.title}**`)
           }
-          if (note.contentType === 'actionItems' && note.content) {
-            const items = note.content.split('\n').filter((s: string) => s.trim())
-            insights.actionItems = items.map((text: string) => ({ text }))
+          if (note.text) {
+            summaryParts.push(note.text)
+          }
+          
+          // Add subpoints
+          if (note.subpoints && Array.isArray(note.subpoints)) {
+            for (const subpoint of note.subpoints) {
+              if (subpoint.title) {
+                summaryParts.push(`• ${subpoint.title}`)
+              }
+              if (subpoint.text) {
+                summaryParts.push(`  ${subpoint.text}`)
+              }
+            }
+          }
+          summaryParts.push('') // Add spacing between notes
+        }
+        
+        insights.summary = summaryParts.join('\n').substring(0, 4000)
+        logger.info('Built summary from meetingNotes, length:', insights.summary.length)
+      }
+
+      // Process actionItems array
+      if (insightsData.actionItems && Array.isArray(insightsData.actionItems)) {
+        logger.info(`Processing ${insightsData.actionItems.length} action items`)
+        insights.actionItems = insightsData.actionItems.map((item: any) => ({
+          text: item.text || item.title || '',
+          owner: item.ownerDisplayName || item.owner || undefined
+        })).filter((item: any) => item.text)
+      }
+
+      // Process mentions/viewpoint if present
+      if (insightsData.viewpoint?.mentionEvents && Array.isArray(insightsData.viewpoint.mentionEvents)) {
+        insights.mentions = insightsData.viewpoint.mentionEvents.map((m: any) => m.utterance || m.text).filter(Boolean)
+      }
+
+      // Fallback: Try old parsing methods if meetingNotes didn't work
+      if (!insights.summary) {
+        // Try value array format
+        if (insightsData.value && Array.isArray(insightsData.value)) {
+          logger.info(`Fallback: Processing ${insightsData.value.length} items from value array`)
+          for (const note of insightsData.value) {
+            const content = note.content || note.text || note.body?.content || note.summary || ''
+            if (content && !insights.summary) {
+              insights.summary = content.substring(0, 4000)
+            }
+          }
+        }
+        
+        // Try direct string properties
+        if (!insights.summary) {
+          const possibleFields = [insightsData.summary, insightsData.recap, insightsData.content, insightsData.text]
+          for (const field of possibleFields) {
+            if (field && typeof field === 'string') {
+              insights.summary = field.substring(0, 4000)
+              break
+            }
           }
         }
       }
-
-      // If no structured data, try to get from notes array
-      if (!insights.summary && insightsData.notes) {
-        insights.summary = insightsData.notes
-          .map((n: any) => n.text || n.content)
-          .filter(Boolean)
-          .join('\n\n')
-          .substring(0, 2000)
+      
+      // Log final parsed result
+      logger.info('Parsed insights summary length:', insights.summary.length)
+      logger.info('Parsed insights summary preview:', insights.summary.substring(0, 200))
+      logger.info('Parsed action items count:', insights.actionItems.length)
+      
+      // If still no summary, return with debug info
+      if (!insights.summary) {
+        logger.warn('No summary content found in Copilot response')
+        return { 
+          success: false, 
+          error: 'Copilot returned no summary content. The meeting may not have a Recap available yet.',
+          debugKeys: Object.keys(insightsData),
+          debugValueCount: insightsData.value?.length || 0
+        }
       }
 
       // Update interview document with insights (remove undefined values for Firestore)
