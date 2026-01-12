@@ -1862,7 +1862,7 @@ Allied Recruitment Team`
           phone: parsed.phone || '',
           email: parsed.email || '',
           jobId: bulkJobTitle,
-          branchId: bulkLocation,
+          branchId: activeJobs.find(j => j.id === bulkJobTitle)?.branchId || '',
         },
         existingCandidatesData
       )
@@ -1898,6 +1898,7 @@ Allied Recruitment Team`
       ))
 
       // Create candidate
+      const selectedJob = activeJobs.find(j => j.id === bulkJobTitle)
       const candidateData: any = {
         firstName: parsed.firstName || 'Unknown',
         lastName: parsed.lastName || 'Candidate',
@@ -1907,8 +1908,11 @@ Allied Recruitment Team`
         address: parsed.address || '',
         postcode: parsed.postcode || '',
         source: bulkSource,
-        jobTitle: bulkJobTitle,
-        location: bulkLocation,
+        jobId: bulkJobTitle,
+        jobTitle: selectedJob?.title || '',
+        branchId: selectedJob?.branchId || '',
+        branchName: selectedJob?.branchName || '',
+        location: selectedJob?.branchName || '',
         status: 'new' as CandidateStatus,
         cvUrl: downloadUrl,
         cvFileName: file.name,
@@ -3262,36 +3266,19 @@ Allied Recruitment Team`
               <div className="bulk-config">
                 <div className="form-row">
                   <div className="form-group">
-                    <label htmlFor="bulk-job">Job Title / Role *</label>
+                    <label htmlFor="bulk-job">Job *</label>
                     <Select
                       id="bulk-job"
                       value={bulkJobTitle}
                       onChange={(e) => setBulkJobTitle(e.target.value)}
                       options={[
-                        { value: '', label: 'Select job title...' },
-                        ...jobTitles.map(jt => ({ value: jt.title, label: jt.title }))
+                        { value: '', label: 'Select job...' },
+                        ...activeJobs.map(job => ({ value: job.id, label: `${job.title} - ${job.branchName}` }))
                       ]}
                     />
-                    {jobTitles.length === 0 && !loadingJobTitles && (
+                    {activeJobs.length === 0 && (
                       <p className="field-hint">
-                        No job titles configured. <a href="/settings" target="_blank">Add job titles in Settings</a>
-                      </p>
-                    )}
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="bulk-location">Branch *</label>
-                    <Select
-                      id="bulk-location"
-                      value={bulkLocation}
-                      onChange={(e) => setBulkLocation(e.target.value)}
-                      options={[
-                        { value: '', label: 'Select branch...' },
-                        ...locations.map(loc => ({ value: loc.name, label: loc.name }))
-                      ]}
-                    />
-                    {locations.length === 0 && !loadingLocations && (
-                      <p className="field-hint">
-                        No branches configured. <a href="/branches" target="_blank">Add branches first</a>
+                        No active jobs found. <a href="/jobs" target="_blank">Create a job first</a>
                       </p>
                     )}
                   </div>
@@ -3368,14 +3355,14 @@ Allied Recruitment Team`
                 <Button 
                   variant="primary" 
                   onClick={processBulkUpload}
-                  disabled={bulkFiles.length === 0 || !bulkJobTitle || !bulkLocation}
+                  disabled={bulkFiles.length === 0 || !bulkJobTitle}
                 >
                   🤖 Process {bulkFiles.length} CV{bulkFiles.length !== 1 ? 's' : ''}
                 </Button>
               </div>
-              {(bulkFiles.length > 0 && (!bulkJobTitle || !bulkLocation)) && (
+              {(bulkFiles.length > 0 && !bulkJobTitle) && (
                 <p className="bulk-validation-warning">
-                  ⚠️ Please select a job title and branch before processing CVs
+                  ⚠️ Please select a job title before processing CVs
                 </p>
               )}
             </>

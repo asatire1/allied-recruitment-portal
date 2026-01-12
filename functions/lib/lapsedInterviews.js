@@ -75,7 +75,7 @@ async function processPassedInterviews() {
         const interviewsSnapshot = await db
             .collection('interviews')
             .where('status', 'in', ['scheduled', 'confirmed'])
-            .where('scheduledAt', '<', admin.firestore.Timestamp.fromDate(now))
+            .where('scheduledDate', '<', admin.firestore.Timestamp.fromDate(now))
             .get();
         if (interviewsSnapshot.empty) {
             logger.info('No past interviews to process');
@@ -85,8 +85,8 @@ async function processPassedInterviews() {
         const candidatesToUpdate = new Map(); // candidateId -> newStatus
         for (const doc of interviewsSnapshot.docs) {
             const interview = doc.data();
-            const scheduledAt = interview.scheduledAt?.toDate?.() || new Date(0);
-            const hoursSinceInterview = (now.getTime() - scheduledAt.getTime()) / (1000 * 60 * 60);
+            const scheduledDate = interview.scheduledDate?.toDate?.() || new Date(0);
+            const hoursSinceInterview = (now.getTime() - scheduledDate.getTime()) / (1000 * 60 * 60);
             // Check if candidate status should prevent processing
             if (interview.candidateId) {
                 const candidateDoc = await db.collection('candidates').doc(interview.candidateId).get();
@@ -104,10 +104,10 @@ async function processPassedInterviews() {
                     }
                 }
             }
-            // If interview was less than 2 hours ago, mark as completed and update candidate
+            // If interview was less than 48 hours ago, mark as pending_feedback
             if (hoursSinceInterview < 48) {
                 batch.update(doc.ref, {
-                    status: 'completed',
+                    status: 'pending_feedback',
                     completedAt: admin.firestore.FieldValue.serverTimestamp(),
                     autoCompleted: true,
                 });
@@ -227,8 +227,8 @@ exports.resolveLapsedInterview = (0, https_1.onCall)({ region: 'us-central1' }, 
                     throw new https_1.HttpsError('invalid-argument', 'New date required for rescheduling');
                 }
                 newStatus = 'scheduled';
-                updateData.scheduledAt = admin.firestore.Timestamp.fromDate(new Date(newDate));
-                updateData.rescheduledFrom = interview?.scheduledAt;
+                updateData.scheduledDate = admin.firestore.Timestamp.fromDate(new Date(newDate));
+                updateData.rescheduledFrom = interview?.scheduledDate;
                 break;
             case 'completed':
                 newStatus = 'completed';

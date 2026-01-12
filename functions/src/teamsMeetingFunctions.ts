@@ -166,7 +166,9 @@ export const fetchMeetingInsights = onCall<FetchMeetingInsightsRequest>(
           return { success: false, error: 'Meeting insights not yet available. Try again after the meeting ends.' }
         }
         if (status === 403) {
-          return { success: false, error: 'Access denied. Ensure Copilot license is active and permissions are granted.' }
+          const errorBody = await insightsResponse.text()
+          logger.error('Copilot 403 error details:', errorBody)
+          return { success: false, error: `No Copilot summary available. Check Teams for a "Recap" on this meeting. (Details: ${errorBody.substring(0, 200)})` }
         }
         const error = await insightsResponse.text()
         logger.error('Failed to fetch meeting insights:', error)

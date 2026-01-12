@@ -1553,7 +1553,7 @@ Allied Recruitment Team`)
     }
   }, [candidate?.meetingSummary])
 
-  // Load latest interview for this candidate (to get onlineMeetingId)
+  // Load latest interview for this candidate (to get teamsMeetingId)
   useEffect(() => {
     const loadLatestInterview = async () => {
       if (!candidate?.id) return
@@ -1561,26 +1561,31 @@ Allied Recruitment Team`)
       try {
         const interviewsQuery = query(
           collection(db, 'interviews'),
-          where('candidateId', '==', candidate.id),
-          orderBy('scheduledAt', 'desc'),
-          limit(1)
+          where('candidateId', '==', candidate.id)
         )
         const snapshot = await getDocs(interviewsQuery)
         if (!snapshot.empty) {
-          const interviewData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() }
-          setLatestInterview(interviewData)
+          // Sort in memory by scheduledDate descending, get most recent
+          const interviews = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
+          interviews.sort((a: any, b: any) => {
+            const dateA = a.scheduledDate?.toDate?.() || new Date(0)
+            const dateB = b.scheduledDate?.toDate?.() || new Date(0)
+            return dateB.getTime() - dateA.getTime()
+          })
+          setLatestInterview(interviews[0])
           
           // Auto-fetch Copilot summary if:
           // 1. Interview has a Teams meeting ID
-          // 2. Interview has ended (scheduledAt is in the past)
+          // 2. Interview has ended (scheduledDate is in the past)
           // 3. No meeting summary exists yet OR it wasn't from Copilot
-          const scheduledAt = interviewData.scheduledAt?.toDate?.() || new Date(interviewData.scheduledAt)
-          const hasEnded = scheduledAt < new Date()
+          const latestInterviewData = interviews[0] as any
+          const scheduledDate = latestInterviewData.scheduledDate?.toDate?.() || new Date(0)
+          const hasEnded = scheduledDate < new Date()
           const hasCopilotSummary = candidate.meetingSummary?.source === 'copilot_auto'
           
-          if (interviewData.onlineMeetingId && hasEnded && !hasCopilotSummary) {
+          if (latestInterviewData.teamsMeetingId && hasEnded && !hasCopilotSummary) {
             // Auto-fetch in background (don't block UI)
-            autoFetchCopilotSummary(interviewData)
+            autoFetchCopilotSummary(latestInterviewData)
           }
         }
       } catch (error) {
@@ -1593,7 +1598,7 @@ Allied Recruitment Team`)
 
   // Auto-fetch Copilot summary (silent, no alerts)
   const autoFetchCopilotSummary = async (interview: any) => {
-    if (!interview?.onlineMeetingId || !candidate) return
+    if (!interview?.teamsMeetingId || !candidate) return
 
     setFetchingCopilotSummary(true)
     try {
@@ -1613,7 +1618,7 @@ Allied Recruitment Team`)
 
       const result = await fetchInsightsFn({
         interviewId: interview.id,
-        onlineMeetingId: interview.onlineMeetingId,
+        onlineMeetingId: interview.teamsMeetingId,
       })
 
       if (result.data.success && result.data.insights) {
@@ -1677,7 +1682,7 @@ Allied Recruitment Team`)
 
   // Fetch Copilot meeting summary from Microsoft Graph (manual button)
   const handleFetchCopilotSummary = async () => {
-    if (!latestInterview?.onlineMeetingId) {
+    if (!latestInterview?.teamsMeetingId) {
       alert('No Teams meeting found for this candidate. The interview must have a Teams meeting link to fetch Copilot insights.')
       return
     }
@@ -1700,7 +1705,7 @@ Allied Recruitment Team`)
 
       const result = await fetchInsightsFn({
         interviewId: latestInterview.id,
-        onlineMeetingId: latestInterview.onlineMeetingId,
+        onlineMeetingId: latestInterview.teamsMeetingId,
       })
 
       if (result.data.success && result.data.insights) {
@@ -2454,7 +2459,7 @@ Allied Recruitment Team`)
                         <Button
                           variant="outline"
                           onClick={handleFetchCopilotSummary}
-                          disabled={fetchingCopilotSummary || !latestInterview?.onlineMeetingId}
+                          disabled={fetchingCopilotSummary || !latestInterview?.teamsMeetingId}
                           className="fetch-copilot-btn"
                         >
                           {fetchingCopilotSummary ? (
@@ -2471,10 +2476,10 @@ Allied Recruitment Team`)
                             </>
                           )}
                         </Button>
-                        {!latestInterview?.onlineMeetingId && (
+                        {!latestInterview?.teamsMeetingId && (
                           <span className="copilot-hint">No Teams meeting found for this candidate</span>
                         )}
-                        {latestInterview?.onlineMeetingId && !candidate.meetingSummary?.source && (
+                        {latestInterview?.teamsMeetingId && !candidate.meetingSummary?.source && (
                           <span className="copilot-hint">✓ Teams meeting available - will auto-fetch after meeting ends</span>
                         )}
                         {candidate.meetingSummary?.source === 'copilot_auto' && (
