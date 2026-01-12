@@ -575,11 +575,17 @@ export interface Branch {
   
   // Entity & Region
   entity: EntityType
+  region?: string
   regionId?: string
   regionName?: string
   
+  // Interview Settings
+  acceptingInterviews?: boolean
+  maxInterviewsPerDay?: number
+  
   // Trial Settings
   acceptingTrials: boolean
+  maxTrialsPerDay?: number
   
   // Status
   active: boolean

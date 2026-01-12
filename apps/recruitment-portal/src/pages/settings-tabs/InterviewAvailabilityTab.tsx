@@ -1,6 +1,7 @@
 // ============================================================================
 // Interview Availability Tab - Extracted from Settings.tsx
 // Configure when candidates can book interviews (30-minute slots)
+// Interviews are managed centrally, not per-branch
 // ============================================================================
 
 import { useEffect, useState } from 'react'
@@ -37,7 +38,6 @@ export function InterviewAvailabilityTab({ userId }: InterviewAvailabilityTabPro
   const db = getFirebaseDb()
 
   // State
-  const [interviewAvailability, setInterviewAvailability] = useState<InterviewAvailabilitySettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
@@ -64,7 +64,6 @@ export function InterviewAvailabilityTab({ userId }: InterviewAvailabilityTabPro
         
         if (docSnap.exists()) {
           const data = docSnap.data() as InterviewAvailabilitySettings
-          setInterviewAvailability({ ...data, id: docSnap.id })
           setForm({
             slotDuration: data.slotDuration || 30,
             bufferTime: data.bufferTime || 15,
@@ -123,14 +122,6 @@ export function InterviewAvailabilityTab({ userId }: InterviewAvailabilityTabPro
         updatedBy: userId || 'system',
       })
       
-      setInterviewAvailability({
-        id: 'interviewAvailability',
-        ...form,
-        blockedDates: blockedDatesTimestamps as any,
-        updatedAt: new Date() as any,
-        updatedBy: userId || 'system',
-      })
-      
       alert('Interview availability settings saved successfully!')
     } catch (err) {
       console.error('Error saving interview availability:', err)
@@ -185,7 +176,7 @@ export function InterviewAvailabilityTab({ userId }: InterviewAvailabilityTabPro
       <div className="settings-section-header">
         <div>
           <h2>Interview Availability</h2>
-          <p>Configure when candidates can book interviews (typically 30-minute slots)</p>
+          <p>Configure when candidates can book interviews (managed centrally)</p>
         </div>
         <Button
           variant="primary"

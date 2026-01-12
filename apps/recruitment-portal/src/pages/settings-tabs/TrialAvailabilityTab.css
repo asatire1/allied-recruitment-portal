@@ -1,0 +1,317 @@
+/* ============================================================================
+   Trial Availability Tab Styles
+   ============================================================================ */
+
+.trial-availability-tab {
+  padding-bottom: 80px; /* Space for save bar if needed */
+}
+
+/* Settings Grid */
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+}
+
+@media (max-width: 1024px) {
+  .settings-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Card Styles */
+.settings-card {
+  margin-bottom: 24px;
+}
+
+.settings-card .card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.settings-card .card-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.settings-card .card-subtitle {
+  font-size: 13px;
+  color: #888;
+}
+
+/* Form Groups */
+.settings-card .form-group {
+  margin-bottom: 0;
+}
+
+.settings-card .form-group label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.settings-card .form-help {
+  display: block;
+  font-size: 12px;
+  color: #888;
+  margin-top: 4px;
+}
+
+/* Schedule Table */
+.schedule-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.schedule-table th {
+  text-align: left;
+  padding: 12px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.schedule-table td {
+  padding: 12px 8px;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 14px;
+  vertical-align: middle;
+}
+
+.schedule-table tr:hover {
+  background: #fafafa;
+}
+
+.schedule-table tr.disabled-row {
+  opacity: 0.6;
+}
+
+.time-input {
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  width: 120px;
+}
+
+.time-input:disabled {
+  background: #f5f5f5;
+  color: #999;
+}
+
+/* Toggle Switch */
+.toggle {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  background: #ddd;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.toggle.on {
+  background: #0d5c4b;
+}
+
+.toggle::after {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background: white;
+  border-radius: 50%;
+  top: 2px;
+  left: 2px;
+  transition: left 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.toggle.on::after {
+  left: 22px;
+}
+
+/* Badges */
+.badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.badge-green {
+  background: #e6f4ea;
+  color: #1e7e34;
+}
+
+.badge-red {
+  background: #fdecea;
+  color: #c62828;
+}
+
+.badge-gray {
+  background: #f0f0f0;
+  color: #666;
+}
+
+/* Entity Filter */
+.entity-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.entity-btn {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  cursor: pointer;
+  border: 1px solid #ddd;
+  background: white;
+  transition: all 0.2s;
+}
+
+.entity-btn:hover {
+  border-color: #0d5c4b;
+}
+
+.entity-btn.active {
+  background: #0d5c4b;
+  color: white;
+  border-color: #0d5c4b;
+}
+
+/* Table Header */
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.search-box {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  width: 250px;
+  font-size: 14px;
+}
+
+.search-box:focus {
+  outline: none;
+  border-color: #0d5c4b;
+}
+
+/* Bulk Actions */
+.bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.selected-count {
+  background: #e3f2fd;
+  color: #1976d2;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.bulk-capacity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #666;
+}
+
+.capacity-input {
+  width: 60px;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.capacity-input:disabled {
+  background: #f5f5f5;
+  color: #999;
+}
+
+/* Branch Table */
+.branch-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.branch-table th {
+  text-align: left;
+  padding: 12px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.branch-table td {
+  padding: 12px 8px;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 14px;
+  vertical-align: middle;
+}
+
+.branch-table tr:hover {
+  background: #fafafa;
+}
+
+.branch-table tr.has-changes {
+  background: #fffde7;
+}
+
+.branch-table tr.has-changes:hover {
+  background: #fff9c4;
+}
+
+.checkbox-cell {
+  width: 40px;
+}
+
+.branch-location {
+  color: #888;
+  font-size: 12px;
+}
+
+/* Table Footer */
+.table-footer {
+  color: #888;
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+.unsaved-indicator {
+  color: #f57c00;
+  font-weight: 500;
+}

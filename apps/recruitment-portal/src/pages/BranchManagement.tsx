@@ -41,6 +41,7 @@ interface BranchFormData {
   managerId: string
   managerName: string
   acceptingTrials: boolean
+  maxTrialsPerDay: number
   active: boolean
 }
 
@@ -70,6 +71,7 @@ const EMPTY_FORM: BranchFormData = {
   managerId: '',
   managerName: '',
   acceptingTrials: true,
+  maxTrialsPerDay: 2,
   active: true,
 }
 
@@ -354,6 +356,7 @@ export function BranchManagement() {
           managerId: '',
           managerName: '',
           acceptingTrials: true,
+          maxTrialsPerDay: 2,
           active: true,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
@@ -395,6 +398,7 @@ export function BranchManagement() {
       managerId: branch.managerId || '',
       managerName: branch.managerName || '',
       acceptingTrials: branch.acceptingTrials,
+      maxTrialsPerDay: (branch as any).maxTrialsPerDay || 2,
       active: branch.active,
     })
     setShowEditModal(true)
@@ -877,17 +881,6 @@ function BranchForm({
               <option key={m.id} value={m.id}>{m.displayName} ({m.email})</option>
             ))}
           </select>
-        </div>
-        
-        <div className="form-group checkbox-group">
-          <label>
-            <input
-              type="checkbox"
-              checked={formData.acceptingTrials}
-              onChange={(e) => handleChange('acceptingTrials', e.target.checked)}
-            />
-            Accepting trial shifts
-          </label>
         </div>
         
         <div className="form-group checkbox-group">
