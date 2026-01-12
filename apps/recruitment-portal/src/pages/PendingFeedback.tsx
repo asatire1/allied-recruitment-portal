@@ -5,10 +5,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { collection, query, where, orderBy, getDocs, Timestamp } from 'firebase/firestore'
+import { collection, query, where, orderBy, getDocs } from 'firebase/firestore'
 import { getFirebaseDb } from '@allied/shared-lib'
 import type { Interview } from '@allied/shared-lib'
-import type { InterviewFeedback } from '@allied/shared-lib'
 import { INTERVIEW_TYPE_LABELS } from '@allied/shared-lib'
 import { Card, Button, Spinner } from '@allied/shared-ui'
 import { useAuth } from '../contexts/AuthContext'
@@ -16,7 +15,6 @@ import './PendingFeedback.css'
 
 interface PendingItem {
   interview: Interview
-  feedback?: InterviewFeedback
   daysOverdue: number
 }
 
@@ -32,45 +30,24 @@ export default function PendingFeedback() {
       setLoading(true)
       const db = getFirebaseDb()
       
-      const thirtyDaysAgo = new Date()
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-      
-      const now = new Date()
-      
-      // Query interviews that are completed OR past their scheduled date
-      // This catches both auto-completed and manually completed interviews
+      // Get all scheduled and completed interviews, filter in memory
       const interviewsQuery = query(
         collection(db, 'interviews'),
-        where('status', 'in', ['completed', 'scheduled', 'confirmed']),
-        where('scheduledDate', '>=', Timestamp.fromDate(thirtyDaysAgo)),
-        orderBy('scheduledDate', 'desc')
+        where('status', 'in', ['scheduled', 'completed', 'pending_feedback'])
       )
       
       const interviewsSnap = await getDocs(interviewsQuery)
       const allInterviews = interviewsSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Interview[]
       
-      // Filter to only past interviews (scheduled time has passed)
-      const pastInterviews = allInterviews.filter(interview => {
-        const scheduledDate = (interview as any).scheduledDate?.toDate?.() || new Date(0)
-        return scheduledDate < now
-      })
-      
-      const feedbackQuery = query(collection(db, 'interviewFeedback'), where('status', 'in', ['pending', 'draft']))
-      const feedbackSnap = await getDocs(feedbackQuery)
-      const feedbackMap = new Map<string, InterviewFeedback>()
-      feedbackSnap.docs.forEach(d => {
-        const data = { id: d.id, ...d.data() } as InterviewFeedback
-        feedbackMap.set(data.interviewId, data)
-      })
-      
+      const now = new Date()
       const items: PendingItem[] = []
       
-      for (const interview of pastInterviews) {
-        const feedback = feedbackMap.get(interview.id)
-        if (!interview.feedback?.submittedAt) {
-          const interviewDate = (interview as any).scheduledDate?.toDate?.() || new Date()
-          const daysOverdue = Math.floor((now.getTime() - interviewDate.getTime()) / (1000 * 60 * 60 * 24)) - 2
-          items.push({ interview, feedback, daysOverdue: Math.max(0, daysOverdue) })
+      for (const interview of allInterviews) {
+        const scheduledDate = (interview as any).scheduledDate?.toDate?.() || new Date(0)
+        // Only include if interview date has passed and no feedback submitted
+        if (scheduledDate < now && !interview.feedback?.submittedAt) {
+          const daysOverdue = Math.floor((now.getTime() - scheduledDate.getTime()) / (1000 * 60 * 60 * 24)) - 2
+          items.push({ interview, daysOverdue: Math.max(0, daysOverdue) })
         }
       }
       
@@ -98,7 +75,7 @@ export default function PendingFeedback() {
   }
 
   const handleAddFeedback = (interview: Interview) => {
-    navigate(`/feedback/new?interviewId=${interview.id}&candidateId=${interview.candidateId}`)
+    navigate(`/candidates/${interview.candidateId}`)
   }
 
   if (loading) {
@@ -157,8 +134,7 @@ export default function PendingFeedback() {
                 </div>
                 <div className="pending-item-right">
                   {item.daysOverdue > 0 && <span className="overdue-badge">{item.daysOverdue} day{item.daysOverdue !== 1 ? 's' : ''} overdue</span>}
-                  {item.feedback?.status === 'draft' && <span className="draft-badge">Draft saved</span>}
-                  <Button variant="primary" size="sm" onClick={() => handleAddFeedback(item.interview)}>{item.feedback ? 'Continue' : 'Add Feedback'}</Button>
+                  <Button variant="primary" size="sm" onClick={() => handleAddFeedback(item.interview)}>Add Feedback</Button>
                 </div>
               </Card>
             )

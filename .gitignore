@@ -49,3 +49,4 @@ extensions/firestore-send-email.env
 *.env
 .github/
 allied-source-code.zip
+service-account.json
