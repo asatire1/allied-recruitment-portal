@@ -42,8 +42,8 @@ export default function PendingFeedback() {
       const interviewsQuery = query(
         collection(db, 'interviews'),
         where('status', 'in', ['completed', 'scheduled', 'confirmed']),
-        where('scheduledAt', '>=', Timestamp.fromDate(thirtyDaysAgo)),
-        orderBy('scheduledAt', 'desc')
+        where('scheduledDate', '>=', Timestamp.fromDate(thirtyDaysAgo)),
+        orderBy('scheduledDate', 'desc')
       )
       
       const interviewsSnap = await getDocs(interviewsQuery)
@@ -51,7 +51,7 @@ export default function PendingFeedback() {
       
       // Filter to only past interviews (scheduled time has passed)
       const pastInterviews = allInterviews.filter(interview => {
-        const scheduledDate = interview.scheduledAt?.toDate?.() || new Date(0)
+        const scheduledDate = (interview as any).scheduledDate?.toDate?.() || new Date(0)
         return scheduledDate < now
       })
       
@@ -68,7 +68,7 @@ export default function PendingFeedback() {
       for (const interview of pastInterviews) {
         const feedback = feedbackMap.get(interview.id)
         if (!interview.feedback?.submittedAt) {
-          const interviewDate = interview.scheduledAt?.toDate?.() || new Date()
+          const interviewDate = (interview as any).scheduledDate?.toDate?.() || new Date()
           const daysOverdue = Math.floor((now.getTime() - interviewDate.getTime()) / (1000 * 60 * 60 * 24)) - 2
           items.push({ interview, feedback, daysOverdue: Math.max(0, daysOverdue) })
         }
@@ -142,7 +142,7 @@ export default function PendingFeedback() {
       ) : (
         <div className="pending-list">
           {filteredItems.map(item => {
-            const interviewDate = item.interview.scheduledAt?.toDate?.() || new Date()
+            const interviewDate = (item.interview as any).scheduledDate?.toDate?.() || new Date()
             return (
               <Card key={item.interview.id} className="pending-item">
                 <div className="pending-item-left">
