@@ -43,7 +43,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onCandidateWithdrawnOrRejected = exports.onCandidateStatusChange = exports.resolveLapsedInterview = exports.markLapsedInterviews = exports.processInterviewsMidnight = exports.processInterviews6pm = exports.processInterviews12pm = exports.processInterviews6am = void 0;
+exports.processInterviewsNow = exports.onCandidateWithdrawnOrRejected = exports.onCandidateStatusChange = exports.resolveLapsedInterview = exports.markLapsedInterviews = exports.processInterviewsMidnight = exports.processInterviews6pm = exports.processInterviews12pm = exports.processInterviews6am = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const firestore_1 = require("firebase-functions/v2/firestore");
@@ -75,7 +75,7 @@ async function processPassedInterviews() {
         const interviewsSnapshot = await db
             .collection('interviews')
             .where('status', 'in', ['scheduled', 'confirmed'])
-            .where('scheduledDate', '<', admin.firestore.Timestamp.fromDate(now))
+            .where('scheduledAt', '<', admin.firestore.Timestamp.fromDate(now))
             .get();
         if (interviewsSnapshot.empty) {
             logger.info('No past interviews to process');
@@ -85,8 +85,8 @@ async function processPassedInterviews() {
         const candidatesToUpdate = new Map(); // candidateId -> newStatus
         for (const doc of interviewsSnapshot.docs) {
             const interview = doc.data();
-            const scheduledDate = interview.scheduledDate?.toDate?.() || new Date(0);
-            const hoursSinceInterview = (now.getTime() - scheduledDate.getTime()) / (1000 * 60 * 60);
+            const scheduledAt = interview.scheduledAt?.toDate?.() || new Date(0);
+            const hoursSinceInterview = (now.getTime() - scheduledAt.getTime()) / (1000 * 60 * 60);
             // Check if candidate status should prevent processing
             if (interview.candidateId) {
                 const candidateDoc = await db.collection('candidates').doc(interview.candidateId).get();
@@ -227,8 +227,8 @@ exports.resolveLapsedInterview = (0, https_1.onCall)({ region: 'us-central1' }, 
                     throw new https_1.HttpsError('invalid-argument', 'New date required for rescheduling');
                 }
                 newStatus = 'scheduled';
-                updateData.scheduledDate = admin.firestore.Timestamp.fromDate(new Date(newDate));
-                updateData.rescheduledFrom = interview?.scheduledDate;
+                updateData.scheduledAt = admin.firestore.Timestamp.fromDate(new Date(newDate));
+                updateData.rescheduledFrom = interview?.scheduledAt;
                 break;
             case 'completed':
                 newStatus = 'completed';
@@ -351,6 +351,34 @@ exports.onCandidateWithdrawnOrRejected = (0, firestore_1.onDocumentUpdated)({
     }
     catch (error) {
         logger.error(`Error cancelling interviews for ${candidateId}:`, error);
+    }
+});
+// ============================================================================
+// Manual Trigger - For immediate processing without waiting for schedule
+// ============================================================================
+exports.processInterviewsNow = (0, https_1.onCall)({
+    region: 'europe-west2',
+    timeoutSeconds: 120,
+}, async (request) => {
+    // Require authentication
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    logger.info('Manual trigger: Processing past interviews');
+    try {
+        const result = await processPassedInterviews();
+        logger.info(`Manual run complete: Completed ${result.completed}, Lapsed ${result.lapsed}, Candidates updated ${result.candidatesUpdated}`);
+        return {
+            success: true,
+            completed: result.completed,
+            lapsed: result.lapsed,
+            candidatesUpdated: result.candidatesUpdated,
+            message: `Processed interviews: ${result.completed} completed, ${result.lapsed} lapsed, ${result.candidatesUpdated} candidates updated`
+        };
+    }
+    catch (error) {
+        logger.error('Manual trigger failed:', error);
+        throw new https_1.HttpsError('internal', error.message || 'Failed to process interviews');
     }
 });
 //# sourceMappingURL=lapsedInterviews.js.map

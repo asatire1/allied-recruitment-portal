@@ -46,7 +46,7 @@ async function processPassedInterviews(): Promise<{ completed: number; lapsed: n
     const interviewsSnapshot = await db
       .collection('interviews')
       .where('status', 'in', ['scheduled', 'confirmed'])
-      .where('scheduledDate', '<', admin.firestore.Timestamp.fromDate(now))
+      .where('scheduledAt', '<', admin.firestore.Timestamp.fromDate(now))
       .get()
 
     if (interviewsSnapshot.empty) {
@@ -59,8 +59,8 @@ async function processPassedInterviews(): Promise<{ completed: number; lapsed: n
 
     for (const doc of interviewsSnapshot.docs) {
       const interview = doc.data()
-      const scheduledDate = interview.scheduledDate?.toDate?.() || new Date(0)
-      const hoursSinceInterview = (now.getTime() - scheduledDate.getTime()) / (1000 * 60 * 60)
+      const scheduledAt = interview.scheduledAt?.toDate?.() || new Date(0)
+      const hoursSinceInterview = (now.getTime() - scheduledAt.getTime()) / (1000 * 60 * 60)
       
       // Check if candidate status should prevent processing
       if (interview.candidateId) {
@@ -244,8 +244,8 @@ export const resolveLapsedInterview = onCall<ResolveLapsedRequest>(
             throw new HttpsError('invalid-argument', 'New date required for rescheduling')
           }
           newStatus = 'scheduled'
-          updateData.scheduledDate = admin.firestore.Timestamp.fromDate(new Date(newDate))
-          updateData.rescheduledFrom = interview?.scheduledDate
+          updateData.scheduledAt = admin.firestore.Timestamp.fromDate(new Date(newDate))
+          updateData.rescheduledFrom = interview?.scheduledAt
           break
         case 'completed':
           newStatus = 'completed'
@@ -394,6 +394,41 @@ export const onCandidateWithdrawnOrRejected = onDocumentUpdated(
       logger.info(`Cancelled ${count} scheduled interviews for ${newStatus} candidate ${candidateId}`)
     } catch (error) {
       logger.error(`Error cancelling interviews for ${candidateId}:`, error)
+    }
+  }
+)
+
+// ============================================================================
+// Manual Trigger - For immediate processing without waiting for schedule
+// ============================================================================
+
+export const processInterviewsNow = onCall(
+  { 
+    region: 'europe-west2',
+    timeoutSeconds: 120,
+  },
+  async (request) => {
+    // Require authentication
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'User must be authenticated')
+    }
+
+    logger.info('Manual trigger: Processing past interviews')
+    
+    try {
+      const result = await processPassedInterviews()
+      logger.info(`Manual run complete: Completed ${result.completed}, Lapsed ${result.lapsed}, Candidates updated ${result.candidatesUpdated}`)
+      
+      return {
+        success: true,
+        completed: result.completed,
+        lapsed: result.lapsed,
+        candidatesUpdated: result.candidatesUpdated,
+        message: `Processed interviews: ${result.completed} completed, ${result.lapsed} lapsed, ${result.candidatesUpdated} candidates updated`
+      }
+    } catch (error: any) {
+      logger.error('Manual trigger failed:', error)
+      throw new HttpsError('internal', error.message || 'Failed to process interviews')
     }
   }
 )

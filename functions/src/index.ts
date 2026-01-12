@@ -1082,7 +1082,7 @@ export { createTeamsMeeting, checkMeetingStatus, fetchMeetingInsights } from './
 export { onCandidateDeleted, permanentlyDeleteCandidate, archiveCandidate, restoreCandidate, reactivateCandidate, checkReturningCandidate } from './cascadeDeletion'
 
 // Lapsed interviews and status change triggers
-export { markLapsedInterviews, resolveLapsedInterview, onCandidateStatusChange, onCandidateWithdrawnOrRejected } from './lapsedInterviews'
+export { markLapsedInterviews, resolveLapsedInterview, onCandidateStatusChange, onCandidateWithdrawnOrRejected, processInterviewsNow } from './lapsedInterviews'
 
 // Job import
 export { parseIndeedJob } from './jobImport'

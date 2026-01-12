@@ -40,7 +40,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.parseIndeedJob = exports.onCandidateWithdrawnOrRejected = exports.onCandidateStatusChange = exports.resolveLapsedInterview = exports.markLapsedInterviews = exports.checkReturningCandidate = exports.reactivateCandidate = exports.restoreCandidate = exports.archiveCandidate = exports.permanentlyDeleteCandidate = exports.onCandidateDeleted = exports.fetchMeetingInsights = exports.checkMeetingStatus = exports.createTeamsMeeting = exports.trackClick = exports.trackOpen = exports.sendBulkCandidateEmails = exports.sendCandidateEmail = exports.submitBooking = exports.getBookingTimeSlots = exports.getBookingAvailability = exports.sendEmail = exports.markBookingLinkUsed = exports.validateBookingToken = exports.createBookingLink = exports.healthCheck = exports.parseCV = void 0;
+exports.parseIndeedJob = exports.processInterviewsNow = exports.onCandidateWithdrawnOrRejected = exports.onCandidateStatusChange = exports.resolveLapsedInterview = exports.markLapsedInterviews = exports.checkReturningCandidate = exports.reactivateCandidate = exports.restoreCandidate = exports.archiveCandidate = exports.permanentlyDeleteCandidate = exports.onCandidateDeleted = exports.fetchMeetingInsights = exports.checkMeetingStatus = exports.createTeamsMeeting = exports.trackClick = exports.trackOpen = exports.sendBulkCandidateEmails = exports.sendCandidateEmail = exports.submitBooking = exports.getBookingTimeSlots = exports.getBookingAvailability = exports.sendEmail = exports.markBookingLinkUsed = exports.validateBookingToken = exports.createBookingLink = exports.healthCheck = exports.parseCV = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const options_1 = require("firebase-functions/v2/options");
 const params_1 = require("firebase-functions/params");
@@ -869,6 +869,7 @@ Object.defineProperty(exports, "markLapsedInterviews", { enumerable: true, get: 
 Object.defineProperty(exports, "resolveLapsedInterview", { enumerable: true, get: function () { return lapsedInterviews_1.resolveLapsedInterview; } });
 Object.defineProperty(exports, "onCandidateStatusChange", { enumerable: true, get: function () { return lapsedInterviews_1.onCandidateStatusChange; } });
 Object.defineProperty(exports, "onCandidateWithdrawnOrRejected", { enumerable: true, get: function () { return lapsedInterviews_1.onCandidateWithdrawnOrRejected; } });
+Object.defineProperty(exports, "processInterviewsNow", { enumerable: true, get: function () { return lapsedInterviews_1.processInterviewsNow; } });
 // Job import
 var jobImport_1 = require("./jobImport");
 Object.defineProperty(exports, "parseIndeedJob", { enumerable: true, get: function () { return jobImport_1.parseIndeedJob; } });
