@@ -18,6 +18,25 @@ const msOrganizerUserId = defineSecret('MS_ORGANIZER_USER_ID')
 const db = getFirestore()
 
 // ============================================================================
+// Helper: Remove undefined values from object (Firestore doesn't accept undefined)
+// ============================================================================
+
+function removeUndefinedFields<T extends Record<string, any>>(obj: T): Partial<T> {
+  const result: Partial<T> = {}
+  for (const key of Object.keys(obj)) {
+    const value = obj[key]
+    if (value !== undefined) {
+      if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+        result[key as keyof T] = removeUndefinedFields(value) as any
+      } else {
+        result[key as keyof T] = value
+      }
+    }
+  }
+  return result
+}
+
+// ============================================================================
 // Helper: Get Microsoft Graph Access Token
 // ============================================================================
 
@@ -183,7 +202,7 @@ export const fetchMeetingInsights = onCall<FetchMeetingInsightsRequest>(
         keyPoints: [] as string[],
         actionItems: [] as { text: string; owner?: string }[],
         mentions: [] as string[],
-        sentiment: undefined as 'positive' | 'neutral' | 'negative' | undefined,
+        sentiment: null as 'positive' | 'neutral' | 'negative' | null,
       }
 
       // Process AI notes
@@ -208,9 +227,11 @@ export const fetchMeetingInsights = onCall<FetchMeetingInsightsRequest>(
           .substring(0, 2000)
       }
 
-      // Update interview document with insights
+      // Update interview document with insights (remove undefined values for Firestore)
+      const cleanInsights = removeUndefinedFields(insights)
+      
       await db.collection('interviews').doc(interviewId).update({
-        meetingInsights: insights,
+        meetingInsights: cleanInsights,
         insightsFetchedAt: Timestamp.now(),
         transcriptStatus: 'processed',
       })

@@ -50,6 +50,24 @@ const msTenantId = (0, params_1.defineSecret)('MS_TENANT_ID');
 const msOrganizerUserId = (0, params_1.defineSecret)('MS_ORGANIZER_USER_ID');
 const db = (0, firestore_1.getFirestore)();
 // ============================================================================
+// Helper: Remove undefined values from object (Firestore doesn't accept undefined)
+// ============================================================================
+function removeUndefinedFields(obj) {
+    const result = {};
+    for (const key of Object.keys(obj)) {
+        const value = obj[key];
+        if (value !== undefined) {
+            if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+                result[key] = removeUndefinedFields(value);
+            }
+            else {
+                result[key] = value;
+            }
+        }
+    }
+    return result;
+}
+// ============================================================================
 // Helper: Get Microsoft Graph Access Token
 // ============================================================================
 async function getMsGraphToken() {
@@ -166,7 +184,7 @@ exports.fetchMeetingInsights = (0, https_1.onCall)({
             keyPoints: [],
             actionItems: [],
             mentions: [],
-            sentiment: undefined,
+            sentiment: null,
         };
         // Process AI notes
         if (insightsData.value && Array.isArray(insightsData.value)) {
@@ -188,9 +206,10 @@ exports.fetchMeetingInsights = (0, https_1.onCall)({
                 .join('\n\n')
                 .substring(0, 2000);
         }
-        // Update interview document with insights
+        // Update interview document with insights (remove undefined values for Firestore)
+        const cleanInsights = removeUndefinedFields(insights);
         await db.collection('interviews').doc(interviewId).update({
-            meetingInsights: insights,
+            meetingInsights: cleanInsights,
             insightsFetchedAt: firestore_1.Timestamp.now(),
             transcriptStatus: 'processed',
         });
