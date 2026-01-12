@@ -255,9 +255,9 @@ export const sendCandidateEmail = onCall<SendEmailRequest>(
         performedBy: request.auth.uid,
         metadata: {
           trackingId,
-          templateId,
-          templateName,
-          emailType: type,
+          templateId: templateId || null,
+          templateName: templateName || null,
+          emailType: type || null,
         },
       })
 
@@ -403,9 +403,9 @@ export const sendBulkCandidateEmails = onCall<SendBulkEmailRequest>(
           performedBy: request.auth.uid,
           metadata: {
             trackingId,
-            templateId,
-            templateName,
-            emailType: type,
+            templateId: templateId || null,
+            templateName: templateName || null,
+            emailType: type || null,
             bulk: true,
           },
         })

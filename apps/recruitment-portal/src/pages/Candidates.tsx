@@ -282,6 +282,8 @@ export function Candidates() {
     success: boolean
     bookingUrl?: string
     error?: string
+    emailSent?: boolean
+    emailError?: string
   }>>([])
   const [sendingBulkEmails, setSendingBulkEmails] = useState(false)
 
@@ -543,16 +545,8 @@ export function Candidates() {
       return true
     })
 
-    // Sort by status priority, then by date (newest first within each status)
+    // Sort by date only (newest first) - regardless of status
     return filtered.sort((a, b) => {
-      const priorityA = STATUS_PRIORITY[a.status] ?? 99
-      const priorityB = STATUS_PRIORITY[b.status] ?? 99
-      
-      if (priorityA !== priorityB) {
-        return priorityA - priorityB
-      }
-      
-      // Same status - sort by date (newest first)
       const dateA = a.createdAt?.toDate?.()?.getTime() || 0
       const dateB = b.createdAt?.toDate?.()?.getTime() || 0
       return dateB - dateA
@@ -1320,19 +1314,25 @@ export function Candidates() {
     return candidates.filter(c => selectedCandidateIds.has(c.id))
   }, [candidates, selectedCandidateIds])
 
-  // Open bulk invite modal
+  // Open bulk invite modal and start processing immediately
   const openBulkInviteModal = (type: 'interview' | 'trial') => {
     setBulkInviteType(type)
     setBulkInviteResults([])
     setShowBulkInviteModal(true)
+    // Start processing immediately
+    setBulkInviteProcessing(true)
   }
+
+  // Effect to start processing when modal opens
+  useEffect(() => {
+    if (showBulkInviteModal && bulkInviteProcessing && bulkInviteResults.length === 0) {
+      processBulkInvites()
+    }
+  }, [showBulkInviteModal, bulkInviteProcessing])
 
   // Process bulk invites
   const processBulkInvites = async () => {
     if (selectedCandidates.length === 0) return
-
-    setBulkInviteProcessing(true)
-    setBulkInviteResults([])
 
     const results: typeof bulkInviteResults = []
 
@@ -1547,49 +1547,62 @@ Allied Recruitment Team`
         type: bulkInviteType,
       })
       
-      alert(`Email sent to ${result.candidateName}`)
+      // Update result with email sent status
+      setBulkInviteResults(prev => prev.map(r => 
+        r.candidateId === result.candidateId 
+          ? { ...r, emailSent: true }
+          : r
+      ))
     } catch (error: any) {
       console.error('Error sending email:', error)
-      alert(`Failed to send email: ${error.message}`)
+      // Update result with email error
+      setBulkInviteResults(prev => prev.map(r => 
+        r.candidateId === result.candidateId 
+          ? { ...r, emailSent: false, emailError: error.message }
+          : r
+      ))
     }
   }
 
-  // Send all emails
+  // Send all emails - sends individually and updates each with tick
   const sendAllEmails = async () => {
-    const emailableResults = bulkInviteResults.filter(r => r.success && r.candidateEmail && r.bookingUrl)
+    const emailableResults = bulkInviteResults.filter(r => r.success && r.candidateEmail && r.bookingUrl && !r.emailSent)
     if (emailableResults.length === 0) return
 
     setSendingBulkEmails(true)
 
-    try {
-      const functions = getFirebaseFunctions()
-      const sendBulkEmailFn = httpsCallable(functions, 'sendBulkCandidateEmails')
-      
-      const candidates = emailableResults.map(r => ({
-        id: r.candidateId,
-        email: r.candidateEmail,
-        firstName: r.candidateName.split(' ')[0],
-        lastName: r.candidateName.split(' ').slice(1).join(' '),
-        jobTitle: r.jobTitle,
-        branchName: r.branchName,
-        bookingUrl: r.bookingUrl,
-      }))
+    const functions = getFirebaseFunctions()
+    const sendEmailFn = httpsCallable(functions, 'sendCandidateEmail')
 
-      const result = await sendBulkEmailFn({
-        candidates,
-        subject: getEmailSubject(bulkInviteType),
-        body: getEmailMessage('{{firstName}}', '{{bookingLink}}', bulkInviteType),
-        type: bulkInviteType,
-      })
-
-      const data = result.data as { sent: number; failed: number }
-      alert(`Emails sent: ${data.sent} successful, ${data.failed} failed`)
-    } catch (error: any) {
-      console.error('Error sending bulk emails:', error)
-      alert(`Failed to send emails: ${error.message}`)
-    } finally {
-      setSendingBulkEmails(false)
+    for (const result of emailableResults) {
+      try {
+        await sendEmailFn({
+          to: result.candidateEmail,
+          candidateId: result.candidateId,
+          candidateName: result.candidateName,
+          subject: getEmailSubject(bulkInviteType),
+          body: getEmailMessage(result.candidateName, result.bookingUrl!, bulkInviteType),
+          type: bulkInviteType,
+        })
+        
+        // Update with success tick
+        setBulkInviteResults(prev => prev.map(r => 
+          r.candidateId === result.candidateId 
+            ? { ...r, emailSent: true }
+            : r
+        ))
+      } catch (error: any) {
+        console.error(`Error sending email to ${result.candidateName}:`, error)
+        // Update with error
+        setBulkInviteResults(prev => prev.map(r => 
+          r.candidateId === result.candidateId 
+            ? { ...r, emailSent: false, emailError: error.message }
+            : r
+        ))
+      }
     }
+
+    setSendingBulkEmails(false)
   }
 
   // ==========================================================================
@@ -3083,51 +3096,10 @@ Allied Recruitment Team`
         onClose={closeBulkInviteModal}
         title={`Send ${bulkInviteType === 'interview' ? 'Interview' : 'Trial'} Invites`}
         size="lg"
-        closeOnOverlayClick={!bulkInviteProcessing && bulkInviteResults.length === 0}
+        closeOnOverlayClick={!bulkInviteProcessing}
         closeOnEscape={!bulkInviteProcessing}
       >
         <div className="bulk-invite-modal">
-          {!bulkInviteProcessing && bulkInviteResults.length === 0 && (
-            <>
-              <div className="bulk-invite-summary">
-                <p>
-                  You're about to send <strong>{bulkInviteType}</strong> booking links to{' '}
-                  <strong>{selectedCandidates.length} candidate{selectedCandidates.length !== 1 ? 's' : ''}</strong>:
-                </p>
-                <ul className="candidate-preview-list">
-                  {selectedCandidates.slice(0, 5).map(c => (
-                    <li key={c.id}>
-                      {c.firstName} {c.lastName} - {c.jobTitle || 'No job'} 
-                      {c.phone ? ` (${formatPhone(c.phone)})` : ' (No phone)'}
-                    </li>
-                  ))}
-                  {selectedCandidates.length > 5 && (
-                    <li className="more-candidates">...and {selectedCandidates.length - 5} more</li>
-                  )}
-                </ul>
-              </div>
-              <div className="bulk-invite-warning">
-                <p>⚠️ This will:</p>
-                <ul>
-                  <li>Create individual booking links for each candidate</li>
-                  <li>Update their status to "Invite Sent"</li>
-                  <li>Show WhatsApp buttons to send each message</li>
-                </ul>
-              </div>
-              <div className="modal-actions">
-                <Button variant="secondary" onClick={closeBulkInviteModal}>
-                  Cancel
-                </Button>
-                <Button 
-                  variant="primary" 
-                  onClick={processBulkInvites}
-                >
-                  Create {selectedCandidates.length} Booking Link{selectedCandidates.length !== 1 ? 's' : ''}
-                </Button>
-              </div>
-            </>
-          )}
-
           {bulkInviteProcessing && (
             <div className="bulk-invite-processing">
               <Spinner size="lg" />
@@ -3181,13 +3153,19 @@ Allied Recruitment Team`
                           <span className="no-phone">No phone</span>
                         )}
                         {result.candidateEmail ? (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => sendSingleEmail(result)}
-                          >
-                            ✉️ Email
-                          </Button>
+                          result.emailSent ? (
+                            <span className="email-sent">✅ Sent</span>
+                          ) : result.emailError ? (
+                            <span className="email-error" title={result.emailError}>❌ Failed</span>
+                          ) : (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => sendSingleEmail(result)}
+                            >
+                              ✉️ Email
+                            </Button>
+                          )
                         ) : (
                           <span className="no-email">No email</span>
                         )}
@@ -3205,14 +3183,19 @@ Allied Recruitment Team`
               </div>
 
               <div className="modal-actions">
-                {bulkInviteResults.filter(r => r.success && r.candidateEmail).length > 0 && (
+                {bulkInviteResults.filter(r => r.success && r.candidateEmail && !r.emailSent).length > 0 && (
                   <Button 
                     variant="secondary" 
                     onClick={sendAllEmails}
                     disabled={sendingBulkEmails}
                   >
-                    {sendingBulkEmails ? '✉️ Sending...' : `✉️ Send All Emails (${bulkInviteResults.filter(r => r.success && r.candidateEmail).length})`}
+                    {sendingBulkEmails ? '✉️ Sending...' : `✉️ Send All Emails (${bulkInviteResults.filter(r => r.success && r.candidateEmail && !r.emailSent).length})`}
                   </Button>
+                )}
+                {bulkInviteResults.filter(r => r.emailSent).length > 0 && (
+                  <span className="emails-sent-count">
+                    ✅ {bulkInviteResults.filter(r => r.emailSent).length} email{bulkInviteResults.filter(r => r.emailSent).length !== 1 ? 's' : ''} sent
+                  </span>
                 )}
                 {bulkInviteResults.filter(r => r.success && r.candidatePhone).length > 0 && (
                   <Button 
