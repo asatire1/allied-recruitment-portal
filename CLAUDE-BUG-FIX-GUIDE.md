@@ -1,10 +1,10 @@
 # Allied Recruitment Portal - Claude Bug Fix Guide
 
-**Last Updated:** 31 December 2025
+**Last Updated:** 13 January 2026
 
 ## Quick Reference
 
-**GitHub Repo:** https://github.com/asatire1/Recruitment
+**GitHub Repo:** https://github.com/asatire1/allied-recruitment-portal
 **Firebase Project:** recruitment-633bd
 
 ### Live URLs
@@ -95,57 +95,58 @@ allied-recruitment-portal/
 To fetch files directly, use this format:
 
 ```
-https://raw.githubusercontent.com/asatire1/Recruitment/main/{path}
+https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/{path}
 ```
 
 ### Key Files
 
 **Recruitment Portal - Pages:**
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/recruitment-portal/src/pages/CandidateDetail.tsx`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/recruitment-portal/src/pages/Candidates.tsx`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/recruitment-portal/src/pages/UserManagement.tsx`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/recruitment-portal/src/pages/Dashboard.tsx`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/recruitment-portal/src/pages/Settings.tsx`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/recruitment-portal/src/pages/JobDetail.tsx`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/recruitment-portal/src/pages/Jobs.tsx`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/recruitment-portal/src/pages/Calendar.tsx`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/recruitment-portal/src/pages/Interviews.tsx`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/recruitment-portal/src/pages/CandidateDetail.tsx`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/recruitment-portal/src/pages/Candidates.tsx`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/recruitment-portal/src/pages/UserManagement.tsx`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/recruitment-portal/src/pages/Dashboard.tsx`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/recruitment-portal/src/pages/Settings.tsx`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/recruitment-portal/src/pages/JobDetail.tsx`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/recruitment-portal/src/pages/Jobs.tsx`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/recruitment-portal/src/pages/Calendar.tsx`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/recruitment-portal/src/pages/Interviews.tsx`
 
 **Recruitment Portal - Styles:**
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/recruitment-portal/src/styles/status-colors.css`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/recruitment-portal/src/styles/bulk-invite.css`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/recruitment-portal/src/styles/status-colors.css`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/recruitment-portal/src/styles/bulk-invite.css`
 
 **Recruitment Portal - Utils:**
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/recruitment-portal/src/utils/statusUtils.ts`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/recruitment-portal/src/utils/statusUtils.ts`
 
 **Recruitment Portal - Other:**
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/recruitment-portal/src/contexts/AuthContext.tsx`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/recruitment-portal/src/hooks/useArchive.ts`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/recruitment-portal/src/App.tsx`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/recruitment-portal/src/contexts/AuthContext.tsx`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/recruitment-portal/src/hooks/useArchive.ts`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/recruitment-portal/src/App.tsx`
 
 **Booking Page:**
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/booking-page/src/components/JobApplication.tsx`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/booking-page/src/components/BookingSuccess.tsx`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/booking-page/src/components/BookingConfirmation.tsx`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/booking-page/src/components/DatePicker.tsx`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/booking-page/src/components/TimeSlotPicker.tsx`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/booking-page/src/services/bookingService.ts`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/booking-page/src/lib/firebase.ts`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/apps/booking-page/src/App.tsx`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/booking-page/src/components/JobApplication.tsx`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/booking-page/src/components/BookingSuccess.tsx`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/booking-page/src/components/BookingConfirmation.tsx`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/booking-page/src/components/DatePicker.tsx`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/booking-page/src/components/TimeSlotPicker.tsx`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/booking-page/src/services/bookingService.ts`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/booking-page/src/lib/firebase.ts`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/apps/booking-page/src/App.tsx`
 
 **Cloud Functions:**
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/functions/src/index.ts`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/functions/src/bookingFunctions.ts`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/functions/src/teamsMeeting.ts`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/functions/src/cascadeDeletion.ts`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/functions/src/pushNotifications.ts`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/functions/src/index.ts`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/functions/src/bookingFunctions.ts`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/functions/src/teamsMeeting.ts`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/functions/src/cascadeDeletion.ts`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/functions/src/trialNotifications.ts`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/functions/src/pushNotifications.ts`
 
 **Shared Library:**
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/packages/shared-lib/src/index.ts`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/packages/shared-lib/src/index.ts`
 
 **Rules:**
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/firestore.rules`
-- `https://raw.githubusercontent.com/asatire1/Recruitment/main/storage.rules`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/firestore.rules`
+- `https://raw.githubusercontent.com/asatire1/allied-recruitment-portal/main/storage.rules`
 
 ---
 
@@ -318,6 +319,10 @@ git push
 | `reactivateCandidate` | Handle re-applications | us-central1 |
 | `permanentlyDeleteCandidate` | Hard delete (super_admin only) | us-central1 |
 | `onCandidateDeleted` | Cascade cleanup trigger | us-central1 |
+| `sendTrialBranchNotification` | Notify branch of trial booking | europe-west2 |
+| `sendDailyFeedbackRequests` | Scheduled feedback reminders | europe-west2 |
+| `submitTrialFeedback` | Public feedback submission | europe-west2 |
+| `validateFeedbackToken` | Validate feedback links | europe-west2 |
 
 ---
 
@@ -385,6 +390,66 @@ isActiveStatus(status)    // true for active statuses
 | Create booking link | `invite_sent` |
 | Candidate books interview | `interview_scheduled` |
 | Candidate books trial | `trial_scheduled` |
+
+---
+
+## Trial System
+
+### Overview
+
+The trial system allows branches to host candidate trial shifts with:
+- Per-branch availability settings (max trials per day, working hours)
+- Self-service booking via booking links
+- Branch notifications when trials are booked
+- Feedback collection from branch managers
+
+### Per-Branch Trial Booking
+
+Trials are booked **per branch**, meaning:
+- A trial at Branch A does NOT block availability at Branch B
+- Each branch can have its own `maxTrialsPerDay` setting
+- Booking links include `branchId` to enable this filtering
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `functions/src/bookingFunctions.ts` | Trial slot availability & booking logic |
+| `functions/src/trialNotifications.ts` | Branch notifications & feedback system |
+| `apps/recruitment-portal/src/components/candidate/WhatsAppModal.tsx` | Sends branchId when creating booking links |
+| `apps/recruitment-portal/src/components/candidate/EmailModal.tsx` | Sends branchId when creating booking links |
+
+### Branch Trial Settings (in branches collection)
+
+```typescript
+{
+  trialSettings: {
+    enabled: true,
+    maxTrialsPerDay: 1,
+    schedule: {
+      monday: { enabled: true, slots: [{ start: "09:00", end: "17:00" }] },
+      // ... other days
+    }
+  }
+}
+```
+
+### Trial Feedback System
+
+1. Branch receives notification email when trial is booked
+2. Day after trial, branch receives feedback request email with secure link
+3. Branch manager submits feedback via public form (no login required)
+4. Feedback stored in `interviewFeedback` collection
+5. Feedback displayed on candidate profile
+
+### Firestore Collections for Trials
+
+| Collection | Purpose |
+|------------|---------|
+| `interviews` | Trial bookings (type: 'trial') |
+| `interviewFeedback` | Feedback from branch managers |
+| `feedbackTokens` | Secure tokens for feedback submission |
+| `slotLocks` | Prevents double-booking race conditions |
 
 ---
 
@@ -976,6 +1041,8 @@ firebase functions:log --only submitBooking | grep -i "teams\|meeting\|graph"
 
 | Date | Change | Files Affected |
 |------|--------|----------------|
+| 13 Jan 2026 | Per-branch trial booking fix | bookingFunctions.ts, index.ts, WhatsAppModal.tsx, EmailModal.tsx |
+| 13 Jan 2026 | Trial system enhancements (manual scheduling, branch notifications, feedback) | trialNotifications.ts, bookingFunctions.ts |
 | 31 Dec 2025 | Colored status badges | status-colors.css, statusUtils.ts, Candidates.tsx |
 | 31 Dec 2025 | Bulk interview invites | Candidates.tsx, bulk-invite.css |
 | 31 Dec 2025 | Status priority sorting | Candidates.tsx |
