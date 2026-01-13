@@ -212,9 +212,9 @@ exports.sendCandidateEmail = (0, https_1.onCall)({
             performedBy: request.auth.uid,
             metadata: {
                 trackingId,
-                templateId,
-                templateName,
-                emailType: type,
+                templateId: templateId || null,
+                templateName: templateName || null,
+                emailType: type || null,
             },
         });
         console.log(`Email sent to ${to} (tracking: ${trackingId})`);
@@ -324,9 +324,9 @@ exports.sendBulkCandidateEmails = (0, https_1.onCall)({
                 performedBy: request.auth.uid,
                 metadata: {
                     trackingId,
-                    templateId,
-                    templateName,
-                    emailType: type,
+                    templateId: templateId || null,
+                    templateName: templateName || null,
+                    emailType: type || null,
                     bulk: true,
                 },
             });
