@@ -40,7 +40,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.parseIndeedJob = exports.processInterviewsNow = exports.onCandidateWithdrawnOrRejected = exports.onCandidateStatusChange = exports.resolveLapsedInterview = exports.markLapsedInterviews = exports.checkReturningCandidate = exports.reactivateCandidate = exports.restoreCandidate = exports.archiveCandidate = exports.permanentlyDeleteCandidate = exports.onCandidateDeleted = exports.fetchMeetingInsights = exports.checkMeetingStatus = exports.createTeamsMeeting = exports.trackClick = exports.trackOpen = exports.sendBulkCandidateEmails = exports.sendCandidateEmail = exports.submitBooking = exports.getBookingTimeSlots = exports.getBookingAvailability = exports.sendEmail = exports.markBookingLinkUsed = exports.validateBookingToken = exports.createBookingLink = exports.healthCheck = exports.parseCV = void 0;
+exports.validateFeedbackToken = exports.submitTrialFeedback = exports.sendDailyFeedbackRequests = exports.sendTrialBranchNotification = exports.parseIndeedJob = exports.processInterviewsNow = exports.onCandidateWithdrawnOrRejected = exports.onCandidateStatusChange = exports.resolveLapsedInterview = exports.markLapsedInterviews = exports.checkReturningCandidate = exports.reactivateCandidate = exports.restoreCandidate = exports.archiveCandidate = exports.permanentlyDeleteCandidate = exports.onCandidateDeleted = exports.fetchMeetingInsights = exports.checkMeetingStatus = exports.createTeamsMeeting = exports.trackClick = exports.trackOpen = exports.sendBulkCandidateEmails = exports.sendCandidateEmail = exports.submitBooking = exports.getBookingTimeSlots = exports.getBookingAvailability = exports.sendEmail = exports.markBookingLinkUsed = exports.validateBookingToken = exports.createBookingLink = exports.healthCheck = exports.parseCV = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const options_1 = require("firebase-functions/v2/options");
 const params_1 = require("firebase-functions/params");
@@ -532,7 +532,7 @@ exports.createBookingLink = (0, https_1.onCall)({
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
     }
-    const { candidateId, candidateName, candidateEmail, type, jobId, jobTitle, location, expiryDays = 3, maxUses = 1 } = request.data;
+    const { candidateId, candidateName, candidateEmail, type, jobId, jobTitle, branchId, branchName, location, expiryDays = 3, maxUses = 1 } = request.data;
     // Validate required fields
     if (!candidateId || !candidateName || !type) {
         throw new https_1.HttpsError('invalid-argument', 'Missing required fields: candidateId, candidateName, type');
@@ -557,6 +557,8 @@ exports.createBookingLink = (0, https_1.onCall)({
             type,
             jobId: jobId || null,
             jobTitle: jobTitle || null,
+            branchId: branchId || null,
+            branchName: branchName || null,
             location: location || null,
             status: 'active',
             expiresAt,
@@ -873,4 +875,10 @@ Object.defineProperty(exports, "processInterviewsNow", { enumerable: true, get: 
 // Job import
 var jobImport_1 = require("./jobImport");
 Object.defineProperty(exports, "parseIndeedJob", { enumerable: true, get: function () { return jobImport_1.parseIndeedJob; } });
+// Trial notifications and feedback
+var trialNotifications_1 = require("./trialNotifications");
+Object.defineProperty(exports, "sendTrialBranchNotification", { enumerable: true, get: function () { return trialNotifications_1.sendTrialBranchNotification; } });
+Object.defineProperty(exports, "sendDailyFeedbackRequests", { enumerable: true, get: function () { return trialNotifications_1.sendDailyFeedbackRequests; } });
+Object.defineProperty(exports, "submitTrialFeedback", { enumerable: true, get: function () { return trialNotifications_1.submitTrialFeedback; } });
+Object.defineProperty(exports, "validateFeedbackToken", { enumerable: true, get: function () { return trialNotifications_1.validateFeedbackToken; } });
 //# sourceMappingURL=index.js.map

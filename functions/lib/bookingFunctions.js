@@ -9,6 +9,7 @@
 * Updated: Teams meeting integration for interviews
 * Updated: Automatic candidate status updates
 * Updated: Bank holiday and lunch time blocking
+* Updated: Per-branch trial availability with maxTrialsPerDay enforcement
 */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -49,6 +50,7 @@ const https_1 = require("firebase-functions/v2/https");
 const admin = __importStar(require("firebase-admin"));
 const crypto = __importStar(require("crypto"));
 const teamsMeeting_1 = require("./teamsMeeting");
+// Note: sendTrialBranchNotification is called via HTTP internally for trial bookings
 const db = admin.firestore();
 // ============================================================================
 // HELPERS
@@ -63,7 +65,7 @@ function getDefaultTrialSettings() {
         bufferTime: 30,
         maxAdvanceBooking: 21,
         minNoticeHours: 48,
-        maxTrialsPerDay: 2,
+        maxTrialsPerDay: 1, // Default to 1 trial per day per branch
         slots: [
             { dayOfWeek: 0, startTime: '09:00', endTime: '13:00', enabled: false }, // Sunday
             { dayOfWeek: 1, startTime: '09:00', endTime: '17:00', enabled: true }, // Monday
@@ -99,7 +101,7 @@ async function getTrialAvailabilitySettings() {
                 bufferTime: data?.bufferTime || 30,
                 maxAdvanceBooking: data?.maxAdvanceBooking || 21,
                 minNoticeHours: data?.minNoticeHours || 48,
-                maxTrialsPerDay: data?.maxTrialsPerDay || 2,
+                maxTrialsPerDay: data?.maxTrialsPerDay || 1,
                 slots: data?.slots || getDefaultTrialSettings().slots,
                 blockedDates: data?.blockedDates || []
             };
@@ -395,13 +397,16 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({
     const linkDoc = token !== "__internal__" ? await validateToken(token) : null;
     const linkData = linkDoc?.data() || {};
     const bookingType = type || linkData.type || 'interview';
-    console.log('Booking type determined:', bookingType, 'linkData.type:', linkData.type);
+    const branchId = linkData.branchId || null; // Get branchId from booking link
+    console.log('Booking type determined:', bookingType, 'linkData.type:', linkData.type, 'branchId:', branchId);
     // Get availability settings based on booking type
     let settings;
+    let maxTrialsPerDay = 1; // Default
     if (bookingType === 'trial') {
         // Read from trialAvailability settings
         const trialSettings = await getTrialAvailabilitySettings();
-        console.log('getBookingTimeSlots - Using trial settings:', JSON.stringify(trialSettings.slots));
+        maxTrialsPerDay = trialSettings.maxTrialsPerDay || 1;
+        console.log('getBookingTimeSlots - Using trial settings:', JSON.stringify(trialSettings.slots), 'maxTrialsPerDay:', maxTrialsPerDay);
         settings = {
             schedule: convertTrialSlotsToSchedule(trialSettings.slots),
             slotDuration: trialSettings.trialDuration, // 240 minutes (4 hours)
@@ -462,6 +467,7 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({
     // (legacy interviews may use scheduledAt, new ones use scheduledDate)
     // Note: Using separate queries and filtering status in-memory to avoid composite index requirement
     let allBookingDocs = [];
+    let branchTrialCount = 0; // Count trials for THIS BRANCH on this date
     try {
         console.log(`Querying interviews for date: ${date}`);
         console.log(`Day range: ${dayStart.toISOString()} to ${dayEnd.toISOString()}`);
@@ -477,35 +483,65 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({
             .where('scheduledAt', '>=', admin.firestore.Timestamp.fromDate(dayStart))
             .where('scheduledAt', '<=', admin.firestore.Timestamp.fromDate(dayEnd))
             .get();
-        // Combine results, avoiding duplicates by ID, and filter for:
-        // 1. Active statuses only
-        // 2. Same booking type only (trials don't conflict with interviews and vice versa)
+        // Combine results, avoiding duplicates by ID
         const activeStatuses = ['scheduled', 'confirmed'];
         const seenIds = new Set();
         bookingsWithScheduledDate.docs.forEach(doc => {
             const data = doc.data();
-            // Only include bookings of the same type
             if (activeStatuses.includes(data.status) && data.type === bookingType) {
                 seenIds.add(doc.id);
-                allBookingDocs.push({ id: doc.id, ...data });
+                // For trials, only count bookings for the SAME BRANCH
+                if (bookingType === 'trial') {
+                    if (branchId && data.branchId === branchId) {
+                        allBookingDocs.push({ id: doc.id, ...data });
+                        branchTrialCount++;
+                    }
+                    // Note: We still need to track ALL trials for time slot conflicts
+                    // but only same-branch trials count toward maxTrialsPerDay
+                }
+                else {
+                    // For interviews, include all (no branch restriction)
+                    allBookingDocs.push({ id: doc.id, ...data });
+                }
             }
         });
         bookingsWithScheduledAt.docs.forEach(doc => {
             const data = doc.data();
-            // Only include bookings of the same type
             if (!seenIds.has(doc.id) && activeStatuses.includes(data.status) && data.type === bookingType) {
-                allBookingDocs.push({ id: doc.id, ...data });
+                seenIds.add(doc.id);
+                if (bookingType === 'trial') {
+                    if (branchId && data.branchId === branchId) {
+                        allBookingDocs.push({ id: doc.id, ...data });
+                        branchTrialCount++;
+                    }
+                }
+                else {
+                    allBookingDocs.push({ id: doc.id, ...data });
+                }
             }
         });
-        console.log(`Found ${allBookingDocs.length} existing ${bookingType} bookings for ${date} (filtered by type)`);
+        console.log(`Found ${allBookingDocs.length} existing ${bookingType} bookings for ${date} at branch ${branchId}`);
+        console.log(`Branch trial count: ${branchTrialCount}, maxTrialsPerDay: ${maxTrialsPerDay}`);
         allBookingDocs.forEach(booking => {
             const dateField = booking.scheduledDate || booking.scheduledAt;
-            console.log(`  - Booking: ${booking.id}, time: ${dateField?.toDate?.()?.toISOString()}, status: ${booking.status}, duration: ${booking.duration}`);
+            console.log(`  - Booking: ${booking.id}, time: ${dateField?.toDate?.()?.toISOString()}, status: ${booking.status}, duration: ${booking.duration}, branchId: ${booking.branchId}`);
         });
     }
     catch (error) {
         console.error('Failed to get existing bookings:', error);
         allBookingDocs = [];
+    }
+    // =========================================================================
+    // CHECK MAX TRIALS PER DAY FOR THIS BRANCH
+    // =========================================================================
+    if (bookingType === 'trial' && branchTrialCount >= maxTrialsPerDay) {
+        console.log(`Branch ${branchId} has reached max trials (${branchTrialCount}/${maxTrialsPerDay}) for ${date}`);
+        return {
+            slots: [],
+            date,
+            blocked: true,
+            blockReason: `This branch has reached the maximum of ${maxTrialsPerDay} trial${maxTrialsPerDay > 1 ? 's' : ''} for this day`
+        };
     }
     // Generate time slots
     const slots = [];
@@ -526,7 +562,7 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({
             const slotEnd = new Date(slotStart.getTime() + slotDuration * 60000);
             // Check minimum notice
             const meetsNotice = slotStart >= minNoticeTime;
-            // Check for conflicts with existing bookings (supports both scheduledDate and scheduledAt)
+            // Check for conflicts with existing bookings at THIS BRANCH
             const hasConflict = allBookingDocs.some(booking => {
                 // Support both field names
                 const existingStart = (booking.scheduledDate || booking.scheduledAt)?.toDate?.();
@@ -562,7 +598,7 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({
         }
     }
     const availableSlots = slots.filter(s => s.available);
-    console.log(`Generated ${slots.length} total slots, ${availableSlots.length} available for ${date} (type: ${bookingType})`);
+    console.log(`Generated ${slots.length} total slots, ${availableSlots.length} available for ${date} (type: ${bookingType}, branch: ${branchId})`);
     console.log(`Available slots: ${availableSlots.map(s => s.time).join(', ') || 'none'}`);
     console.log(`Unavailable slots: ${slots.filter(s => !s.available).map(s => `${s.time}(${s.reason})`).join(', ')}`);
     return { slots, date };
@@ -624,6 +660,29 @@ exports.submitBooking = (0, https_1.onCall)({
     // Generate confirmation code
     const confirmationCode = `AP-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
     // =========================================================================
+    // CHECK MAX TRIALS PER DAY FOR BRANCH (for trials only)
+    // =========================================================================
+    if (linkData.type === 'trial' && linkData.branchId) {
+        const trialSettings = await getTrialAvailabilitySettings();
+        const maxTrialsPerDay = trialSettings.maxTrialsPerDay || 1;
+        const dayStart = new Date(scheduledDate);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(scheduledDate);
+        dayEnd.setHours(23, 59, 59, 999);
+        // Count existing trials for this branch on this date
+        const existingTrials = await db
+            .collection('interviews')
+            .where('type', '==', 'trial')
+            .where('branchId', '==', linkData.branchId)
+            .where('scheduledDate', '>=', admin.firestore.Timestamp.fromDate(dayStart))
+            .where('scheduledDate', '<=', admin.firestore.Timestamp.fromDate(dayEnd))
+            .where('status', 'in', ['scheduled', 'confirmed'])
+            .get();
+        if (existingTrials.size >= maxTrialsPerDay) {
+            throw new https_1.HttpsError('resource-exhausted', `This branch has reached the maximum of ${maxTrialsPerDay} trial${maxTrialsPerDay > 1 ? 's' : ''} for this day. Please select another date.`);
+        }
+    }
+    // =========================================================================
     // CREATE TEAMS MEETING FOR INTERVIEWS ONLY
     // =========================================================================
     let teamsMeetingResult = null;
@@ -666,9 +725,11 @@ exports.submitBooking = (0, https_1.onCall)({
     }
     // Use transaction to ensure atomicity and prevent double-booking
     const interviewRef = db.collection('interviews').doc();
-    // Create a slot lock document ID based on date and time
-    // This prevents race conditions where two users book the same slot
-    const slotLockId = `${date}_${time.replace(':', '')}`;
+    // Create a slot lock document ID based on date, time, AND BRANCH
+    // This allows different branches to book the same time slot
+    const slotLockId = linkData.type === 'trial' && linkData.branchId
+        ? `${date}_${time.replace(':', '')}_${linkData.branchId}`
+        : `${date}_${time.replace(':', '')}`;
     const slotLockRef = db.collection('slotLocks').doc(slotLockId);
     await db.runTransaction(async (transaction) => {
         // =========================================================================
@@ -691,43 +752,64 @@ exports.submitBooking = (0, https_1.onCall)({
             }
         }
         // Also check for overlapping bookings (different start times but overlapping duration)
-        // Query interviews that could potentially overlap - check BOTH field names
-        // Note: Filtering status in-memory to avoid composite index requirement
+        // For trials: only check same branch. For interviews: check all.
         const dayStart = new Date(scheduledDate);
         dayStart.setHours(0, 0, 0, 0);
         const dayEnd = new Date(scheduledDate);
         dayEnd.setHours(23, 59, 59, 999);
-        // Query for scheduledDate field (new format) - filter status in memory
+        // Query for scheduledDate field (new format)
         const bookingsWithScheduledDate = await db
             .collection('interviews')
             .where('scheduledDate', '>=', admin.firestore.Timestamp.fromDate(dayStart))
             .where('scheduledDate', '<=', admin.firestore.Timestamp.fromDate(dayEnd))
             .get();
-        // Query for scheduledAt field (legacy format) - filter status in memory
+        // Query for scheduledAt field (legacy format)
         const bookingsWithScheduledAt = await db
             .collection('interviews')
             .where('scheduledAt', '>=', admin.firestore.Timestamp.fromDate(dayStart))
             .where('scheduledAt', '<=', admin.firestore.Timestamp.fromDate(dayEnd))
             .get();
-        // Combine results and filter for:
-        // 1. Active statuses only
-        // 2. Same booking type only (trials don't conflict with interviews and vice versa)
+        // Combine results and filter appropriately
         const activeStatuses = ['scheduled', 'confirmed'];
         const allBookings = [];
         const seenIds = new Set();
         bookingsWithScheduledDate.docs.forEach(doc => {
             const data = doc.data();
-            // Only check conflicts with same booking type
+            // For trials, only check conflicts with same branch
+            // For interviews, check all
             if (activeStatuses.includes(data.status) && data.type === linkData.type) {
-                seenIds.add(doc.id);
-                allBookings.push({ id: doc.id, ...data });
+                if (linkData.type === 'trial') {
+                    // Only conflict with same branch for trials
+                    // If either branchId is null/undefined, don't consider it a match (allow booking)
+                    // Only block if BOTH have branchIds AND they're the same
+                    const bothHaveBranchIds = data.branchId && linkData.branchId;
+                    const sameBranch = bothHaveBranchIds && data.branchId === linkData.branchId;
+                    if (sameBranch) {
+                        seenIds.add(doc.id);
+                        allBookings.push({ id: doc.id, ...data });
+                    }
+                }
+                else {
+                    seenIds.add(doc.id);
+                    allBookings.push({ id: doc.id, ...data });
+                }
             }
         });
         bookingsWithScheduledAt.docs.forEach(doc => {
             const data = doc.data();
-            // Only check conflicts with same booking type
             if (!seenIds.has(doc.id) && activeStatuses.includes(data.status) && data.type === linkData.type) {
-                allBookings.push({ id: doc.id, ...data });
+                if (linkData.type === 'trial') {
+                    // Only conflict with same branch for trials
+                    // If either branchId is null/undefined, don't consider it a match (allow booking)
+                    const bothHaveBranchIds = data.branchId && linkData.branchId;
+                    const sameBranch = bothHaveBranchIds && data.branchId === linkData.branchId;
+                    if (sameBranch) {
+                        allBookings.push({ id: doc.id, ...data });
+                    }
+                }
+                else {
+                    allBookings.push({ id: doc.id, ...data });
+                }
             }
         });
         const hasOverlap = allBookings.some(booking => {
@@ -764,6 +846,7 @@ exports.submitBooking = (0, https_1.onCall)({
             time,
             interviewId: interviewRef.id,
             candidateId: linkData.candidateId,
+            branchId: linkData.branchId || null,
             createdAt: admin.firestore.FieldValue.serverTimestamp()
         });
         // Create interview
@@ -788,6 +871,71 @@ exports.submitBooking = (0, https_1.onCall)({
     // =========================================================================
     const newStatus = linkData.type === 'interview' ? 'interview_scheduled' : 'trial_scheduled';
     await updateCandidateStatus(linkData.candidateId, newStatus, `Candidate booked ${linkData.type} via self-service booking`);
+    // =========================================================================
+    // SEND BRANCH NOTIFICATION FOR TRIALS
+    // =========================================================================
+    if (linkData.type === 'trial' && linkData.branchId) {
+        try {
+            // Get branch email
+            const branchDoc = await db.collection('branches').doc(linkData.branchId).get();
+            const branchData = branchDoc.data();
+            const branchEmail = branchData?.email;
+            if (branchEmail) {
+                // Send notification email to branch using Microsoft Graph
+                const { getAccessToken } = await Promise.resolve().then(() => __importStar(require('./teamsMeeting')));
+                // Get secret values
+                const clientId = teamsMeeting_1.msClientId.value();
+                const clientSecret = teamsMeeting_1.msClientSecret.value();
+                const tenantId = teamsMeeting_1.msTenantId.value();
+                const organizerUserId = teamsMeeting_1.msOrganizerUserId.value();
+                if (clientId && clientSecret && tenantId && organizerUserId) {
+                    const accessToken = await getAccessToken(clientId, clientSecret, tenantId);
+                    const formattedDate = scheduledDate.toLocaleDateString('en-GB', {
+                        weekday: 'long',
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric'
+                    });
+                    const formattedTime = scheduledDate.toLocaleTimeString('en-GB', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                    const emailBody = `
+              <h2>New Trial Booking</h2>
+              <p>A candidate has booked a trial at your branch:</p>
+              <ul>
+                <li><strong>Candidate:</strong> ${linkData.candidateName}</li>
+                <li><strong>Date:</strong> ${formattedDate}</li>
+                <li><strong>Time:</strong> ${formattedTime}</li>
+                <li><strong>Duration:</strong> ${duration} minutes</li>
+                ${linkData.jobTitle ? `<li><strong>Position:</strong> ${linkData.jobTitle}</li>` : ''}
+              </ul>
+              <p>Please ensure someone is available to supervise the trial.</p>
+            `;
+                    const graphUrl = `https://graph.microsoft.com/v1.0/users/${organizerUserId}/sendMail`;
+                    await fetch(graphUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            message: {
+                                subject: `Trial Booking: ${linkData.candidateName} - ${formattedDate}`,
+                                body: { contentType: 'HTML', content: emailBody },
+                                toRecipients: [{ emailAddress: { address: branchEmail } }]
+                            }
+                        })
+                    });
+                    console.log('Branch notification sent for trial booking');
+                }
+            }
+        }
+        catch (error) {
+            console.warn('Failed to send branch notification:', error);
+            // Don't fail the booking if notification fails
+        }
+    }
     // =========================================================================
     // SEND EMAIL CONFIRMATION TO CANDIDATE
     // =========================================================================

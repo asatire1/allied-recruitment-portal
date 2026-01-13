@@ -1,37 +1,34 @@
 // ============================================================================
-// Message Templates Tab - Supports WhatsApp and Email
-// Renamed from WhatsAppTemplatesTab to support both channels
+// Message Templates Tab - Unified Template System
+// Supports WhatsApp (plain text) and Email (HTML) from single collection
+// Uses: messageTemplates collection (with fallback to whatsappTemplates)
 // ============================================================================
 
-import { useEffect, useState } from 'react'
-import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore'
-import { getFirebaseDb, PLACEHOLDER_DEFINITIONS } from '@allied/shared-lib'
+import { useEffect, useState, useRef } from 'react'
+import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, serverTimestamp, query, orderBy } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
+import { 
+  getFirebaseDb, 
+  getFirebaseFunctions,
+  PLACEHOLDER_DEFINITIONS,
+  DEFAULT_MESSAGE_TEMPLATES,
+  DEFAULT_EMAIL_WRAPPER,
+  type MessageTemplate,
+  type TemplateCategory,
+  type TemplateChannel,
+  type TemplateType
+} from '@allied/shared-lib'
 import { Card, Button, Input, Spinner, Modal, Select, Textarea } from '@allied/shared-ui'
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
-type TemplateCategory = 'interview' | 'trial' | 'offer' | 'rejection' | 'reminder' | 'general'
-type TemplateChannel = 'whatsapp' | 'email' | 'both'
-
-interface MessageTemplate {
-  id: string
-  name: string
-  category: TemplateCategory
-  channel: TemplateChannel
-  subject?: string // Email subject line
-  content: string
-  placeholders: string[]
-  active: boolean
-  createdAt: any
-  updatedAt: any
-  createdBy?: string
-}
-
 interface MessageTemplatesTabProps {
   userId?: string
 }
+
+type EditorMode = 'plain' | 'html' | 'preview'
 
 // ============================================================================
 // CONSTANTS
@@ -40,9 +37,11 @@ interface MessageTemplatesTabProps {
 const TEMPLATE_CATEGORIES = [
   { value: 'interview', label: 'Interview', color: '#3b82f6' },
   { value: 'trial', label: 'Trial', color: '#8b5cf6' },
+  { value: 'confirmation', label: 'Confirmation', color: '#10b981' },
+  { value: 'reminder', label: 'Reminder', color: '#f59e0b' },
   { value: 'offer', label: 'Offer', color: '#10b981' },
   { value: 'rejection', label: 'Rejection', color: '#ef4444' },
-  { value: 'reminder', label: 'Reminder', color: '#f59e0b' },
+  { value: 'feedback', label: 'Feedback', color: '#f97316' },
   { value: 'general', label: 'General', color: '#6b7280' },
 ]
 
@@ -52,6 +51,20 @@ const TEMPLATE_CHANNELS = [
   { value: 'both', label: '📱📧 Both', color: '#8b5cf6' },
 ]
 
+const TEMPLATE_TYPES: { value: TemplateType; label: string }[] = [
+  { value: 'interview_invitation', label: 'Interview Invitation' },
+  { value: 'interview_confirmation', label: 'Interview Confirmation' },
+  { value: 'interview_reminder', label: 'Interview Reminder' },
+  { value: 'trial_invitation', label: 'Trial Invitation' },
+  { value: 'trial_confirmation', label: 'Trial Confirmation' },
+  { value: 'trial_reminder', label: 'Trial Reminder' },
+  { value: 'job_offer', label: 'Job Offer' },
+  { value: 'rejection', label: 'Rejection' },
+  { value: 'feedback_request', label: 'Feedback Request' },
+  { value: 'branch_notification', label: 'Branch Notification' },
+  { value: 'custom', label: 'Custom' },
+]
+
 // Available placeholders for templates
 const AVAILABLE_PLACEHOLDERS = PLACEHOLDER_DEFINITIONS.map(p => ({
   key: p.key,
@@ -59,110 +72,25 @@ const AVAILABLE_PLACEHOLDERS = PLACEHOLDER_DEFINITIONS.map(p => ({
   description: p.description
 }))
 
-// Default templates for seeding
-const DEFAULT_TEMPLATES: Omit<MessageTemplate, 'id' | 'createdAt' | 'updatedAt' | 'createdBy'>[] = [
-  {
-    name: 'Interview Invitation',
-    category: 'interview',
-    channel: 'both',
-    subject: 'Interview Invitation - {{jobTitle}} at Allied Pharmacies',
-    content: `Hi {{firstName}},
-
-Thank you for applying for the {{jobTitle}} position at Allied Pharmacies.
-
-We'd like to invite you for an interview. Please book your preferred slot using this link:
-{{interviewBookingLink}}
-
-We look forward to meeting you!
-
-Best regards,
-Allied Pharmacies Recruitment`,
-    placeholders: ['firstName', 'jobTitle', 'interviewBookingLink'],
-    active: true,
-  },
-  {
-    name: 'Interview Reminder',
-    category: 'reminder',
-    channel: 'both',
-    subject: 'Reminder: Your Interview Tomorrow - Allied Pharmacies',
-    content: `Hi {{firstName}},
-
-This is a friendly reminder about your interview tomorrow for the {{jobTitle}} position.
-
-📅 Date: {{interviewDate}}
-⏰ Time: {{interviewTime}}
-📍 Location: {{branchAddress}}
-
-Please arrive 10 minutes early. If you need to reschedule, please let us know as soon as possible.
-
-See you soon!`,
-    placeholders: ['firstName', 'jobTitle', 'interviewDate', 'interviewTime', 'branchAddress'],
-    active: true,
-  },
-  {
-    name: 'Trial Shift Invitation',
-    category: 'trial',
-    channel: 'both',
-    subject: 'Trial Shift Invitation - {{branchName}} - Allied Pharmacies',
-    content: `Hi {{firstName}},
-
-Congratulations! Following your successful interview, we'd like to invite you for a trial shift at {{branchName}}.
-
-Please book your trial slot here:
-{{interviewBookingLink}}
-
-What to bring:
-• Proof of right to work
-• Smart business attire
-• Any relevant certificates
-
-Looking forward to seeing you!
-
-Best regards,
-Allied Pharmacies`,
-    placeholders: ['firstName', 'branchName', 'interviewBookingLink'],
-    active: true,
-  },
-  {
-    name: 'Trial Shift Reminder',
-    category: 'reminder',
-    channel: 'both',
-    subject: 'Reminder: Your Trial Shift Tomorrow - Allied Pharmacies',
-    content: `Hi {{firstName}},
-
-Just a reminder about your trial shift tomorrow at {{branchName}}.
-
-📅 Date: {{interviewDate}}
-⏰ Time: {{interviewTime}}
-📍 Location: {{branchAddress}}
-
-Please arrive 10 minutes early and report to the branch manager.
-
-Good luck!`,
-    placeholders: ['firstName', 'branchName', 'interviewDate', 'interviewTime', 'branchAddress'],
-    active: true,
-  },
-  {
-    name: 'Job Offer',
-    category: 'offer',
-    channel: 'both',
-    subject: 'Job Offer - {{jobTitle}} at Allied Pharmacies 🎉',
-    content: `Hi {{firstName}},
-
-Fantastic news! 🎉
-
-We are delighted to offer you the position of {{jobTitle}} at {{branchName}}.
-
-Please contact us to discuss the next steps.
-
-Welcome to the team!
-
-Best regards,
-Allied Pharmacies`,
-    placeholders: ['firstName', 'jobTitle', 'branchName'],
-    active: true,
-  },
-]
+// Sample data for preview
+const SAMPLE_PREVIEW_DATA: Record<string, string> = {
+  '{{firstName}}': 'John',
+  '{{lastName}}': 'Smith',
+  '{{fullName}}': 'John Smith',
+  '{{email}}': 'john.smith@email.com',
+  '{{phone}}': '07700 900123',
+  '{{jobTitle}}': 'Pharmacist',
+  '{{branchName}}': 'Manchester City Centre',
+  '{{branchAddress}}': '123 High Street, Manchester, M1 1AA',
+  '{{interviewBookingLink}}': 'https://allied-booking.web.app/book/abc123',
+  '{{interviewDate}}': 'Wednesday, 15 January 2026',
+  '{{interviewTime}}': '10:00 AM',
+  '{{duration}}': '30 minutes',
+  '{{confirmationCode}}': 'INT-ABC123',
+  '{{teamsLink}}': 'https://teams.microsoft.com/l/meetup-join/...',
+  '{{feedbackLink}}': 'https://allied-booking.web.app/feedback/xyz789',
+  '{{companyName}}': 'Allied Pharmacies',
+}
 
 // ============================================================================
 // COMPONENT
@@ -170,6 +98,7 @@ Allied Pharmacies`,
 
 export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
   const db = getFirebaseDb()
+  const functions = getFirebaseFunctions()
 
   // State
   const [templates, setTemplates] = useState<MessageTemplate[]>([])
@@ -179,10 +108,13 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
   const [editingTemplate, setEditingTemplate] = useState<MessageTemplate | null>(null)
   const [templateForm, setTemplateForm] = useState({
     name: '',
+    description: '',
     category: 'general' as TemplateCategory,
+    templateType: 'custom' as TemplateType,
     channel: 'both' as TemplateChannel,
     subject: '',
-    content: ''
+    plainContent: '',
+    htmlContent: ''
   })
   const [templateFormError, setTemplateFormError] = useState('')
   const [showDeleteTemplateModal, setShowDeleteTemplateModal] = useState(false)
@@ -193,58 +125,81 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
   const [showPlaceholderHelp, setShowPlaceholderHelp] = useState(false)
   const [templateSearch, setTemplateSearch] = useState('')
   const [previewingTemplate, setPreviewingTemplate] = useState<MessageTemplate | null>(null)
+  const [editorMode, setEditorMode] = useState<EditorMode>('plain')
+  const [showMigrationBanner, setShowMigrationBanner] = useState(false)
+  const [migrating, setMigrating] = useState(false)
+  
+  const previewIframeRef = useRef<HTMLIFrameElement>(null)
 
   // ============================================================================
   // DATA FETCHING
   // ============================================================================
 
   useEffect(() => {
-    async function fetchTemplates() {
-      try {
-        setLoadingTemplates(true)
-        // Use same collection for backward compatibility
-        const templatesRef = collection(db, 'whatsappTemplates')
-        const snapshot = await getDocs(templatesRef)
-
-        if (snapshot.empty) {
-          console.log('No templates found, initializing defaults...')
-          await initializeDefaultTemplates()
-        } else {
-          const data = snapshot.docs.map(doc => {
-            const docData = doc.data()
-            return {
-              id: doc.id,
-              ...docData,
-              // Default channel to 'whatsapp' for backward compatibility
-              channel: docData.channel || 'whatsapp',
-              subject: docData.subject || '',
-            }
-          }) as MessageTemplate[]
-
-          // Sort by category then name
-          data.sort((a, b) => {
-            if (a.category !== b.category) return a.category.localeCompare(b.category)
-            return a.name.localeCompare(b.name)
-          })
-          setTemplates(data)
-        }
-      } catch (err) {
-        console.error('Error fetching templates:', err)
-      } finally {
-        setLoadingTemplates(false)
-      }
-    }
-
     fetchTemplates()
   }, [db])
+
+  const fetchTemplates = async () => {
+    try {
+      setLoadingTemplates(true)
+      
+      // Try messageTemplates first (new collection)
+      let templatesRef = collection(db, 'messageTemplates')
+      let snapshot = await getDocs(query(templatesRef, orderBy('name')))
+      
+      // If empty, try whatsappTemplates (old collection) and show migration banner
+      if (snapshot.empty) {
+        templatesRef = collection(db, 'whatsappTemplates')
+        snapshot = await getDocs(templatesRef)
+        
+        if (!snapshot.empty) {
+          // Old templates exist - show migration banner
+          setShowMigrationBanner(true)
+        }
+      }
+
+      if (snapshot.empty) {
+        console.log('No templates found, initializing defaults...')
+        await initializeDefaultTemplates()
+      } else {
+        const data = snapshot.docs.map(doc => {
+          const docData = doc.data()
+          return {
+            id: doc.id,
+            ...docData,
+            // Handle both old and new schema
+            plainContent: docData.plainContent || docData.content || '',
+            htmlContent: docData.htmlContent || '',
+            channel: docData.channel || 'whatsapp',
+            subject: docData.subject || '',
+            templateType: docData.templateType || 'custom',
+            isSystemTemplate: docData.isSystemTemplate || false,
+            isDefault: docData.isDefault || false,
+            version: docData.version || 1,
+          }
+        }) as MessageTemplate[]
+
+        // Sort by category then name
+        data.sort((a, b) => {
+          if (a.category !== b.category) return a.category.localeCompare(b.category)
+          return a.name.localeCompare(b.name)
+        })
+        setTemplates(data)
+      }
+    } catch (err) {
+      console.error('Error fetching templates:', err)
+    } finally {
+      setLoadingTemplates(false)
+    }
+  }
 
   // ============================================================================
   // HELPER FUNCTIONS
   // ============================================================================
 
   // Extract placeholders from template content
-  const extractPlaceholders = (content: string, subject?: string): string[] => {
-    const allContent = subject ? `${subject} ${content}` : content
+  const extractPlaceholders = (content: string, subject?: string, htmlContent?: string): string[] => {
+    const allContent = [subject, content, htmlContent].filter(Boolean).join(' ')
     const matches = allContent.match(/\{\{(\w+)\}\}/g) || []
     return [...new Set(matches.map(m => m.replace(/\{\{|\}\}/g, '')))]
   }
@@ -264,6 +219,35 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
     })
   }
 
+  // Replace placeholders with sample data for preview
+  const replacePlaceholdersForPreview = (content: string): string => {
+    let result = content
+    Object.entries(SAMPLE_PREVIEW_DATA).forEach(([placeholder, value]) => {
+      result = result.replace(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'), value)
+    })
+    return result
+  }
+
+  // Generate full HTML email for preview
+  const generateHtmlPreview = (template: { subject: string; htmlContent?: string; plainContent: string }): string => {
+    const content = template.htmlContent || convertPlainToHtml(template.plainContent)
+    const fullHtml = DEFAULT_EMAIL_WRAPPER
+      .replace('{{subject}}', replacePlaceholdersForPreview(template.subject))
+      .replace('{{content}}', replacePlaceholdersForPreview(content))
+    return fullHtml
+  }
+
+  // Convert plain text to basic HTML
+  const convertPlainToHtml = (plain: string): string => {
+    const paragraphs = plain.split('\n\n')
+    return `<div class="header">
+  <h1>Message</h1>
+</div>
+<div class="content">
+  ${paragraphs.map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('\n  ')}
+</div>`
+  }
+
   // Filter templates by category, channel, and search
   const filteredTemplates = templates.filter(t => {
     const matchesCategory = templateCategoryFilter === 'all' || t.category === templateCategoryFilter
@@ -272,7 +256,7 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
       t.channel === 'both'
     const matchesSearch = !templateSearch ||
       t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
-      t.content.toLowerCase().includes(templateSearch.toLowerCase())
+      t.plainContent.toLowerCase().includes(templateSearch.toLowerCase())
     return matchesCategory && matchesChannel && matchesSearch
   })
 
@@ -283,12 +267,13 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
   // Initialize default templates
   const initializeDefaultTemplates = async () => {
     try {
-      const templatesRef = collection(db, 'whatsappTemplates')
+      const templatesRef = collection(db, 'messageTemplates')
       const newTemplates: MessageTemplate[] = []
 
-      for (const defaultTemplate of DEFAULT_TEMPLATES) {
+      for (const defaultTemplate of DEFAULT_MESSAGE_TEMPLATES) {
         const docRef = await addDoc(templatesRef, {
           ...defaultTemplate,
+          version: 1,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
           createdBy: userId || 'system',
@@ -296,10 +281,11 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
         newTemplates.push({
           id: docRef.id,
           ...defaultTemplate,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          version: 1,
+          createdAt: new Date() as any,
+          updatedAt: new Date() as any,
           createdBy: userId || 'system',
-        })
+        } as MessageTemplate)
       }
 
       newTemplates.sort((a, b) => {
@@ -312,10 +298,40 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
     }
   }
 
+  // Run migration from whatsappTemplates to messageTemplates
+  const handleRunMigration = async () => {
+    try {
+      setMigrating(true)
+      const migrateTemplateFn = httpsCallable(functions, 'migrateMessageTemplates')
+      const result = await migrateTemplateFn({})
+      console.log('Migration result:', result)
+      
+      // Refresh templates
+      await fetchTemplates()
+      setShowMigrationBanner(false)
+      alert('Migration complete! Your templates have been upgraded.')
+    } catch (err) {
+      console.error('Migration failed:', err)
+      alert('Migration failed. Please try again or contact support.')
+    } finally {
+      setMigrating(false)
+    }
+  }
+
   const handleAddTemplate = () => {
     setEditingTemplate(null)
-    setTemplateForm({ name: '', category: 'general', channel: 'both', subject: '', content: '' })
+    setTemplateForm({ 
+      name: '', 
+      description: '',
+      category: 'general', 
+      templateType: 'custom',
+      channel: 'both', 
+      subject: '', 
+      plainContent: '',
+      htmlContent: ''
+    })
     setTemplateFormError('')
+    setEditorMode('plain')
     setShowTemplateModal(true)
   }
 
@@ -323,12 +339,16 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
     setEditingTemplate(template)
     setTemplateForm({
       name: template.name,
+      description: template.description || '',
       category: template.category,
+      templateType: template.templateType || 'custom',
       channel: template.channel,
       subject: template.subject || '',
-      content: template.content
+      plainContent: template.plainContent || '',
+      htmlContent: template.htmlContent || ''
     })
     setTemplateFormError('')
+    setEditorMode(template.htmlContent ? 'html' : 'plain')
     setShowTemplateModal(true)
   }
 
@@ -337,8 +357,8 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
       setTemplateFormError('Template name is required')
       return
     }
-    if (!templateForm.content.trim()) {
-      setTemplateFormError('Template content is required')
+    if (!templateForm.plainContent.trim()) {
+      setTemplateFormError('Plain text content is required (used for WhatsApp)')
       return
     }
     // Require subject for email templates
@@ -359,30 +379,40 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
 
     try {
       setSavingTemplate(true)
-      const templatesRef = collection(db, 'whatsappTemplates')
-      const placeholders = extractPlaceholders(templateForm.content, templateForm.subject)
+      const templatesRef = collection(db, 'messageTemplates')
+      const placeholders = extractPlaceholders(
+        templateForm.plainContent, 
+        templateForm.subject, 
+        templateForm.htmlContent
+      )
+
+      const templateData = {
+        name: templateForm.name.trim(),
+        description: templateForm.description.trim() || null,
+        category: templateForm.category,
+        templateType: templateForm.templateType,
+        channel: templateForm.channel,
+        subject: templateForm.subject.trim(),
+        plainContent: templateForm.plainContent.trim(),
+        htmlContent: templateForm.htmlContent.trim() || null,
+        placeholders,
+        active: true,
+        updatedAt: serverTimestamp(),
+      }
 
       if (editingTemplate) {
-        await updateDoc(doc(db, 'whatsappTemplates', editingTemplate.id), {
-          name: templateForm.name.trim(),
-          category: templateForm.category,
-          channel: templateForm.channel,
-          subject: templateForm.subject.trim(),
-          content: templateForm.content.trim(),
-          placeholders,
-          updatedAt: serverTimestamp(),
+        // Preserve system template flags when editing
+        await updateDoc(doc(db, 'messageTemplates', editingTemplate.id), {
+          ...templateData,
+          version: (editingTemplate.version || 1) + 1,
         })
         setTemplates(prev => prev.map(t =>
           t.id === editingTemplate.id
             ? {
                 ...t,
-                name: templateForm.name.trim(),
-                category: templateForm.category,
-                channel: templateForm.channel,
-                subject: templateForm.subject.trim(),
-                content: templateForm.content.trim(),
-                placeholders,
-                updatedAt: new Date(),
+                ...templateData,
+                version: (t.version || 1) + 1,
+                updatedAt: new Date() as any,
               }
             : t
         ).sort((a, b) => {
@@ -391,30 +421,22 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
         }))
       } else {
         const docRef = await addDoc(templatesRef, {
-          name: templateForm.name.trim(),
-          category: templateForm.category,
-          channel: templateForm.channel,
-          subject: templateForm.subject.trim(),
-          content: templateForm.content.trim(),
-          placeholders,
-          active: true,
+          ...templateData,
+          isSystemTemplate: false,
+          isDefault: false,
+          version: 1,
           createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
           createdBy: userId || 'system',
         })
         setTemplates(prev => [...prev, {
           id: docRef.id,
-          name: templateForm.name.trim(),
-          category: templateForm.category,
-          channel: templateForm.channel,
-          subject: templateForm.subject.trim(),
-          content: templateForm.content.trim(),
-          placeholders,
-          active: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          ...templateData,
+          isSystemTemplate: false,
+          isDefault: false,
+          version: 1,
+          createdAt: new Date() as any,
           createdBy: userId || 'system',
-        }].sort((a, b) => {
+        } as MessageTemplate].sort((a, b) => {
           if (a.category !== b.category) return a.category.localeCompare(b.category)
           return a.name.localeCompare(b.name)
         }))
@@ -431,7 +453,7 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
 
   const handleToggleTemplateActive = async (template: MessageTemplate) => {
     try {
-      await updateDoc(doc(db, 'whatsappTemplates', template.id), {
+      await updateDoc(doc(db, 'messageTemplates', template.id), {
         active: !template.active,
         updatedAt: serverTimestamp(),
       })
@@ -444,6 +466,10 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
   }
 
   const handleConfirmDeleteTemplate = (template: MessageTemplate) => {
+    if (template.isSystemTemplate) {
+      alert('System templates cannot be deleted. You can deactivate them instead.')
+      return
+    }
     setDeletingTemplate(template)
     setShowDeleteTemplateModal(true)
   }
@@ -453,7 +479,7 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
 
     try {
       setDeletingTemplateLoading(true)
-      await deleteDoc(doc(db, 'whatsappTemplates', deletingTemplate.id))
+      await deleteDoc(doc(db, 'messageTemplates', deletingTemplate.id))
       setTemplates(prev => prev.filter(t => t.id !== deletingTemplate.id))
       setShowDeleteTemplateModal(false)
       setDeletingTemplate(null)
@@ -468,27 +494,31 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
     setEditingTemplate(null)
     setTemplateForm({
       name: `${template.name} (Copy)`,
+      description: template.description || '',
       category: template.category,
+      templateType: 'custom',
       channel: template.channel,
       subject: template.subject || '',
-      content: template.content
+      plainContent: template.plainContent || '',
+      htmlContent: template.htmlContent || ''
     })
     setTemplateFormError('')
+    setEditorMode(template.htmlContent ? 'html' : 'plain')
     setShowTemplateModal(true)
   }
 
   const handleInsertPlaceholder = (key: string) => {
-    setTemplateForm(prev => ({
-      ...prev,
-      content: prev.content + `{{${key}}}`
-    }))
-  }
-
-  const handleInsertPlaceholderSubject = (key: string) => {
-    setTemplateForm(prev => ({
-      ...prev,
-      subject: prev.subject + `{{${key}}}`
-    }))
+    if (editorMode === 'html') {
+      setTemplateForm(prev => ({
+        ...prev,
+        htmlContent: prev.htmlContent + key
+      }))
+    } else {
+      setTemplateForm(prev => ({
+        ...prev,
+        plainContent: prev.plainContent + key
+      }))
+    }
   }
 
   // Get channel badge
@@ -507,6 +537,24 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
     )
   }
 
+  // Update preview iframe when content changes
+  useEffect(() => {
+    if (editorMode === 'preview' && previewIframeRef.current) {
+      const htmlPreview = generateHtmlPreview({
+        subject: templateForm.subject,
+        htmlContent: templateForm.htmlContent,
+        plainContent: templateForm.plainContent
+      })
+      const iframe = previewIframeRef.current
+      const doc = iframe.contentDocument || iframe.contentWindow?.document
+      if (doc) {
+        doc.open()
+        doc.write(htmlPreview)
+        doc.close()
+      }
+    }
+  }, [editorMode, templateForm.subject, templateForm.htmlContent, templateForm.plainContent])
+
   // ============================================================================
   // RENDER
   // ============================================================================
@@ -523,6 +571,33 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
             + New Template
           </Button>
         </div>
+
+        {/* Migration Banner */}
+        {showMigrationBanner && (
+          <div className="migration-banner">
+            <div className="migration-banner-content">
+              <span className="migration-icon">🔄</span>
+              <div className="migration-text">
+                <strong>Template System Upgrade Available</strong>
+                <p>Migrate your templates to the new unified system with HTML email support.</p>
+              </div>
+              <Button 
+                variant="primary" 
+                size="sm" 
+                onClick={handleRunMigration}
+                disabled={migrating}
+              >
+                {migrating ? 'Migrating...' : 'Upgrade Now'}
+              </Button>
+              <button 
+                className="migration-dismiss"
+                onClick={() => setShowMigrationBanner(false)}
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
 
         {loadingTemplates ? (
           <div className="loading-state">
@@ -585,7 +660,7 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
                 filteredTemplates.map(template => {
                   const category = TEMPLATE_CATEGORIES.find(c => c.value === template.category)
                   return (
-                    <Card key={template.id} className={`template-card ${!template.active ? 'inactive' : ''}`}>
+                    <Card key={template.id} className={`template-card ${!template.active ? 'inactive' : ''} ${template.isSystemTemplate ? 'system-template' : ''}`}>
                       <div className="template-card-header">
                         <div className="template-badges">
                           <span
@@ -598,6 +673,12 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
                             {category?.label}
                           </span>
                           {getChannelBadge(template.channel)}
+                          {template.isSystemTemplate && (
+                            <span className="system-badge" title="System template">🔒</span>
+                          )}
+                          {template.htmlContent && (
+                            <span className="html-badge" title="Has HTML version">HTML</span>
+                          )}
                         </div>
                         <div className="template-actions">
                           <button
@@ -610,24 +691,29 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
                         </div>
                       </div>
                       <h4 className="template-name">{template.name}</h4>
+                      {template.description && (
+                        <p className="template-description">{template.description}</p>
+                      )}
                       {template.subject && (
                         <p className="template-subject">
                           <strong>Subject:</strong> {template.subject}
                         </p>
                       )}
                       <div className="template-preview" onClick={() => setPreviewingTemplate(template)}>
-                        {template.content.substring(0, 120)}
-                        {template.content.length > 120 && '...'}
+                        {(template.plainContent || '').substring(0, 120)}
+                        {(template.plainContent || '').length > 120 && '...'}
                       </div>
                       <div className="template-card-footer">
                         <span className="placeholder-count">
-                          {template.placeholders.length} placeholder{template.placeholders.length !== 1 ? 's' : ''}
+                          {template.placeholders?.length || 0} placeholder{(template.placeholders?.length || 0) !== 1 ? 's' : ''}
                         </span>
                         <div className="template-card-actions">
                           <button onClick={() => setPreviewingTemplate(template)} title="Preview">👁️</button>
                           <button onClick={() => handleDuplicateTemplate(template)} title="Duplicate">📋</button>
                           <button onClick={() => handleEditTemplate(template)} title="Edit">✏️</button>
-                          <button onClick={() => handleConfirmDeleteTemplate(template)} title="Delete">🗑️</button>
+                          {!template.isSystemTemplate && (
+                            <button onClick={() => handleConfirmDeleteTemplate(template)} title="Delete">🗑️</button>
+                          )}
                         </div>
                       </div>
                     </Card>
@@ -643,7 +729,8 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
                   ? `${templates.length} template${templates.length !== 1 ? 's' : ''}`
                   : `Showing ${filteredTemplates.length} of ${templates.length} templates`
                 } • {templates.filter(t => t.active).length} active
-                • {templates.filter(t => t.channel === 'email' || t.channel === 'both').length} email-enabled
+                • {templates.filter(t => t.htmlContent).length} with HTML
+                • {templates.filter(t => t.isSystemTemplate).length} system
               </div>
             )}
           </>
@@ -655,9 +742,10 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
         isOpen={showTemplateModal}
         onClose={() => setShowTemplateModal(false)}
         title={editingTemplate ? 'Edit Template' : 'New Template'}
-        size="lg"
+        size="xl"
       >
         <div className="template-form">
+          {/* Basic Info Row */}
           <div className="form-row">
             <div className="form-group" style={{ flex: 2 }}>
               <label>Template Name *</label>
@@ -695,6 +783,16 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
             </div>
           </div>
 
+          {/* Description */}
+          <div className="form-group">
+            <label>Description (optional)</label>
+            <Input
+              value={templateForm.description}
+              onChange={(e) => setTemplateForm(prev => ({ ...prev, description: e.target.value }))}
+              placeholder="Brief description of when to use this template"
+            />
+          </div>
+
           {/* Email Subject (only for email templates) */}
           {(templateForm.channel === 'email' || templateForm.channel === 'both') && (
             <div className="form-group">
@@ -708,72 +806,133 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
                   }}
                   placeholder="e.g., Interview Invitation - {{jobTitle}} at Allied Pharmacies"
                 />
-                <button
-                  type="button"
-                  className="insert-placeholder-btn"
-                  onClick={() => setShowPlaceholderHelp(!showPlaceholderHelp)}
-                  title="Insert placeholder"
-                >
-                  {'{ }'}
-                </button>
               </div>
             </div>
           )}
 
-          <div className="form-group">
-            <div className="template-content-header">
-              <label>Message Content *</label>
-              <button
-                type="button"
-                className="placeholder-help-btn"
-                onClick={() => setShowPlaceholderHelp(!showPlaceholderHelp)}
-              >
-                {showPlaceholderHelp ? 'Hide placeholders' : 'Show placeholders'}
-              </button>
+          {/* Placeholder Help */}
+          <div className="placeholder-toggle-section">
+            <button
+              type="button"
+              className="placeholder-help-btn"
+              onClick={() => setShowPlaceholderHelp(!showPlaceholderHelp)}
+            >
+              {showPlaceholderHelp ? '▼ Hide placeholders' : '▶ Show available placeholders'}
+            </button>
+          </div>
+          
+          {showPlaceholderHelp && (
+            <div className="placeholder-help-panel">
+              <p className="placeholder-help-intro">Click a placeholder to insert it:</p>
+              <div className="placeholder-buttons">
+                {AVAILABLE_PLACEHOLDERS.map(p => (
+                  <button
+                    key={p.key}
+                    type="button"
+                    className="placeholder-insert-btn"
+                    onClick={() => handleInsertPlaceholder(p.key)}
+                    title={p.description}
+                  >
+                    {p.key.replace(/\{\{|\}\}/g, '')}
+                  </button>
+                ))}
+              </div>
             </div>
-            
-            {showPlaceholderHelp && (
-              <div className="placeholder-help-panel">
-                <p className="placeholder-help-intro">Click a placeholder to insert it into your message:</p>
-                <div className="placeholder-buttons">
-                  {AVAILABLE_PLACEHOLDERS.map(p => (
-                    <button
-                      key={p.key}
-                      type="button"
-                      className="placeholder-insert-btn"
-                      onClick={() => handleInsertPlaceholder(p.key)}
-                      title={p.description}
-                    >
-                      {p.key}
-                    </button>
-                  ))}
-                </div>
+          )}
+
+          {/* Editor Mode Tabs */}
+          <div className="editor-tabs">
+            <button 
+              className={`editor-tab ${editorMode === 'plain' ? 'active' : ''}`}
+              onClick={() => setEditorMode('plain')}
+            >
+              📝 Plain Text
+            </button>
+            {(templateForm.channel === 'email' || templateForm.channel === 'both') && (
+              <>
+                <button 
+                  className={`editor-tab ${editorMode === 'html' ? 'active' : ''}`}
+                  onClick={() => setEditorMode('html')}
+                >
+                  🌐 HTML
+                </button>
+                <button 
+                  className={`editor-tab ${editorMode === 'preview' ? 'active' : ''}`}
+                  onClick={() => setEditorMode('preview')}
+                >
+                  👁️ Preview
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Content Editors */}
+          <div className="editor-content">
+            {editorMode === 'plain' && (
+              <div className="form-group">
+                <label>Plain Text Content * <span className="label-hint">(Used for WhatsApp & plain emails)</span></label>
+                <Textarea
+                  value={templateForm.plainContent}
+                  onChange={(e) => {
+                    setTemplateForm(prev => ({ ...prev, plainContent: e.target.value }))
+                    setTemplateFormError('')
+                  }}
+                  placeholder="Write your message here. Use {{placeholders}} for dynamic content..."
+                  rows={12}
+                />
               </div>
             )}
 
-            <Textarea
-              value={templateForm.content}
-              onChange={(e) => {
-                setTemplateForm(prev => ({ ...prev, content: e.target.value }))
-                setTemplateFormError('')
-              }}
-              placeholder="Write your message here. Use {{placeholders}} for dynamic content..."
-              rows={10}
-            />
-            
-            {templateForm.content && (
-              <div className="detected-placeholders">
-                <span className="detected-label">Detected placeholders:</span>
-                {extractPlaceholders(templateForm.content, templateForm.subject).length > 0 ? (
-                  extractPlaceholders(templateForm.content, templateForm.subject).map(p => (
-                    <span key={p} className="placeholder-tag">{`{{${p}}}`}</span>
-                  ))
-                ) : (
-                  <span className="no-placeholders">None</span>
-                )}
+            {editorMode === 'html' && (
+              <div className="form-group">
+                <label>HTML Content <span className="label-hint">(Optional - for rich email formatting)</span></label>
+                <Textarea
+                  value={templateForm.htmlContent}
+                  onChange={(e) => setTemplateForm(prev => ({ ...prev, htmlContent: e.target.value }))}
+                  placeholder={`<div class="header">
+  <h1>Your Title</h1>
+</div>
+<div class="content">
+  <p>Hi {{firstName}},</p>
+  <p>Your message here...</p>
+</div>`}
+                  rows={12}
+                  className="html-editor"
+                />
+                <p className="html-hint">
+                  💡 Leave blank to auto-generate from plain text. Use classes: <code>header</code>, <code>content</code>, <code>details-box</code>, <code>btn</code>
+                </p>
+              </div>
+            )}
+
+            {editorMode === 'preview' && (
+              <div className="email-preview-container">
+                <div className="preview-header-bar">
+                  <span>📧 Email Preview (with sample data)</span>
+                </div>
+                <iframe
+                  ref={previewIframeRef}
+                  className="email-preview-iframe"
+                  title="Email Preview"
+                  sandbox="allow-same-origin"
+                />
               </div>
             )}
           </div>
+
+          {/* Detected Placeholders */}
+          {(templateForm.plainContent || templateForm.htmlContent) && (
+            <div className="detected-placeholders">
+              <span className="detected-label">Detected placeholders:</span>
+              {extractPlaceholders(templateForm.plainContent, templateForm.subject, templateForm.htmlContent).length > 0 ? (
+                extractPlaceholders(templateForm.plainContent, templateForm.subject, templateForm.htmlContent).map(p => (
+                  <span key={p} className="placeholder-tag">{`{{${p}}}`}</span>
+                ))
+              ) : (
+                <span className="no-placeholders">None</span>
+              )}
+            </div>
+          )}
 
           {templateFormError && (
             <p className="form-error">{templateFormError}</p>
@@ -822,7 +981,7 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
         isOpen={!!previewingTemplate}
         onClose={() => setPreviewingTemplate(null)}
         title="Template Preview"
-        size="md"
+        size="lg"
       >
         {previewingTemplate && (
           <div className="template-preview-modal">
@@ -838,10 +997,34 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
                   {TEMPLATE_CATEGORIES.find(c => c.value === previewingTemplate.category)?.label}
                 </span>
                 {getChannelBadge(previewingTemplate.channel)}
+                {previewingTemplate.isSystemTemplate && (
+                  <span className="system-badge">🔒 System</span>
+                )}
               </div>
               <h3>{previewingTemplate.name}</h3>
+              {previewingTemplate.description && (
+                <p className="preview-description">{previewingTemplate.description}</p>
+              )}
               {!previewingTemplate.active && <span className="inactive-badge">Inactive</span>}
             </div>
+
+            {/* Preview Tabs for Email Templates */}
+            {(previewingTemplate.channel === 'email' || previewingTemplate.channel === 'both') && (
+              <div className="preview-tabs">
+                <button 
+                  className={`preview-tab ${editorMode !== 'preview' ? 'active' : ''}`}
+                  onClick={() => setEditorMode('plain')}
+                >
+                  Plain Text
+                </button>
+                <button 
+                  className={`preview-tab ${editorMode === 'preview' ? 'active' : ''}`}
+                  onClick={() => setEditorMode('preview')}
+                >
+                  HTML Preview
+                </button>
+              </div>
+            )}
 
             {previewingTemplate.subject && (
               <div className="preview-subject">
@@ -849,13 +1032,28 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
               </div>
             )}
             
-            <div className="preview-content">
-              <div className="preview-message">
-                {highlightPlaceholders(previewingTemplate.content)}
+            {editorMode === 'preview' && (previewingTemplate.channel === 'email' || previewingTemplate.channel === 'both') ? (
+              <div className="email-preview-container modal-preview">
+                <iframe
+                  className="email-preview-iframe"
+                  title="Email Preview"
+                  srcDoc={generateHtmlPreview({
+                    subject: previewingTemplate.subject || '',
+                    htmlContent: previewingTemplate.htmlContent,
+                    plainContent: previewingTemplate.plainContent
+                  })}
+                  sandbox="allow-same-origin"
+                />
               </div>
-            </div>
+            ) : (
+              <div className="preview-content">
+                <div className="preview-message">
+                  {highlightPlaceholders(previewingTemplate.plainContent || '')}
+                </div>
+              </div>
+            )}
 
-            {previewingTemplate.placeholders.length > 0 && (
+            {previewingTemplate.placeholders && previewingTemplate.placeholders.length > 0 && (
               <div className="preview-placeholders">
                 <span className="preview-placeholders-label">Placeholders used:</span>
                 <div className="preview-placeholders-list">
@@ -898,6 +1096,180 @@ export function MessageTemplatesTab({ userId }: MessageTemplatesTabProps) {
           </div>
         )}
       </Modal>
+
+      {/* Styles for new features */}
+      <style>{`
+        .migration-banner {
+          background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+          border-radius: 8px;
+          padding: 16px;
+          margin-bottom: 20px;
+        }
+        .migration-banner-content {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          color: white;
+        }
+        .migration-icon {
+          font-size: 24px;
+        }
+        .migration-text {
+          flex: 1;
+        }
+        .migration-text strong {
+          display: block;
+          margin-bottom: 4px;
+        }
+        .migration-text p {
+          margin: 0;
+          opacity: 0.9;
+          font-size: 14px;
+        }
+        .migration-dismiss {
+          background: none;
+          border: none;
+          color: white;
+          font-size: 20px;
+          cursor: pointer;
+          opacity: 0.7;
+        }
+        .migration-dismiss:hover {
+          opacity: 1;
+        }
+
+        .system-template {
+          border-left: 3px solid #8b5cf6;
+        }
+        .system-badge {
+          font-size: 12px;
+        }
+        .html-badge {
+          background: #e0f2fe;
+          color: #0369a1;
+          padding: 2px 6px;
+          border-radius: 4px;
+          font-size: 10px;
+          font-weight: 600;
+        }
+
+        .editor-tabs {
+          display: flex;
+          gap: 0;
+          border-bottom: 1px solid #e5e7eb;
+          margin-bottom: 16px;
+        }
+        .editor-tab {
+          padding: 10px 20px;
+          background: none;
+          border: none;
+          border-bottom: 2px solid transparent;
+          cursor: pointer;
+          font-size: 14px;
+          color: #6b7280;
+          transition: all 0.2s;
+        }
+        .editor-tab:hover {
+          color: #3b82f6;
+        }
+        .editor-tab.active {
+          color: #3b82f6;
+          border-bottom-color: #3b82f6;
+        }
+
+        .html-editor {
+          font-family: 'Monaco', 'Menlo', monospace;
+          font-size: 13px;
+        }
+        .html-hint {
+          margin-top: 8px;
+          font-size: 12px;
+          color: #6b7280;
+        }
+        .html-hint code {
+          background: #f3f4f6;
+          padding: 2px 6px;
+          border-radius: 4px;
+        }
+
+        .email-preview-container {
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+          overflow: hidden;
+        }
+        .preview-header-bar {
+          background: #f9fafb;
+          padding: 8px 12px;
+          border-bottom: 1px solid #e5e7eb;
+          font-size: 12px;
+          color: #6b7280;
+        }
+        .email-preview-iframe {
+          width: 100%;
+          height: 400px;
+          border: none;
+          background: #f5f5f5;
+        }
+        .modal-preview .email-preview-iframe {
+          height: 350px;
+        }
+
+        .preview-tabs {
+          display: flex;
+          gap: 0;
+          margin-bottom: 16px;
+        }
+        .preview-tab {
+          padding: 8px 16px;
+          background: #f3f4f6;
+          border: none;
+          cursor: pointer;
+          font-size: 13px;
+        }
+        .preview-tab:first-child {
+          border-radius: 6px 0 0 6px;
+        }
+        .preview-tab:last-child {
+          border-radius: 0 6px 6px 0;
+        }
+        .preview-tab.active {
+          background: #3b82f6;
+          color: white;
+        }
+
+        .placeholder-toggle-section {
+          margin-bottom: 12px;
+        }
+        .placeholder-help-btn {
+          background: none;
+          border: none;
+          color: #3b82f6;
+          cursor: pointer;
+          font-size: 13px;
+          padding: 0;
+        }
+        .placeholder-help-btn:hover {
+          text-decoration: underline;
+        }
+
+        .label-hint {
+          font-weight: normal;
+          color: #9ca3af;
+          font-size: 12px;
+        }
+
+        .template-description {
+          font-size: 13px;
+          color: #6b7280;
+          margin: 4px 0 8px;
+        }
+
+        .preview-description {
+          color: #6b7280;
+          font-size: 14px;
+          margin-top: 4px;
+        }
+      `}</style>
     </>
   )
 }
