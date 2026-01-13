@@ -235,6 +235,8 @@ export function EmailModal({
         candidateEmail?: string
         type: 'interview' | 'trial'
         jobTitle?: string
+        branchId?: string
+        branchName?: string
         expiryDays?: number
         maxUses?: number
       }, {
@@ -250,6 +252,8 @@ export function EmailModal({
         candidateEmail: candidate.email,
         type,
         jobTitle: candidate.jobTitle,
+        branchId: candidate.branchId,
+        branchName: candidate.branchName,
         expiryDays: expiry,
         maxUses: 1,
       })

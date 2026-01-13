@@ -190,6 +190,8 @@ export function WhatsAppModal({ isOpen, onClose, candidate, onLogActivity }: Wha
         candidateEmail?: string
         type: 'interview' | 'trial'
         jobTitle?: string
+        branchId?: string
+        branchName?: string
         expiryDays?: number
         maxUses?: number
       }, {
@@ -205,6 +207,8 @@ export function WhatsAppModal({ isOpen, onClose, candidate, onLogActivity }: Wha
         candidateEmail: candidate.email,
         type,
         jobTitle: candidate.jobTitle,
+        branchId: candidate.branchId,
+        branchName: candidate.branchName,
         expiryDays: expiry,
         maxUses: 1,
       })

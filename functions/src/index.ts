@@ -583,6 +583,8 @@ interface CreateBookingLinkRequest {
   type: 'interview' | 'trial'
   jobId?: string
   jobTitle?: string
+  branchId?: string
+  branchName?: string
   location?: string
   expiryDays?: number  // Default: 3 days
   maxUses?: number     // Default: 1
@@ -641,7 +643,9 @@ export const createBookingLink = onCall<CreateBookingLinkRequest, Promise<Create
       candidateEmail,
       type, 
       jobId, 
-      jobTitle, 
+      jobTitle,
+      branchId,
+      branchName,
       location,
       expiryDays = 3,
       maxUses = 1
@@ -679,6 +683,8 @@ export const createBookingLink = onCall<CreateBookingLinkRequest, Promise<Create
         type,
         jobId: jobId || null,
         jobTitle: jobTitle || null,
+        branchId: branchId || null,
+        branchName: branchName || null,
         location: location || null,
         status: 'active',
         expiresAt,
@@ -1086,3 +1092,11 @@ export { markLapsedInterviews, resolveLapsedInterview, onCandidateStatusChange, 
 
 // Job import
 export { parseIndeedJob } from './jobImport'
+
+// Trial notifications and feedback
+export { 
+  sendTrialBranchNotification, 
+  sendDailyFeedbackRequests, 
+  submitTrialFeedback, 
+  validateFeedbackToken 
+} from './trialNotifications'
