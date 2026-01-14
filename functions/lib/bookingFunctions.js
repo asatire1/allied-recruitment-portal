@@ -127,7 +127,17 @@ function getDefaultInterviewSettings() {
             { dayOfWeek: 5, startTime: '09:00', endTime: '17:00', enabled: true }, // Friday
             { dayOfWeek: 6, startTime: '09:00', endTime: '17:00', enabled: false }, // Saturday
         ],
-        blockedDates: []
+        blockedDates: [],
+        interviewSlots: [
+            {
+                id: 'slot-1',
+                name: 'Interview Slot 1',
+                startTime: '09:00',
+                endTime: '17:00',
+                enabledDays: [1, 2, 3, 4, 5], // Mon-Fri
+                active: true,
+            }
+        ]
     };
 }
 async function getInterviewAvailabilitySettings() {
@@ -135,13 +145,15 @@ async function getInterviewAvailabilitySettings() {
         const settingsDoc = await db.collection('settings').doc('interviewAvailability').get();
         if (settingsDoc.exists) {
             const data = settingsDoc.data();
+            const defaults = getDefaultInterviewSettings();
             return {
                 slotDuration: data?.slotDuration || 30,
                 bufferTime: data?.bufferTime || 15,
                 maxAdvanceBooking: data?.maxAdvanceBooking || 14,
                 minNoticeHours: data?.minNoticeHours || 24,
-                slots: data?.slots || getDefaultInterviewSettings().slots,
-                blockedDates: data?.blockedDates || []
+                slots: data?.slots || defaults.slots,
+                blockedDates: data?.blockedDates || [],
+                interviewSlots: data?.interviewSlots || defaults.interviewSlots
             };
         }
     }
@@ -402,6 +414,7 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({
     // Get availability settings based on booking type
     let settings;
     let maxTrialsPerDay = 1; // Default
+    let interviewSettings = null; // For parallel interview slots
     if (bookingType === 'trial') {
         // Read from trialAvailability settings
         const trialSettings = await getTrialAvailabilitySettings();
@@ -418,8 +431,9 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({
     }
     else {
         // Read from interviewAvailability settings (also uses slots array format)
-        const interviewSettings = await getInterviewAvailabilitySettings();
+        interviewSettings = await getInterviewAvailabilitySettings();
         console.log('getBookingTimeSlots - Using interview settings:', JSON.stringify(interviewSettings.slots));
+        console.log('getBookingTimeSlots - Interview slots for parallel bookings:', JSON.stringify(interviewSettings.interviewSlots));
         settings = {
             schedule: convertTrialSlotsToSchedule(interviewSettings.slots),
             slotDuration: interviewSettings.slotDuration,
@@ -543,6 +557,27 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({
             blockReason: `This branch has reached the maximum of ${maxTrialsPerDay} trial${maxTrialsPerDay > 1 ? 's' : ''} for this day`
         };
     }
+    // =========================================================================
+    // GET ACTIVE INTERVIEW SLOTS FOR THIS DAY (for parallel booking capacity)
+    // =========================================================================
+    let activeInterviewSlots = [];
+    if (bookingType === 'interview' && interviewSettings?.interviewSlots) {
+        activeInterviewSlots = interviewSettings.interviewSlots.filter(slot => slot.active && slot.enabledDays.includes(dayOfWeek));
+        console.log(`Active interview slots for day ${dayOfWeek}: ${activeInterviewSlots.length}`, activeInterviewSlots.map(s => `${s.name} (${s.startTime}-${s.endTime})`));
+    }
+    // Helper: Check if a time falls within an interview slot's time range
+    const timeInMinutes = (timeStr) => {
+        const [h, m] = timeStr.split(':').map(Number);
+        return h * 60 + m;
+    };
+    const isTimeInSlotRange = (timeStr, interviewSlot) => {
+        const timeMin = timeInMinutes(timeStr);
+        const slotStartMin = timeInMinutes(interviewSlot.startTime);
+        const slotEndMin = timeInMinutes(interviewSlot.endTime);
+        // Time is in range if it starts within the slot's window
+        // (the interview duration should also fit, but we assume it does based on global settings)
+        return timeMin >= slotStartMin && (timeMin + slotDuration) <= slotEndMin;
+    };
     // Generate time slots
     const slots = [];
     const now = new Date();
@@ -562,8 +597,22 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({
             const slotEnd = new Date(slotStart.getTime() + slotDuration * 60000);
             // Check minimum notice
             const meetsNotice = slotStart >= minNoticeTime;
-            // Check for conflicts with existing bookings at THIS BRANCH
-            const hasConflict = allBookingDocs.some(booking => {
+            // =====================================================================
+            // PER-SLOT TIME RANGE CHECK: Calculate capacity for THIS specific time
+            // =====================================================================
+            let capacityAtThisTime = 1; // Default if no interview slots configured
+            if (bookingType === 'interview' && activeInterviewSlots.length > 0) {
+                // Count how many interview slots cover this time
+                const slotsAtThisTime = activeInterviewSlots.filter(is => isTimeInSlotRange(timeStr, is));
+                capacityAtThisTime = slotsAtThisTime.length;
+                // If no interview slots cover this time, skip it entirely
+                if (capacityAtThisTime === 0) {
+                    currentMinutes += slotInterval + bufferTime;
+                    continue;
+                }
+            }
+            // Count conflicting bookings for this time slot
+            const conflictingBookings = allBookingDocs.filter(booking => {
                 // Support both field names
                 const existingStart = (booking.scheduledDate || booking.scheduledAt)?.toDate?.();
                 if (!existingStart)
@@ -575,6 +624,15 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({
                 const bufferedSlotEnd = new Date(slotEnd.getTime() + bufferTime * 60000);
                 return bufferedSlotStart < existingEnd && bufferedSlotEnd > existingStart;
             });
+            // For interviews: slot is available if fewer bookings than capacity AT THIS TIME
+            // For trials: slot is unavailable if any conflict (capacity is 1 per branch)
+            const hasConflict = bookingType === 'trial'
+                ? conflictingBookings.length > 0
+                : conflictingBookings.length >= capacityAtThisTime;
+            // Calculate remaining capacity for display
+            const remainingCapacity = bookingType === 'interview'
+                ? capacityAtThisTime - conflictingBookings.length
+                : 0;
             // Check if slot falls within lunch block (skip for trials - they're 4 hours and will span lunch anyway)
             const inLunchBlock = bookingType !== 'trial' && isInLunchBlock(timeStr, slotDuration, blocksSettings.lunchBlock);
             // Determine availability and reason
@@ -584,7 +642,7 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({
                 reason = 'Too short notice';
             }
             else if (hasConflict) {
-                reason = 'Already booked';
+                reason = 'Fully booked';
             }
             else if (inLunchBlock) {
                 reason = 'Lunch break';
@@ -592,7 +650,9 @@ exports.getBookingTimeSlots = (0, https_1.onCall)({
             slots.push({
                 time: timeStr,
                 available,
-                ...(reason && { reason })
+                ...(reason && { reason }),
+                // Include remaining capacity for interviews (helpful for UI)
+                ...(bookingType === 'interview' && remainingCapacity > 0 && { remainingCapacity })
             });
             currentMinutes += slotInterval + bufferTime;
         }
@@ -683,6 +743,39 @@ exports.submitBooking = (0, https_1.onCall)({
         }
     }
     // =========================================================================
+    // GET INTERVIEW CAPACITY FOR THIS SPECIFIC TIME (per-slot time ranges)
+    // =========================================================================
+    let interviewCapacity = 1; // Default capacity
+    if (linkData.type === 'interview') {
+        const interviewSettings = await getInterviewAvailabilitySettings();
+        const dayOfWeek = scheduledDate.getDay();
+        const slotDuration = interviewSettings.slotDuration || 30;
+        // Helper: Check if booking time falls within an interview slot's time range
+        const timeInMinutes = (timeStr) => {
+            const [h, m] = timeStr.split(':').map(Number);
+            return h * 60 + m;
+        };
+        if (interviewSettings.interviewSlots && interviewSettings.interviewSlots.length > 0) {
+            // Filter active slots for this day AND this specific time
+            const bookingTimeMin = timeInMinutes(time);
+            const activeSlots = interviewSettings.interviewSlots.filter(slot => {
+                if (!slot.active || !slot.enabledDays.includes(dayOfWeek))
+                    return false;
+                // Check if booking time falls within this slot's time range
+                const slotStartMin = timeInMinutes(slot.startTime);
+                const slotEndMin = timeInMinutes(slot.endTime);
+                return bookingTimeMin >= slotStartMin && (bookingTimeMin + slotDuration) <= slotEndMin;
+            });
+            interviewCapacity = activeSlots.length > 0 ? activeSlots.length : 0;
+            console.log(`Interview capacity at ${time} on day ${dayOfWeek}: ${interviewCapacity}`);
+            console.log(`Active slots covering this time: ${activeSlots.map(s => `${s.name} (${s.startTime}-${s.endTime})`).join(', ') || 'none'}`);
+            // If no slots cover this time, reject the booking
+            if (interviewCapacity === 0) {
+                throw new https_1.HttpsError('invalid-argument', 'No interview slots are available at this time');
+            }
+        }
+    }
+    // =========================================================================
     // CREATE TEAMS MEETING FOR INTERVIEWS ONLY
     // =========================================================================
     let teamsMeetingResult = null;
@@ -725,34 +818,36 @@ exports.submitBooking = (0, https_1.onCall)({
     }
     // Use transaction to ensure atomicity and prevent double-booking
     const interviewRef = db.collection('interviews').doc();
-    // Create a slot lock document ID based on date, time, AND BRANCH
-    // This allows different branches to book the same time slot
+    // Create a slot lock document ID based on date, time, AND BRANCH (for trials)
+    // For interviews with multiple slots, we use capacity-based checking instead
     const slotLockId = linkData.type === 'trial' && linkData.branchId
         ? `${date}_${time.replace(':', '')}_${linkData.branchId}`
-        : `${date}_${time.replace(':', '')}`;
+        : `${date}_${time.replace(':', '')}_${interviewRef.id}`; // Unique per booking for interviews
     const slotLockRef = db.collection('slotLocks').doc(slotLockId);
     await db.runTransaction(async (transaction) => {
         // =========================================================================
         // CHECK FOR SLOT CONFLICTS INSIDE TRANSACTION
         // =========================================================================
-        // Check if slot lock exists (another booking for exact same time)
-        const slotLockDoc = await transaction.get(slotLockRef);
-        if (slotLockDoc.exists) {
-            const lockData = slotLockDoc.data();
-            // Check if the lock is still valid (interview exists and is scheduled/confirmed)
-            if (lockData?.interviewId) {
-                const existingInterviewRef = db.collection('interviews').doc(lockData.interviewId);
-                const existingInterviewDoc = await transaction.get(existingInterviewRef);
-                if (existingInterviewDoc.exists) {
-                    const existingStatus = existingInterviewDoc.data()?.status;
-                    if (existingStatus === 'scheduled' || existingStatus === 'confirmed') {
-                        throw new https_1.HttpsError('already-exists', 'This time slot has just been booked. Please select another time.');
+        // For trials: check if slot lock exists (single booking per time slot per branch)
+        // For interviews: skip slot lock check - we use capacity-based checking below
+        if (linkData.type === 'trial') {
+            const slotLockDoc = await transaction.get(slotLockRef);
+            if (slotLockDoc.exists) {
+                const lockData = slotLockDoc.data();
+                // Check if the lock is still valid (interview exists and is scheduled/confirmed)
+                if (lockData?.interviewId) {
+                    const existingInterviewRef = db.collection('interviews').doc(lockData.interviewId);
+                    const existingInterviewDoc = await transaction.get(existingInterviewRef);
+                    if (existingInterviewDoc.exists) {
+                        const existingStatus = existingInterviewDoc.data()?.status;
+                        if (existingStatus === 'scheduled' || existingStatus === 'confirmed') {
+                            throw new https_1.HttpsError('already-exists', 'This time slot has just been booked. Please select another time.');
+                        }
                     }
                 }
             }
         }
-        // Also check for overlapping bookings (different start times but overlapping duration)
-        // For trials: only check same branch. For interviews: check all.
+        // Check for overlapping bookings (capacity-based for interviews, strict for trials)
         const dayStart = new Date(scheduledDate);
         dayStart.setHours(0, 0, 0, 0);
         const dayEnd = new Date(scheduledDate);
@@ -812,7 +907,8 @@ exports.submitBooking = (0, https_1.onCall)({
                 }
             }
         });
-        const hasOverlap = allBookings.some(booking => {
+        // Count overlapping bookings
+        const overlappingBookings = allBookings.filter(booking => {
             const existingStart = (booking.scheduledDate || booking.scheduledAt)?.toDate?.();
             if (!existingStart)
                 return false;
@@ -821,8 +917,19 @@ exports.submitBooking = (0, https_1.onCall)({
             // Check overlap: new booking overlaps if it starts before existing ends AND ends after existing starts
             return scheduledDate < existingEnd && endTime > existingStart;
         });
-        if (hasOverlap) {
-            throw new https_1.HttpsError('already-exists', 'This time slot conflicts with an existing booking. Please select another time.');
+        // For trials: any overlap is a conflict
+        // For interviews: check capacity (overlapping count vs available slots)
+        if (linkData.type === 'trial') {
+            if (overlappingBookings.length > 0) {
+                throw new https_1.HttpsError('already-exists', 'This time slot conflicts with an existing booking. Please select another time.');
+            }
+        }
+        else {
+            // Interview capacity check
+            if (overlappingBookings.length >= interviewCapacity) {
+                throw new https_1.HttpsError('already-exists', 'All interview slots are booked for this time. Please select another time.');
+            }
+            console.log(`Interview booking check: ${overlappingBookings.length} existing, capacity ${interviewCapacity}`);
         }
         // =========================================================================
         // RE-CHECK BOOKING LINK STATUS

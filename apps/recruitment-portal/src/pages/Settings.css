@@ -1532,3 +1532,277 @@
   font-size: 12px;
   color: var(--color-gray-500);
 }
+
+/* ============================================================================
+   INTERVIEW SLOTS - Multiple Parallel Bookings
+   ============================================================================ */
+
+/* Card header with action button */
+.card-header-with-action {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.card-header-with-action h3 {
+  margin-bottom: 4px !important;
+}
+
+/* Interview slots list */
+.interview-slots-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.interview-slot-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  background: var(--color-gray-50);
+  border: 1px solid var(--color-gray-200);
+  border-radius: 10px;
+  transition: all 0.2s ease;
+}
+
+.interview-slot-item:hover {
+  border-color: var(--color-gray-300);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.interview-slot-item.active {
+  background: var(--color-primary-50);
+  border-color: var(--color-primary-200);
+}
+
+.interview-slot-item.inactive {
+  opacity: 0.6;
+}
+
+.slot-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.slot-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.slot-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-gray-900);
+}
+
+.slot-status {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 10px;
+}
+
+.slot-status.active {
+  background: var(--color-success-100);
+  color: var(--color-success-700);
+}
+
+.slot-status.inactive {
+  background: var(--color-gray-200);
+  color: var(--color-gray-600);
+}
+
+.slot-details {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--color-gray-600);
+}
+
+.slot-time {
+  font-weight: 500;
+}
+
+.slot-days {
+  color: var(--color-gray-500);
+}
+
+.slot-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.slot-action-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: var(--color-gray-100);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.slot-action-btn:hover {
+  background: var(--color-gray-200);
+}
+
+.slot-action-btn.delete:hover {
+  background: var(--color-red-100);
+}
+
+.empty-slots-message {
+  text-align: center;
+  padding: 32px;
+  color: var(--color-gray-500);
+  font-size: 14px;
+}
+
+.slots-summary {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-gray-200);
+  font-size: 14px;
+  color: var(--color-gray-600);
+}
+
+/* Legacy schedule - collapsed */
+.collapsed-card details {
+  cursor: pointer;
+}
+
+.legacy-schedule-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.legacy-schedule-header h3 {
+  margin: 0 !important;
+  font-size: 14px;
+  color: var(--color-gray-600);
+}
+
+.legacy-hint {
+  font-size: 12px;
+  color: var(--color-gray-400);
+  font-style: italic;
+}
+
+details[open] .legacy-schedule-header {
+  margin-bottom: 16px;
+}
+
+/* Slot Modal */
+.slot-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.slot-modal-content .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.slot-modal-content .form-group label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-gray-700);
+}
+
+.slot-modal-content .form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* Days selector */
+.days-selector {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.day-btn {
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-gray-600);
+  background: var(--color-gray-100);
+  border: 2px solid var(--color-gray-200);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.day-btn:hover {
+  background: var(--color-gray-200);
+  border-color: var(--color-gray-300);
+}
+
+.day-btn.selected {
+  background: var(--color-primary-100);
+  border-color: var(--color-primary-400);
+  color: var(--color-primary-700);
+}
+
+/* Checkbox label */
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--color-gray-700);
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary-600);
+  cursor: pointer;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .interview-slot-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .slot-actions {
+    align-self: flex-end;
+  }
+
+  .slot-modal-content .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .days-selector {
+    justify-content: center;
+  }
+
+  .card-header-with-action {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .card-header-with-action button {
+    align-self: flex-start;
+  }
+}
