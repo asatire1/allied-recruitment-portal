@@ -2,6 +2,8 @@
 
 export { Login } from './Login'
 export { ForgotPassword } from './ForgotPassword'
+export { Register } from './Register'
+export { ResetPassword } from './ResetPassword'
 export { Unauthorized } from './Unauthorized'
 export { NotFound } from './NotFound'
 export { Dashboard } from './Dashboard'

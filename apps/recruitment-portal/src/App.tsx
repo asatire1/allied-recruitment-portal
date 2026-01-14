@@ -30,7 +30,7 @@ initializeFirebase()
 // ============================================================================
 
 // Auth pages - loaded immediately as they're entry points
-import { Login, ForgotPassword, Unauthorized, NotFound } from './pages'
+import { Login, Register, ResetPassword, Unauthorized, NotFound } from './pages'
 
 // Main pages - lazy loaded for code splitting
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -86,14 +86,10 @@ function LoadingScreen() {
 // ============================================================================
 
 function AppRoutes() {
-  const { signIn, resetPassword, error, clearError } = useAuth()
+  const { signIn, error, clearError } = useAuth()
 
   const handleLogin = async (email: string, password: string, remember: boolean) => {
     await signIn(email, password, remember)
-  }
-  
-  const handleForgotPassword = async (email: string) => {
-    await resetPassword(email)
   }
 
   return (
@@ -107,13 +103,29 @@ function AppRoutes() {
           </PublicRoute>
         } 
       />
-      <Route 
-        path="/forgot-password" 
+      <Route
+        path="/forgot-password"
         element={
           <PublicRoute>
-            <ForgotPassword onSubmit={handleForgotPassword} />
+            <ResetPassword />
           </PublicRoute>
-        } 
+        }
+      />
+      <Route
+        path="/reset-password/:token"
+        element={
+          <PublicRoute>
+            <ResetPassword />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/register/:token"
+        element={
+          <PublicRoute>
+            <Register />
+          </PublicRoute>
+        }
       />
 
       {/* PROTECTED ROUTES - Wrapped in Suspense for lazy loading */}

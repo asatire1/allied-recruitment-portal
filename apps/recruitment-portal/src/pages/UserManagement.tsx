@@ -4,18 +4,16 @@
 // ============================================================================
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { 
-  collection, 
-  getDocs, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  doc, 
-  query, 
+import {
+  collection,
+  getDocs,
+  updateDoc,
+  deleteDoc,
+  doc,
+  query,
   orderBy,
   where,
-  serverTimestamp,
-  setDoc
+  serverTimestamp
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { getFirebaseDb, getFirebaseFunctions, COLLECTIONS } from '@allied/shared-lib'
@@ -221,7 +219,7 @@ export function UserManagement() {
     try {
       setSaving(true)
       setError(null)
-      
+
       // Check if email already exists locally
       const existingUser = users.find(u => u.email.toLowerCase() === formData.email.toLowerCase())
       if (existingUser) {
@@ -229,75 +227,33 @@ export function UserManagement() {
         return
       }
 
-      // If password is provided, create user with password via Cloud Function
-      if (formData.password && formData.password.length >= 6) {
-        // Call Cloud Function to create user with password
-        const functions = getFirebaseFunctions()
-        const createUserFn = httpsCallable<{
-          email: string
-          password: string
-          displayName: string
-          phone?: string
-          role: string
-          entities?: string[]
-          branchIds?: string[]
-          emailNotifications?: boolean
-          pushNotifications?: boolean
-        }, { success: boolean; uid: string; message: string }>(functions, 'createUserWithPassword')
-        
-        const result = await createUserFn({
-          email: formData.email.toLowerCase(),
-          password: formData.password,
-          displayName: formData.displayName,
-          phone: formData.phone || undefined,
-          role: formData.role,
-          entities: formData.entities,
-          branchIds: formData.branchIds,
-          emailNotifications: formData.emailNotifications,
-          pushNotifications: formData.pushNotifications,
-        })
-        
-        if (result.data.success) {
-          setShowInviteModal(false)
-          setFormData(EMPTY_FORM)
-          setSuccess(`User ${formData.displayName} created successfully. They can log in with email/password or Microsoft.`)
-          await loadData()
-        }
-      } else {
-        // No password - create Firestore document only for Microsoft SSO
-        // Generate a temporary document ID (will be replaced when they sign in with Microsoft)
-        const db = getFirebaseDb()
-        const tempId = `pending_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-        
-        await setDoc(doc(db, COLLECTIONS.USERS, tempId), {
-          email: formData.email.toLowerCase(),
-          displayName: formData.displayName,
-          phone: formData.phone || null,
-          role: formData.role,
-          entities: formData.entities || [],
-          branchIds: formData.branchIds || [],
-          emailNotifications: formData.emailNotifications ?? true,
-          pushNotifications: formData.pushNotifications ?? false,
-          active: true,
-          microsoftOnly: true, // Flag to indicate this user should use Microsoft SSO
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        })
-        
+      // Send invitation email via Cloud Function
+      const functions = getFirebaseFunctions()
+      const inviteFn = httpsCallable<{
+        email: string
+        role: string
+        branchIds?: string[]
+        entityIds?: string[]
+      }, { success: boolean; message: string }>(functions, 'createUserInvite')
+
+      const result = await inviteFn({
+        email: formData.email.toLowerCase(),
+        role: formData.role,
+        branchIds: formData.branchIds,
+        entityIds: formData.entities,
+      })
+
+      if (result.data.success) {
         setShowInviteModal(false)
         setFormData(EMPTY_FORM)
-        setSuccess(`User ${formData.displayName} created successfully. They can now sign in with their Microsoft account.`)
-        await loadData()
+        setSuccess(`Invitation sent to ${formData.email}. They will receive an email to complete their registration.`)
       }
     } catch (err: any) {
-      console.error('Error creating user:', err)
-      // Handle specific error messages
+      console.error('Error inviting user:', err)
       if (err.message?.includes('already exists')) {
         setError('A user with this email already exists')
-      } else if (err.message?.includes('weak')) {
-        setError('Password is too weak. Please use a stronger password.')
       } else {
-        setError(err.message || 'Failed to create user')
+        setError(err.message || 'Failed to send invitation')
       }
     } finally {
       setSaving(false)
@@ -831,7 +787,11 @@ function UserForm({
     }
   }
 
-  const isValid = formData.email && formData.displayName && formData.role
+  // For new users (invites), only require email and role
+  // For editing, require email, displayName, and role
+  const isValid = isNew
+    ? formData.email && formData.role
+    : formData.email && formData.displayName && formData.role
 
   const showBranchSelector = formData.role === 'branch_manager'
 
@@ -849,47 +809,35 @@ function UserForm({
             disabled={!isNew}
           />
           {isNew && (
-            <p className="field-hint">Must be a company email (e.g., @alliedpharmacies.com)</p>
+            <p className="field-hint">An invitation email will be sent to this address</p>
           )}
         </div>
-        
-        {isNew && (
-          <div className="form-group">
-            <label>Password (Optional)</label>
-            <Input
-              type="password"
-              value={formData.password}
-              onChange={(e) => handleChange('password', e.target.value)}
-              placeholder="Leave blank for Microsoft sign-in only"
-              minLength={6}
-            />
-            <p className="field-hint">
-              💡 Leave blank if user will sign in with Microsoft. 
-              Set a password only if they need email/password login too.
-            </p>
-          </div>
+
+        {/* Only show name/phone fields when editing existing users */}
+        {!isNew && (
+          <>
+            <div className="form-group">
+              <label>Full Name *</label>
+              <Input
+                value={formData.displayName}
+                onChange={(e) => handleChange('displayName', e.target.value)}
+                placeholder="John Smith"
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Phone Number</label>
+              <Input
+                type="tel"
+                value={formData.phone}
+                onChange={(e) => handleChange('phone', e.target.value)}
+                placeholder="07700 900000"
+              />
+            </div>
+          </>
         )}
-        
-        <div className="form-group">
-          <label>Full Name *</label>
-          <Input
-            value={formData.displayName}
-            onChange={(e) => handleChange('displayName', e.target.value)}
-            placeholder="John Smith"
-            required
-          />
-        </div>
-        
-        <div className="form-group">
-          <label>Phone Number</label>
-          <Input
-            type="tel"
-            value={formData.phone}
-            onChange={(e) => handleChange('phone', e.target.value)}
-            placeholder="07700 900000"
-          />
-        </div>
-        
+
         <div className="form-group">
           <label>Role *</label>
           <select

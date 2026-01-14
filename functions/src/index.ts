@@ -771,12 +771,16 @@ export const createUserWithPassword = onCall<{
         throw new HttpsError('permission-denied', 'Only admins can create users')
       }
 
+      // Validate phone number format (E.164: +CountryCodeNumber, e.g., +447123456789)
+      // Only pass to Firebase Auth if valid, otherwise just store in Firestore
+      const isValidE164 = phone && /^\+[1-9]\d{6,14}$/.test(phone)
+
       // Create the user in Firebase Auth
       const userRecord = await admin.auth().createUser({
         email: email.toLowerCase(),
         password,
         displayName,
-        phoneNumber: phone || undefined,
+        phoneNumber: isValidE164 ? phone : undefined,
       })
 
       // Create the user document in Firestore
@@ -866,3 +870,13 @@ export { migrateMessageTemplates } from './migrations/migrateTemplatesFunction'
 
 // Test email (Phase 5: Template testing)
 export { sendTestEmail } from './sendTestEmail'
+
+// User invite and password reset functions
+export {
+  createUserInvite,
+  validateUserInvite,
+  completeUserRegistration,
+  requestPasswordReset,
+  validatePasswordReset,
+  completePasswordReset
+} from './userInviteFunctions'

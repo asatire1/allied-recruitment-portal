@@ -40,7 +40,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendTestEmail = exports.migrateMessageTemplates = exports.validateFeedbackToken = exports.submitTrialFeedback = exports.sendDailyFeedbackRequests = exports.sendTrialBranchNotification = exports.parseIndeedJob = exports.processInterviewsNow = exports.onCandidateWithdrawnOrRejected = exports.onCandidateStatusChange = exports.resolveLapsedInterview = exports.markLapsedInterviews = exports.checkReturningCandidate = exports.reactivateCandidate = exports.restoreCandidate = exports.archiveCandidate = exports.permanentlyDeleteCandidate = exports.onCandidateDeleted = exports.fetchMeetingInsights = exports.checkMeetingStatus = exports.createTeamsMeeting = exports.trackClick = exports.trackOpen = exports.sendBulkCandidateEmails = exports.sendCandidateEmail = exports.createBookingLink = exports.validateBookingToken = exports.submitBooking = exports.getBookingTimeSlots = exports.getBookingAvailability = exports.createUserWithPassword = exports.sendEmail = exports.markBookingLinkUsed = exports.parseCV = void 0;
+exports.completePasswordReset = exports.validatePasswordReset = exports.requestPasswordReset = exports.completeUserRegistration = exports.validateUserInvite = exports.createUserInvite = exports.sendTestEmail = exports.migrateMessageTemplates = exports.validateFeedbackToken = exports.submitTrialFeedback = exports.sendDailyFeedbackRequests = exports.sendTrialBranchNotification = exports.parseIndeedJob = exports.processInterviewsNow = exports.onCandidateWithdrawnOrRejected = exports.onCandidateStatusChange = exports.resolveLapsedInterview = exports.markLapsedInterviews = exports.checkReturningCandidate = exports.reactivateCandidate = exports.restoreCandidate = exports.archiveCandidate = exports.permanentlyDeleteCandidate = exports.onCandidateDeleted = exports.fetchMeetingInsights = exports.checkMeetingStatus = exports.createTeamsMeeting = exports.trackClick = exports.trackOpen = exports.sendBulkCandidateEmails = exports.sendCandidateEmail = exports.createBookingLink = exports.validateBookingToken = exports.submitBooking = exports.getBookingTimeSlots = exports.getBookingAvailability = exports.createUserWithPassword = exports.sendEmail = exports.markBookingLinkUsed = exports.parseCV = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const options_1 = require("firebase-functions/v2/options");
 const params_1 = require("firebase-functions/params");
@@ -621,12 +621,15 @@ exports.createUserWithPassword = (0, https_1.onCall)({
         if (!['super_admin', 'admin'].includes(callerRole)) {
             throw new https_1.HttpsError('permission-denied', 'Only admins can create users');
         }
+        // Validate phone number format (E.164: +CountryCodeNumber, e.g., +447123456789)
+        // Only pass to Firebase Auth if valid, otherwise just store in Firestore
+        const isValidE164 = phone && /^\+[1-9]\d{6,14}$/.test(phone);
         // Create the user in Firebase Auth
         const userRecord = await admin.auth().createUser({
             email: email.toLowerCase(),
             password,
             displayName,
-            phoneNumber: phone || undefined,
+            phoneNumber: isValidE164 ? phone : undefined,
         });
         // Create the user document in Firestore
         await admin.firestore().collection('users').doc(userRecord.uid).set({
@@ -723,4 +726,12 @@ Object.defineProperty(exports, "migrateMessageTemplates", { enumerable: true, ge
 // Test email (Phase 5: Template testing)
 var sendTestEmail_1 = require("./sendTestEmail");
 Object.defineProperty(exports, "sendTestEmail", { enumerable: true, get: function () { return sendTestEmail_1.sendTestEmail; } });
+// User invite and password reset functions
+var userInviteFunctions_1 = require("./userInviteFunctions");
+Object.defineProperty(exports, "createUserInvite", { enumerable: true, get: function () { return userInviteFunctions_1.createUserInvite; } });
+Object.defineProperty(exports, "validateUserInvite", { enumerable: true, get: function () { return userInviteFunctions_1.validateUserInvite; } });
+Object.defineProperty(exports, "completeUserRegistration", { enumerable: true, get: function () { return userInviteFunctions_1.completeUserRegistration; } });
+Object.defineProperty(exports, "requestPasswordReset", { enumerable: true, get: function () { return userInviteFunctions_1.requestPasswordReset; } });
+Object.defineProperty(exports, "validatePasswordReset", { enumerable: true, get: function () { return userInviteFunctions_1.validatePasswordReset; } });
+Object.defineProperty(exports, "completePasswordReset", { enumerable: true, get: function () { return userInviteFunctions_1.completePasswordReset; } });
 //# sourceMappingURL=index.js.map
