@@ -243,11 +243,12 @@ export function UserManagement() {
         entityIds: formData.entities,
       })
 
-      if (result.data.success) {
-        setShowInviteModal(false)
-        setFormData(EMPTY_FORM)
-        setSuccess(`Invitation sent to ${formData.email}. They will receive an email to complete their registration.`)
-      }
+      console.log('createUserInvite result:', result.data)
+
+      // Close modal and show success
+      setShowInviteModal(false)
+      setFormData(EMPTY_FORM)
+      setSuccess(result.data.message || `Invitation sent to ${formData.email}`)
     } catch (err: any) {
       console.error('Error inviting user:', err)
       if (err.message?.includes('already exists')) {

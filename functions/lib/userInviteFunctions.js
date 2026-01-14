@@ -175,7 +175,7 @@ exports.createUserInvite = (0, https_1.onCall)({
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 7);
         // Create invite document
-        await db.collection('userInvites').add({
+        const inviteRef = await db.collection('userInvites').add({
             tokenHash,
             email: email.toLowerCase(),
             role,
@@ -184,6 +184,20 @@ exports.createUserInvite = (0, https_1.onCall)({
             status: 'active',
             expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdBy: request.auth.uid,
+        });
+        // Create pending user document so they appear in user list
+        await db.collection('users').doc(`pending_${inviteRef.id}`).set({
+            email: email.toLowerCase(),
+            displayName: email.toLowerCase(), // Will be updated when they register
+            role,
+            branchIds: branchIds || [],
+            entities: entityIds || [],
+            status: 'invited',
+            active: false,
+            inviteId: inviteRef.id,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             createdBy: request.auth.uid,
         });
         // Build registration link
@@ -340,7 +354,10 @@ exports.completeUserRegistration = (0, https_1.onCall)({
             password,
             displayName: `${firstName} ${lastName}`,
         });
-        // Create Firestore user document
+        // Delete the pending user document (created when invite was sent)
+        const pendingUserRef = db.collection('users').doc(`pending_${doc.id}`);
+        await pendingUserRef.delete();
+        // Create Firestore user document with real UID
         await db.collection('users').doc(userRecord.uid).set({
             email: invite.email,
             displayName: `${firstName} ${lastName}`,
