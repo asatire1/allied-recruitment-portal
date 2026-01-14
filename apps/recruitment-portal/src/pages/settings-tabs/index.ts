@@ -1,8 +1,10 @@
 // Settings Tab Components
 // Export all settings tab components from this file
 
-export { WhatsAppTemplatesTab } from './WhatsAppTemplatesTab'
-export { EmailTemplatesTab } from './EmailTemplatesTab'
+export { MessageTemplatesTab } from './MessageTemplatesTab'
+// Keep old exports for backward compatibility
+export { MessageTemplatesTab as WhatsAppTemplatesTab } from './MessageTemplatesTab'
+export { MessageTemplatesTab as EmailTemplatesTab } from './MessageTemplatesTab'
 export { EntitiesTab } from './EntitiesTab'
 export { JobTitlesTab } from './JobTitlesTab'
 export { InterviewAvailabilityTab } from './InterviewAvailabilityTab'

@@ -1,7 +1,7 @@
 // ============================================================================
-// WhatsApp Modal Component
-// Extracted from CandidateDetail.tsx for better maintainability
-// Location: apps/recruitment-portal/src/components/candidate/WhatsAppModal.tsx
+// WhatsApp Modal Component - Phase 3 Update
+// Now uses unified messageTemplates collection
+// Properly fetches branch name from branches collection
 // ============================================================================
 
 import { useState, useEffect } from 'react'
@@ -23,15 +23,18 @@ import { Modal, Select, Spinner, Button, Textarea } from '@allied/shared-ui'
 // TYPES
 // ============================================================================
 
-type TemplateCategory = 'interview' | 'trial' | 'offer' | 'rejection' | 'reminder' | 'general'
+type TemplateCategory = 'interview' | 'trial' | 'confirmation' | 'offer' | 'rejection' | 'reminder' | 'feedback' | 'general'
+type TemplateChannel = 'whatsapp' | 'email' | 'both'
 
 interface WhatsAppTemplate {
   id: string
   name: string
   category: TemplateCategory
-  content: string
+  channel: TemplateChannel
+  plainContent: string
   placeholders: string[]
   active: boolean
+  isSystemTemplate?: boolean
 }
 
 interface WhatsAppModalProps {
@@ -53,10 +56,11 @@ interface WhatsAppModalProps {
 
 const TEMPLATE_CATEGORIES = [
   { value: 'interview', label: 'Interview', color: '#3b82f6' },
-  { value: 'trial', label: 'Trial', color: '#f59e0b' },
+  { value: 'trial', label: 'Trial', color: '#8b5cf6' },
+  { value: 'confirmation', label: 'Confirmation', color: '#10b981' },
   { value: 'offer', label: 'Offer', color: '#10b981' },
   { value: 'rejection', label: 'Rejection', color: '#ef4444' },
-  { value: 'reminder', label: 'Reminder', color: '#8b5cf6' },
+  { value: 'reminder', label: 'Reminder', color: '#f59e0b' },
   { value: 'general', label: 'General', color: '#6b7280' },
 ]
 
@@ -79,6 +83,10 @@ export function WhatsAppModal({ isOpen, onClose, candidate, onLogActivity }: Wha
   const [generatingBookingLink, setGeneratingBookingLink] = useState(false)
   const [interviewExpiryDays, setInterviewExpiryDays] = useState(7)
   const [trialExpiryDays, setTrialExpiryDays] = useState(7)
+  
+  // Branch data - fetched when candidate has branchId
+  const [branchName, setBranchName] = useState<string>('')
+  const [branchAddress, setBranchAddress] = useState<string>('')
 
   // Load templates when modal opens
   useEffect(() => {
@@ -114,6 +122,37 @@ export function WhatsAppModal({ isOpen, onClose, candidate, onLogActivity }: Wha
     loadExpirySettings()
   }, [db])
 
+  // Fetch branch details when candidate changes
+  useEffect(() => {
+    const fetchBranchDetails = async () => {
+      if (!candidate?.branchId) {
+        setBranchName('')
+        setBranchAddress('')
+        return
+      }
+
+      // If candidate already has branchName, use it
+      if (candidate.branchName) {
+        setBranchName(candidate.branchName)
+      }
+
+      try {
+        const branchDoc = await getDoc(doc(db, 'branches', candidate.branchId))
+        if (branchDoc.exists()) {
+          const branchData = branchDoc.data()
+          setBranchName(branchData.name || candidate.branchName || '')
+          setBranchAddress(branchData.address || '')
+        }
+      } catch (error) {
+        console.error('Error fetching branch details:', error)
+        // Fallback to candidate's branchName if available
+        setBranchName(candidate.branchName || '')
+      }
+    }
+
+    fetchBranchDetails()
+  }, [candidate?.branchId, candidate?.branchName, db])
+
   // Reset state when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -127,20 +166,40 @@ export function WhatsAppModal({ isOpen, onClose, candidate, onLogActivity }: Wha
     }
   }, [isOpen])
 
-  // Load WhatsApp templates from Firestore
+  // Load WhatsApp templates from Firestore - unified messageTemplates collection
   const loadTemplates = async () => {
     setLoadingTemplates(true)
     try {
-      const templatesRef = collection(db, 'whatsappTemplates')
-      const q = query(templatesRef, where('active', '==', true), orderBy('name'))
-      const snapshot = await getDocs(q)
+      // Load from unified messageTemplates collection
+      let templatesRef = collection(db, 'messageTemplates')
+      let q = query(templatesRef, where('active', '==', true), orderBy('name'))
+      let snapshot = await getDocs(q)
+      
+      // Fallback to whatsappTemplates if messageTemplates is empty
+      if (snapshot.empty) {
+        templatesRef = collection(db, 'whatsappTemplates')
+        q = query(templatesRef, where('active', '==', true), orderBy('name'))
+        snapshot = await getDocs(q)
+      }
       
       const loadedTemplates: WhatsAppTemplate[] = []
-      snapshot.forEach(doc => {
-        loadedTemplates.push({
-          id: doc.id,
-          ...doc.data()
-        } as WhatsAppTemplate)
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data()
+        // Filter: only show templates that support WhatsApp (channel = 'whatsapp' or 'both')
+        const channel = data.channel || 'whatsapp'
+        if (channel === 'whatsapp' || channel === 'both') {
+          loadedTemplates.push({
+            id: docSnap.id,
+            name: data.name,
+            category: data.category,
+            channel: channel,
+            // Support both new schema (plainContent) and old schema (content)
+            plainContent: data.plainContent || data.content || '',
+            placeholders: data.placeholders || [],
+            active: data.active,
+            isSystemTemplate: data.isSystemTemplate || false
+          })
+        }
       })
       
       setTemplates(loadedTemplates)
@@ -168,8 +227,9 @@ export function WhatsAppModal({ isOpen, onClose, candidate, onLogActivity }: Wha
     return combinePlaceholderData(candidateData, {
       interviewBookingLink: generatedBookingLink || '[Booking link will be generated]',
       companyName: candidate.entity || 'Allied Pharmacies',
-      branchName: candidate.branchId || '',
-      branchAddress: ''
+      // Use fetched branch name, not branchId
+      branchName: branchName || candidate.branchName || '',
+      branchAddress: branchAddress || ''
     })
   }
 
@@ -208,7 +268,8 @@ export function WhatsAppModal({ isOpen, onClose, candidate, onLogActivity }: Wha
         type,
         jobTitle: candidate.jobTitle,
         branchId: candidate.branchId,
-        branchName: candidate.branchName,
+        // Use fetched branch name
+        branchName: branchName || candidate.branchName,
         expiryDays: expiry,
         maxUses: 1,
       })
@@ -239,7 +300,7 @@ export function WhatsAppModal({ isOpen, onClose, candidate, onLogActivity }: Wha
     setSelectedTemplate(template)
     setIsEditingMessage(false)
     
-    const usesBookingLink = template.content.includes('{{interviewBookingLink}}')
+    const usesBookingLink = template.plainContent.includes('{{interviewBookingLink}}')
     
     if (usesBookingLink && !generatedBookingLink) {
       const linkType = template.category === 'trial' ? 'trial' : 'interview'
@@ -247,7 +308,7 @@ export function WhatsAppModal({ isOpen, onClose, candidate, onLogActivity }: Wha
     }
     
     const data = getPlaceholderData()
-    const result = replaceTemplatePlaceholders(template.content, data)
+    const result = replaceTemplatePlaceholders(template.plainContent, data)
     setMessageContent(result.text)
   }
 
@@ -262,11 +323,20 @@ export function WhatsAppModal({ isOpen, onClose, candidate, onLogActivity }: Wha
       setSelectedTemplate(template)
       setIsEditingMessage(false)
       const data = getPlaceholderData()
-      const result = replaceTemplatePlaceholders(template.content, data)
+      const result = replaceTemplatePlaceholders(template.plainContent, data)
       setMessageContent(result.text)
     } else {
       const data = getPlaceholderData()
-      setMessageContent(`Hi ${data.firstName},\n\nThank you for applying for the ${data.jobTitle} position at Allied Pharmacies.\n\nWe would like to invite you for an interview. Please use the following link to book a convenient time:\n\n${bookingUrl || data.interviewBookingLink}\n\nBest regards,\nAllied Recruitment Team`)
+      setMessageContent(`Hi ${data.firstName},
+
+Thank you for applying for the ${data.jobTitle} position at Allied Pharmacies.
+
+We would like to invite you for an interview. Please use the following link to book a convenient time:
+
+${bookingUrl || data.interviewBookingLink}
+
+Best regards,
+Allied Recruitment Team`)
       setSelectedTemplate(null)
     }
   }
@@ -282,11 +352,21 @@ export function WhatsAppModal({ isOpen, onClose, candidate, onLogActivity }: Wha
       setSelectedTemplate(template)
       setIsEditingMessage(false)
       const data = getPlaceholderData()
-      const result = replaceTemplatePlaceholders(template.content, data)
+      const result = replaceTemplatePlaceholders(template.plainContent, data)
       setMessageContent(result.text)
     } else {
       const data = getPlaceholderData()
-      setMessageContent(`Hi ${data.firstName},\n\nCongratulations! Following your successful interview, we would like to invite you for a trial shift.\n\nPlease use this link to book your trial: ${bookingUrl || '[Booking link]'}\n\nPlease bring your GPhC registration, ID, and wear smart clothing.\n\nBest regards,\nAllied Recruitment Team`)
+      const branchText = branchName ? ` at ${branchName}` : ''
+      setMessageContent(`Hi ${data.firstName},
+
+Congratulations! Following your successful interview, we would like to invite you for a trial shift${branchText}.
+
+Please use this link to book your trial: ${bookingUrl || '[Booking link]'}
+
+Please bring your GPhC registration, ID, and wear smart clothing.
+
+Best regards,
+Allied Recruitment Team`)
       setSelectedTemplate(null)
     }
   }
@@ -431,6 +511,7 @@ export function WhatsAppModal({ isOpen, onClose, candidate, onLogActivity }: Wha
                         {category?.label}
                       </span>
                       <span className="template-option-name">{template.name}</span>
+                      {template.isSystemTemplate && <span className="system-badge">🔒</span>}
                     </button>
                   )
                 })

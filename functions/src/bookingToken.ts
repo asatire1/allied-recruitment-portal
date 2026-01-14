@@ -26,13 +26,16 @@ interface ValidateTokenRequest {
 
 interface ValidateTokenResponse {
   valid: boolean
-  candidateName: string
-  type: 'interview' | 'trial'
-  jobTitle?: string
-  branchName?: string
-  branchAddress?: string
-  duration: number
-  expiresAt: string
+  data: {
+    candidateName: string
+    candidatePhone?: string
+    type: 'interview' | 'trial'
+    jobTitle?: string
+    branchName?: string
+    branchAddress?: string
+    duration: number
+    expiresAt: string
+  }
 }
 
 interface BookingLinkDoc {
@@ -40,12 +43,14 @@ interface BookingLinkDoc {
   candidateId: string
   candidateName: string
   candidateEmail?: string
+  candidatePhone?: string
   type: 'interview' | 'trial'
   jobId?: string
   jobTitle?: string
   branchId?: string
   branchName?: string
   branchAddress?: string
+  duration?: number
   status: 'active' | 'used' | 'expired' | 'revoked'
   expiresAt: admin.firestore.Timestamp
   maxUses: number
@@ -113,8 +118,8 @@ export const validateBookingToken = onCall<ValidateTokenRequest>(
     // Sanitize token
     const sanitizedToken = token.trim()
     
-    // Validate token format (nanoid is typically 21 chars)
-    if (sanitizedToken.length < 10 || sanitizedToken.length > 50) {
+    // Validate token format (crypto.randomBytes(32).toString('hex') = 64 chars)
+    if (sanitizedToken.length < 10 || sanitizedToken.length > 64) {
       console.log('validateBookingToken: Token length invalid:', sanitizedToken.length)
       throw new HttpsError('not-found', 'Invalid or expired booking link')
     }
@@ -196,15 +201,19 @@ export const validateBookingToken = onCall<ValidateTokenRequest>(
       
       console.log('validateBookingToken: Token valid for', link.candidateName, '- type:', link.type)
 
+      // Return data nested under 'data' property as expected by booking page
       return {
         valid: true,
-        candidateName: getFirstName(link.candidateName),
-        type: link.type || 'interview',
-        jobTitle: link.jobTitle,
-        branchName: link.branchName,
-        branchAddress: link.branchAddress,
-        duration: getDuration(link.type),
-        expiresAt: expiresAt.toISOString(),
+        data: {
+          candidateName: getFirstName(link.candidateName),
+          candidatePhone: link.candidatePhone || undefined,
+          type: link.type || 'interview',
+          jobTitle: link.jobTitle,
+          branchName: link.branchName,
+          branchAddress: link.branchAddress,
+          duration: link.duration || getDuration(link.type),
+          expiresAt: expiresAt.toISOString(),
+        }
       }
 
     } catch (error) {

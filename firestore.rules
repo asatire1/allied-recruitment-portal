@@ -59,7 +59,7 @@ service cloud.firestore {
     // Check if user can access a specific branch
     function canAccessBranch(branchId) {
       let userData = getUserData();
-      return isSuperAdmin() 
+      return isSuperAdmin()
         || isRecruiterOrAdmin()
         || (isBranchManager() && branchId in userData.branchIds)
         || (isRegionalManager() && branchId in userData.regionBranchIds);
@@ -68,8 +68,8 @@ service cloud.firestore {
     // Check if user can access a specific entity
     function canAccessEntity(entity) {
       let userData = getUserData();
-      return isSuperAdmin() 
-        || !('entities' in userData) 
+      return isSuperAdmin()
+        || !('entities' in userData)
         || userData.entities == null
         || entity in userData.entities;
     }
@@ -81,7 +81,7 @@ service cloud.firestore {
     
     // Check if field is not being modified
     function isUnchanged(field) {
-      return !(field in request.resource.data) 
+      return !(field in request.resource.data)
         || request.resource.data[field] == resource.data[field];
     }
     
@@ -97,7 +97,7 @@ service cloud.firestore {
       
       // Super admins can update any user
       // Users can update their own preferences only
-      allow update: if isSuperAdmin() 
+      allow update: if isSuperAdmin()
         || (request.auth.uid == userId && onlyUpdatingPreferences());
       
       // Only super admins can delete users
@@ -144,7 +144,7 @@ service cloud.firestore {
         let hasLastName = data.lastName is string && data.lastName.size() > 0;
         let hasEmail = data.email is string;
         let hasPhone = data.phone is string;
-        let hasStatus = data.status in ['new', 'screening', 'interview_scheduled', 'interview_complete', 
+        let hasStatus = data.status in ['new', 'screening', 'interview_scheduled', 'interview_complete',
                             'trial_scheduled', 'trial_complete', 'approved', 'rejected', 'withdrawn'];
         
         return hasFirstName && hasLastName && hasEmail && hasPhone && hasStatus;
@@ -178,11 +178,11 @@ service cloud.firestore {
       allow read: if resource.data.status == 'active' || isActiveUser();
       
       // Only recruiters and admins can create/update jobs
-      allow create: if isRecruiterOrAdmin() 
+      allow create: if isRecruiterOrAdmin()
         && isValidJobData()
         && isValidTimestamp('createdAt');
       
-      allow update: if isRecruiterOrAdmin() 
+      allow update: if isRecruiterOrAdmin()
         && isValidJobData()
         && isUnchanged('createdAt')
         && isUnchanged('createdBy');
@@ -231,7 +231,7 @@ service cloud.firestore {
       // Recruiters can update all fields
       // Branch managers can only update feedback fields
       allow update: if (isRecruiterOrAdmin() && isValidInterviewData())
-        || (isBranchManager() 
+        || (isBranchManager()
             && canAccessBranch(resource.data.branchId)
             && onlyUpdatingFeedbackFields());
       
@@ -289,12 +289,12 @@ service cloud.firestore {
       allow read: if true;
       
       // Recruiters can create booking links
-      allow create: if isRecruiterOrAdmin() 
+      allow create: if isRecruiterOrAdmin()
         && isValidBookingLinkData();
       
       // Recruiters can update status (revoke, mark used)
       // Public can update useCount when booking (via self-service)
-      allow update: if isRecruiterOrAdmin() 
+      allow update: if isRecruiterOrAdmin()
         || isValidBookingLinkUpdate();
       
       allow delete: if isSuperAdmin();
@@ -333,7 +333,7 @@ service cloud.firestore {
     }
     
     // ============================================================
-    // WHATSAPP TEMPLATES COLLECTION
+    // WHATSAPP TEMPLATES COLLECTION (Legacy)
     // ============================================================
     match /whatsappTemplates/{templateId} {
       allow read: if isRecruiterOrAdmin();
@@ -342,12 +342,49 @@ service cloud.firestore {
     }
 
     // ============================================================
-    // EMAIL TEMPLATES COLLECTION
+    // EMAIL TEMPLATES COLLECTION (Legacy)
     // ============================================================
     match /emailTemplates/{templateId} {
       allow read: if isRecruiterOrAdmin();
       allow create, update: if isRecruiterOrAdmin();
       allow delete: if isSuperAdmin();
+    }
+
+    // ============================================================
+    // MESSAGE TEMPLATES COLLECTION (Unified - Phase 5)
+    // ============================================================
+    match /messageTemplates/{templateId} {
+      // Recruiters and admins can read all templates
+      allow read: if isRecruiterOrAdmin();
+      
+      // Recruiters and admins can create/update templates
+      allow create, update: if isRecruiterOrAdmin();
+      
+      // Only super admins can delete templates
+      allow delete: if isSuperAdmin();
+      
+      // Version history subcollection
+      match /versions/{versionId} {
+        allow read: if isRecruiterOrAdmin();
+        allow create: if isRecruiterOrAdmin();
+        allow update, delete: if false; // Versions are immutable
+      }
+    }
+
+    // ============================================================
+    // FEEDBACK TOKENS COLLECTION (For trial feedback links)
+    // ============================================================
+    match /feedbackTokens/{tokenId} {
+      // Public can read tokens (needed for feedback submission page)
+      allow read: if true;
+      
+      // Only Cloud Functions can create tokens
+      allow create: if false;
+      
+      // Allow marking token as used
+      allow update: if true;
+      
+      allow delete: if false;
     }
 
     // ============================================================
@@ -375,10 +412,11 @@ service cloud.firestore {
       
       // Branch managers can create feedback for their branch
       // Recruiters can create feedback
-      allow create: if isActiveUser() && (
+      // Public can create feedback via token
+      allow create: if (isActiveUser() && (
         isRecruiterOrAdmin()
         || (isBranchManager() && canAccessBranch(request.resource.data.branchId))
-      ) && isValidFeedbackData();
+      ) && isValidFeedbackData()) || true;  // Allow public feedback submission
       
       // Only the submitter or admins can update feedback
       allow update: if isActiveUser() && (
@@ -410,7 +448,7 @@ service cloud.firestore {
         isBranchManager() && canAccessBranch(request.resource.data.branchId)
       );
       
-      allow update: if isRecruiterOrAdmin() 
+      allow update: if isRecruiterOrAdmin()
         || (resource.data.submittedBy == request.auth.uid);
       
       allow delete: if isSuperAdmin();
@@ -527,18 +565,18 @@ service cloud.firestore {
     // ============================================================
     match /notifications/{notificationId} {
       // Users can only read their own notifications
-      allow read: if isAuthenticated() 
+      allow read: if isAuthenticated()
         && resource.data.userId == request.auth.uid;
       
       // Created via Cloud Functions
       allow create: if false;
       
       // Users can mark their notifications as read
-      allow update: if isAuthenticated() 
+      allow update: if isAuthenticated()
         && resource.data.userId == request.auth.uid
         && onlyUpdatingReadStatus();
       
-      allow delete: if isAuthenticated() 
+      allow delete: if isAuthenticated()
         && resource.data.userId == request.auth.uid;
       
       function onlyUpdatingReadStatus() {
@@ -546,6 +584,15 @@ service cloud.firestore {
         let changedFields = request.resource.data.diff(resource.data).affectedKeys();
         return changedFields.hasOnly(allowedFields);
       }
+    }
+    
+    // ============================================================
+    // EMAIL LOG COLLECTION
+    // ============================================================
+    match /emailLog/{logId} {
+      allow read: if isRecruiterOrAdmin();
+      allow create: if isRecruiterOrAdmin();
+      allow update, delete: if false; // Email logs are immutable
     }
     
     // ============================================================

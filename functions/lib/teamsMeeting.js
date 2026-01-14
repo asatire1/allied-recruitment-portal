@@ -2,7 +2,42 @@
 /**
  * Microsoft Teams Meeting Integration
  * Creates Teams meetings via Microsoft Graph API
+ *
+ * Phase 4 Update: Confirmation emails now fetch templates from Firestore
  */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.msOrganizerUserId = exports.msTenantId = exports.msClientSecret = exports.msClientId = void 0;
 exports.getAccessToken = getAccessToken;
@@ -10,11 +45,73 @@ exports.createTeamsMeeting = createTeamsMeeting;
 exports.sendConfirmationEmail = sendConfirmationEmail;
 exports.getTeamsMeetingICSContent = getTeamsMeetingICSContent;
 const params_1 = require("firebase-functions/params");
+const admin = __importStar(require("firebase-admin"));
 // Define secrets for Microsoft Graph API
 exports.msClientId = (0, params_1.defineSecret)('MS_CLIENT_ID');
 exports.msClientSecret = (0, params_1.defineSecret)('MS_CLIENT_SECRET');
 exports.msTenantId = (0, params_1.defineSecret)('MS_TENANT_ID');
 exports.msOrganizerUserId = (0, params_1.defineSecret)('MS_ORGANIZER_USER_ID');
+// ============================================================================
+// EMAIL WRAPPER (inlined from shared-lib)
+// ============================================================================
+const DEFAULT_EMAIL_WRAPPER = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{subject}}</title>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
+    .email-container { max-width: 600px; margin: 0 auto; background: white; }
+    .header { background-color: #003366; color: white; padding: 24px; text-align: center; }
+    .header h1 { margin: 0; font-size: 24px; }
+    .header p { margin: 8px 0 0; opacity: 0.9; }
+    .content { padding: 32px 24px; }
+    .content p { margin: 0 0 16px; }
+    .details-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 24px 0; }
+    .detail-row { display: flex; padding: 8px 0; border-bottom: 1px solid #e2e8f0; }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-label { font-weight: 600; color: #64748b; width: 140px; flex-shrink: 0; }
+    .detail-value { color: #1e293b; }
+    .btn { display: inline-block; background: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 8px 0; }
+    .btn:hover { background: #2563eb; }
+    .btn-teams { background: #6264A7; }
+    .btn-teams:hover { background: #4B4D8C; }
+    .footer { background: #f8fafc; padding: 24px; text-align: center; color: #64748b; font-size: 14px; border-top: 1px solid #e2e8f0; }
+    .footer p { margin: 4px 0; }
+    .important { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; margin: 24px 0; }
+    .checklist { background: #dbeafe; border-left: 4px solid #3b82f6; padding: 16px; margin: 24px 0; }
+    .confirmation-code { background: #dcfce7; border: 1px solid #22c55e; padding: 8px 16px; border-radius: 4px; font-family: monospace; font-size: 18px; display: inline-block; }
+    ul { margin: 8px 0; padding-left: 20px; }
+    li { margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    {{content}}
+    <div class="footer">
+      <p><strong>Allied Pharmacies</strong></p>
+      <p>recruitment@alliedpharmacies.com</p>
+      <p style="font-size: 12px; margin-top: 12px;">This is an automated message from the Allied Recruitment Portal.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+// ============================================================================
+// PLACEHOLDER REPLACEMENT (inlined from shared-lib)
+// ============================================================================
+function replaceTemplatePlaceholders(template, data) {
+    const unfilledPlaceholders = [];
+    let result = template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
+        const value = data[key];
+        if (value !== undefined && value !== '') {
+            return value;
+        }
+        unfilledPlaceholders.push(key);
+        return match;
+    });
+    return { text: result, unfilledPlaceholders };
+}
 // ============================================================================
 // AUTHENTICATION
 // ============================================================================
@@ -50,23 +147,13 @@ async function getAccessToken(clientId, clientSecret, tenantId) {
 // ============================================================================
 /**
  * Create a Microsoft Teams online meeting
- *
- * @param subject - Meeting subject/title
- * @param startDateTime - Meeting start time (ISO 8601)
- * @param endDateTime - Meeting end time (ISO 8601)
- * @param candidateName - Name of the candidate (for meeting description)
- * @param jobTitle - Optional job title
- * @param branchName - Optional branch/location name
- * @returns TeamsMeetingResult with join URL and meeting details
  */
 async function createTeamsMeeting(subject, startDateTime, endDateTime, candidateName, jobTitle, branchName) {
     try {
-        // Get secrets
         const clientId = exports.msClientId.value();
         const clientSecret = exports.msClientSecret.value();
         const tenantId = exports.msTenantId.value();
         const organizerUserId = exports.msOrganizerUserId.value();
-        // Validate secrets are configured
         if (!clientId || !clientSecret || !tenantId || !organizerUserId) {
             console.error('Microsoft Graph API secrets not configured');
             return {
@@ -74,16 +161,14 @@ async function createTeamsMeeting(subject, startDateTime, endDateTime, candidate
                 error: 'Teams integration not configured. Please set up Microsoft Graph API credentials.',
             };
         }
-        // Get access token
         console.log('Obtaining Microsoft Graph access token...');
         const accessToken = await getAccessToken(clientId, clientSecret, tenantId);
-        // Prepare meeting request body
         const meetingBody = {
             subject,
             startDateTime: startDateTime.toISOString(),
             endDateTime: endDateTime.toISOString(),
             lobbyBypassSettings: {
-                scope: 'everyone', // Allow external guests to bypass lobby
+                scope: 'everyone',
                 isDialInBypassEnabled: true,
             },
             participants: {
@@ -98,8 +183,6 @@ async function createTeamsMeeting(subject, startDateTime, endDateTime, candidate
             isEntryExitAnnounced: false,
             allowedPresenters: 'organizer',
         };
-        // Create meeting via Graph API
-        // Using /users/{userId}/onlineMeetings endpoint for application permissions
         const graphUrl = `https://graph.microsoft.com/v1.0/users/${organizerUserId}/onlineMeetings`;
         console.log(`Creating Teams meeting for: ${candidateName}`);
         const response = await fetch(graphUrl, {
@@ -121,7 +204,6 @@ async function createTeamsMeeting(subject, startDateTime, endDateTime, candidate
         const meeting = await response.json();
         console.log(`Teams meeting created successfully: ${meeting.id}`);
         console.log(`Join URL: ${meeting.joinWebUrl}`);
-        // Also create a calendar event for the organizer
         await createCalendarEvent(accessToken, organizerUserId, subject, startDateTime, endDateTime, meeting.joinWebUrl, candidateName, jobTitle, branchName);
         return {
             success: true,
@@ -141,10 +223,6 @@ async function createTeamsMeeting(subject, startDateTime, endDateTime, candidate
 // ============================================================================
 // CALENDAR EVENT CREATION
 // ============================================================================
-/**
- * Create a calendar event in the organizer's Outlook calendar
- * This ensures the meeting shows up in the recruiter's calendar
- */
 async function createCalendarEvent(accessToken, userId, subject, startDateTime, endDateTime, teamsJoinUrl, candidateName, jobTitle, branchName) {
     try {
         const graphUrl = `https://graph.microsoft.com/v1.0/users/${userId}/events`;
@@ -193,7 +271,6 @@ async function createCalendarEvent(accessToken, userId, subject, startDateTime, 
         if (!response.ok) {
             const errorData = await response.text();
             console.error('Failed to create calendar event:', errorData);
-            // Don't throw - meeting was created, calendar event is secondary
         }
         else {
             console.log('Calendar event created successfully');
@@ -201,16 +278,42 @@ async function createCalendarEvent(accessToken, userId, subject, startDateTime, 
     }
     catch (error) {
         console.error('Error creating calendar event:', error);
-        // Don't throw - meeting was created, calendar event is secondary
     }
 }
-/**
- * Send confirmation email to candidate via Microsoft Graph API
- * Uses the recruitment@alliedpharmacies.com mailbox
- */
+// ============================================================================
+// TEMPLATE FETCHING
+// ============================================================================
+async function getTemplateByType(templateType) {
+    try {
+        const db = admin.firestore();
+        const snapshot = await db.collection('messageTemplates')
+            .where('templateType', '==', templateType)
+            .where('active', '==', true)
+            .limit(1)
+            .get();
+        if (!snapshot.empty) {
+            const doc = snapshot.docs[0];
+            const data = doc.data();
+            return {
+                id: doc.id,
+                name: data.name,
+                subject: data.subject,
+                plainContent: data.plainContent || data.content || '',
+                htmlContent: data.htmlContent,
+                templateType: data.templateType,
+                active: data.active
+            };
+        }
+        console.log(`Template not found for type: ${templateType}, using hardcoded fallback`);
+        return null;
+    }
+    catch (error) {
+        console.error('Error fetching template:', error);
+        return null;
+    }
+}
 async function sendConfirmationEmail(candidateEmail, candidateName, scheduledDate, type, teamsJoinUrl, jobTitle, branchName, confirmationCode, duration) {
     try {
-        // Get secrets
         const clientId = exports.msClientId.value();
         const clientSecret = exports.msClientSecret.value();
         const tenantId = exports.msTenantId.value();
@@ -219,9 +322,7 @@ async function sendConfirmationEmail(candidateEmail, candidateName, scheduledDat
             console.error('Microsoft Graph API secrets not configured for email');
             return { success: false, error: 'Email integration not configured' };
         }
-        // Get access token
         const accessToken = await getAccessToken(clientId, clientSecret, tenantId);
-        // Format date and time for display
         const dateOptions = {
             weekday: 'long',
             day: 'numeric',
@@ -235,19 +336,63 @@ async function sendConfirmationEmail(candidateEmail, candidateName, scheduledDat
         };
         const formattedDate = scheduledDate.toLocaleDateString('en-GB', dateOptions);
         const formattedTime = scheduledDate.toLocaleTimeString('en-GB', timeOptions);
-        // Calculate end time
         const durationMinutes = duration || (type === 'trial' ? 240 : 30);
         const endTime = new Date(scheduledDate.getTime() + durationMinutes * 60000);
         const formattedEndTime = endTime.toLocaleTimeString('en-GB', timeOptions);
-        // Build email subject
-        const subject = type === 'interview'
-            ? `Interview Confirmation - Allied Pharmacies${jobTitle ? ` (${jobTitle})` : ''}`
-            : `Trial Shift Confirmation - Allied Pharmacies${branchName ? ` at ${branchName}` : ''}`;
-        // Build email body
-        const emailBody = type === 'interview'
-            ? buildInterviewEmailBody(candidateName, formattedDate, formattedTime, formattedEndTime, teamsJoinUrl, jobTitle, confirmationCode)
-            : buildTrialEmailBody(candidateName, formattedDate, formattedTime, formattedEndTime, branchName, jobTitle, confirmationCode);
-        // Send email via Graph API
+        const durationDisplay = durationMinutes >= 60
+            ? `${Math.floor(durationMinutes / 60)} hour${durationMinutes >= 120 ? 's' : ''}${durationMinutes % 60 > 0 ? ` ${durationMinutes % 60} minutes` : ''}`
+            : `${durationMinutes} minutes`;
+        const placeholderData = {
+            firstName: candidateName.split(' ')[0],
+            lastName: candidateName.split(' ').slice(1).join(' '),
+            fullName: candidateName,
+            jobTitle: jobTitle || '',
+            branchName: branchName || '',
+            interviewDate: formattedDate,
+            interviewTime: `${formattedTime} - ${formattedEndTime}`,
+            duration: durationDisplay,
+            confirmationCode: confirmationCode || '',
+            teamsLink: teamsJoinUrl || '',
+            teamsJoinUrl: teamsJoinUrl || '',
+            bookingType: type === 'interview' ? 'Interview' : 'Trial Shift',
+            companyName: 'Allied Pharmacies',
+        };
+        const templateType = type === 'interview' ? 'interview_confirmation' : 'trial_confirmation';
+        const template = await getTemplateByType(templateType);
+        let subject;
+        let emailBody;
+        if (template) {
+            console.log(`Using template from Firestore: ${template.name}`);
+            const subjectResult = replaceTemplatePlaceholders(template.subject || (type === 'interview'
+                ? 'Interview Confirmation - Allied Pharmacies'
+                : 'Trial Shift Confirmation - Allied Pharmacies'), placeholderData);
+            subject = subjectResult.text;
+            if (template.htmlContent) {
+                const contentResult = replaceTemplatePlaceholders(template.htmlContent, placeholderData);
+                emailBody = DEFAULT_EMAIL_WRAPPER
+                    .replace('{{subject}}', subject)
+                    .replace('{{content}}', contentResult.text);
+            }
+            else {
+                const contentResult = replaceTemplatePlaceholders(template.plainContent, placeholderData);
+                const htmlContent = contentResult.text
+                    .split('\n\n')
+                    .map((para) => `<p>${para.replace(/\n/g, '<br>')}</p>`)
+                    .join('\n');
+                emailBody = DEFAULT_EMAIL_WRAPPER
+                    .replace('{{subject}}', subject)
+                    .replace('{{content}}', `<div class="header"><h1>${type === 'interview' ? 'Interview Confirmed' : 'Trial Shift Confirmed'}</h1></div><div class="content">${htmlContent}</div>`);
+            }
+        }
+        else {
+            console.log('Using hardcoded email template');
+            subject = type === 'interview'
+                ? `Interview Confirmation - Allied Pharmacies${jobTitle ? ` (${jobTitle})` : ''}`
+                : `Trial Shift Confirmation - Allied Pharmacies${branchName ? ` at ${branchName}` : ''}`;
+            emailBody = type === 'interview'
+                ? buildInterviewEmailBody(candidateName, formattedDate, formattedTime, formattedEndTime, teamsJoinUrl, jobTitle, confirmationCode)
+                : buildTrialEmailBody(candidateName, formattedDate, formattedTime, formattedEndTime, branchName, jobTitle, confirmationCode);
+        }
         const graphUrl = `https://graph.microsoft.com/v1.0/users/${organizerUserId}/sendMail`;
         const emailRequest = {
             message: {
@@ -293,9 +438,9 @@ async function sendConfirmationEmail(candidateEmail, candidateName, scheduledDat
         };
     }
 }
-/**
- * Build HTML email body for interview confirmation
- */
+// ============================================================================
+// FALLBACK EMAIL TEMPLATES
+// ============================================================================
 function buildInterviewEmailBody(candidateName, date, startTime, endTime, teamsJoinUrl, jobTitle, confirmationCode) {
     return `
 <!DOCTYPE html>
@@ -313,7 +458,6 @@ function buildInterviewEmailBody(candidateName, date, startTime, endTime, teamsJ
     .detail-label { font-weight: bold; width: 140px; color: #666; }
     .detail-value { flex: 1; }
     .teams-button { display: inline-block; background-color: #6264A7; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; margin: 15px 0; }
-    .teams-button:hover { background-color: #4B4D8C; }
     .confirmation-code { background-color: #e8f5e9; border: 1px solid #4caf50; padding: 10px 15px; border-radius: 4px; font-family: monospace; font-size: 16px; display: inline-block; }
     .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
     .important { background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 15px 0; }
@@ -326,9 +470,7 @@ function buildInterviewEmailBody(candidateName, date, startTime, endTime, teamsJ
     </div>
     <div class="content">
       <p>Dear ${candidateName},</p>
-      
       <p>Thank you for booking your interview with <strong>Allied Pharmacies</strong>. We're looking forward to speaking with you!</p>
-      
       <div class="details-box">
         <div class="detail-row">
           <span class="detail-label">📅 Date:</span>
@@ -338,32 +480,14 @@ function buildInterviewEmailBody(candidateName, date, startTime, endTime, teamsJ
           <span class="detail-label">🕐 Time:</span>
           <span class="detail-value">${startTime} - ${endTime}</span>
         </div>
-        ${jobTitle ? `
-        <div class="detail-row">
-          <span class="detail-label">💼 Position:</span>
-          <span class="detail-value">${jobTitle}</span>
-        </div>
-        ` : ''}
+        ${jobTitle ? `<div class="detail-row"><span class="detail-label">💼 Position:</span><span class="detail-value">${jobTitle}</span></div>` : ''}
         <div class="detail-row">
           <span class="detail-label">📍 Location:</span>
           <span class="detail-value">Microsoft Teams (Online)</span>
         </div>
-        ${confirmationCode ? `
-        <div class="detail-row">
-          <span class="detail-label">🎫 Reference:</span>
-          <span class="detail-value"><span class="confirmation-code">${confirmationCode}</span></span>
-        </div>
-        ` : ''}
+        ${confirmationCode ? `<div class="detail-row"><span class="detail-label">🎫 Reference:</span><span class="detail-value"><span class="confirmation-code">${confirmationCode}</span></span></div>` : ''}
       </div>
-      
-      ${teamsJoinUrl ? `
-      <div style="text-align: center;">
-        <p><strong>Join your interview using the button below:</strong></p>
-        <a href="${teamsJoinUrl}" class="teams-button">🎥 Join Teams Meeting</a>
-        <p style="font-size: 12px; color: #666;">Or copy this link: <a href="${teamsJoinUrl}">${teamsJoinUrl}</a></p>
-      </div>
-      ` : ''}
-      
+      ${teamsJoinUrl ? `<div style="text-align: center;"><p><strong>Join your interview using the button below:</strong></p><a href="${teamsJoinUrl}" class="teams-button">🎥 Join Teams Meeting</a><p style="font-size: 12px; color: #666;">Or copy this link: <a href="${teamsJoinUrl}">${teamsJoinUrl}</a></p></div>` : ''}
       <div class="important">
         <strong>📋 Before your interview:</strong>
         <ul style="margin: 10px 0;">
@@ -373,23 +497,16 @@ function buildInterviewEmailBody(candidateName, date, startTime, endTime, teamsJ
           <li>Prepare questions about the role</li>
         </ul>
       </div>
-      
       <p>If you need to reschedule or cancel, please contact us as soon as possible.</p>
-      
       <p>Best regards,<br/><strong>Allied Pharmacies Recruitment Team</strong></p>
     </div>
     <div class="footer">
       <p>Allied Pharmacies | recruitment@alliedpharmacies.com</p>
-      <p style="font-size: 10px;">This is an automated message. Please do not reply directly to this email.</p>
     </div>
   </div>
 </body>
-</html>
-  `;
+</html>`;
 }
-/**
- * Build HTML email body for trial shift confirmation
- */
 function buildTrialEmailBody(candidateName, date, startTime, endTime, branchName, jobTitle, confirmationCode) {
     return `
 <!DOCTYPE html>
@@ -419,9 +536,7 @@ function buildTrialEmailBody(candidateName, date, startTime, endTime, branchName
     </div>
     <div class="content">
       <p>Dear ${candidateName},</p>
-      
-      <p>Great news! Your trial shift with <strong>Allied Pharmacies</strong> has been confirmed. We're excited to have you join us!</p>
-      
+      <p>Great news! Your trial shift with <strong>Allied Pharmacies</strong> has been confirmed.</p>
       <div class="details-box">
         <div class="detail-row">
           <span class="detail-label">📅 Date:</span>
@@ -431,26 +546,10 @@ function buildTrialEmailBody(candidateName, date, startTime, endTime, branchName
           <span class="detail-label">🕐 Time:</span>
           <span class="detail-value">${startTime} - ${endTime}</span>
         </div>
-        ${jobTitle ? `
-        <div class="detail-row">
-          <span class="detail-label">💼 Position:</span>
-          <span class="detail-value">${jobTitle}</span>
-        </div>
-        ` : ''}
-        ${branchName ? `
-        <div class="detail-row">
-          <span class="detail-label">📍 Location:</span>
-          <span class="detail-value">${branchName}</span>
-        </div>
-        ` : ''}
-        ${confirmationCode ? `
-        <div class="detail-row">
-          <span class="detail-label">🎫 Reference:</span>
-          <span class="detail-value"><span class="confirmation-code">${confirmationCode}</span></span>
-        </div>
-        ` : ''}
+        ${jobTitle ? `<div class="detail-row"><span class="detail-label">💼 Position:</span><span class="detail-value">${jobTitle}</span></div>` : ''}
+        ${branchName ? `<div class="detail-row"><span class="detail-label">📍 Location:</span><span class="detail-value">${branchName}</span></div>` : ''}
+        ${confirmationCode ? `<div class="detail-row"><span class="detail-label">🎫 Reference:</span><span class="detail-value"><span class="confirmation-code">${confirmationCode}</span></span></div>` : ''}
       </div>
-      
       <div class="checklist">
         <strong>📋 What to bring:</strong>
         <ul style="margin: 10px 0;">
@@ -460,7 +559,6 @@ function buildTrialEmailBody(candidateName, date, startTime, endTime, branchName
           <li>Comfortable, smart clothing</li>
         </ul>
       </div>
-      
       <div class="important">
         <strong>⚠️ Important:</strong>
         <ul style="margin: 10px 0;">
@@ -469,29 +567,19 @@ function buildTrialEmailBody(candidateName, date, startTime, endTime, branchName
           <li>If you're running late, please call the branch directly</li>
         </ul>
       </div>
-      
-      <p>If you need to reschedule or cancel, please contact us as soon as possible.</p>
-      
       <p>Best of luck with your trial!</p>
-      
       <p>Best regards,<br/><strong>Allied Pharmacies Recruitment Team</strong></p>
     </div>
     <div class="footer">
       <p>Allied Pharmacies | recruitment@alliedpharmacies.com</p>
-      <p style="font-size: 10px;">This is an automated message. Please do not reply directly to this email.</p>
     </div>
   </div>
 </body>
-</html>
-  `;
+</html>`;
 }
 // ============================================================================
 // HELPER: GENERATE TEAMS MEETING LINK FOR ICS
 // ============================================================================
-/**
- * Generate ICS-compatible Teams meeting description
- * Includes the join URL formatted for calendar applications
- */
 function getTeamsMeetingICSContent(teamsJoinUrl, candidateName, jobTitle) {
     return [
         `Interview with ${candidateName}`,

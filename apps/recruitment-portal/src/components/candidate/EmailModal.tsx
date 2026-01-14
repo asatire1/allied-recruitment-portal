@@ -1,7 +1,7 @@
 // ============================================================================
-// Email Modal Component
-// Extracted from CandidateDetail.tsx for better maintainability
-// Location: apps/recruitment-portal/src/components/candidate/EmailModal.tsx
+// Email Modal Component - Phase 3 Update
+// Now uses unified messageTemplates collection
+// Properly fetches branch name from branches collection
 // ============================================================================
 
 import { useState, useEffect } from 'react'
@@ -22,16 +22,20 @@ import { Modal, Select, Spinner, Button, Textarea, Input } from '@allied/shared-
 // TYPES
 // ============================================================================
 
-type TemplateCategory = 'interview' | 'trial' | 'offer' | 'rejection' | 'reminder' | 'general'
+type TemplateCategory = 'interview' | 'trial' | 'confirmation' | 'offer' | 'rejection' | 'reminder' | 'feedback' | 'general'
+type TemplateChannel = 'whatsapp' | 'email' | 'both'
 
 interface EmailTemplate {
   id: string
   name: string
   category: TemplateCategory
+  channel: TemplateChannel
   subject: string
-  content: string
+  plainContent: string
+  htmlContent?: string
   placeholders: string[]
   active: boolean
+  isSystemTemplate?: boolean
 }
 
 interface EmailModalProps {
@@ -57,10 +61,11 @@ interface EmailModalProps {
 
 const TEMPLATE_CATEGORIES = [
   { value: 'interview', label: 'Interview', color: '#3b82f6' },
-  { value: 'trial', label: 'Trial', color: '#f59e0b' },
+  { value: 'trial', label: 'Trial', color: '#8b5cf6' },
+  { value: 'confirmation', label: 'Confirmation', color: '#10b981' },
   { value: 'offer', label: 'Offer', color: '#10b981' },
   { value: 'rejection', label: 'Rejection', color: '#ef4444' },
-  { value: 'reminder', label: 'Reminder', color: '#8b5cf6' },
+  { value: 'reminder', label: 'Reminder', color: '#f59e0b' },
   { value: 'general', label: 'General', color: '#6b7280' },
 ]
 
@@ -93,6 +98,10 @@ export function EmailModal({
   const [generatingBookingLink, setGeneratingBookingLink] = useState(false)
   const [interviewExpiryDays, setInterviewExpiryDays] = useState(7)
   const [trialExpiryDays, setTrialExpiryDays] = useState(7)
+  
+  // Branch data - fetched when candidate has branchId
+  const [branchName, setBranchName] = useState<string>('')
+  const [branchAddress, setBranchAddress] = useState<string>('')
 
   // Load templates when modal opens
   useEffect(() => {
@@ -128,6 +137,37 @@ export function EmailModal({
     loadExpirySettings()
   }, [db])
 
+  // Fetch branch details when candidate changes
+  useEffect(() => {
+    const fetchBranchDetails = async () => {
+      if (!candidate?.branchId) {
+        setBranchName('')
+        setBranchAddress('')
+        return
+      }
+
+      // If candidate already has branchName, use it
+      if (candidate.branchName) {
+        setBranchName(candidate.branchName)
+      }
+
+      try {
+        const branchDoc = await getDoc(doc(db, 'branches', candidate.branchId))
+        if (branchDoc.exists()) {
+          const branchData = branchDoc.data()
+          setBranchName(branchData.name || candidate.branchName || '')
+          setBranchAddress(branchData.address || '')
+        }
+      } catch (error) {
+        console.error('Error fetching branch details:', error)
+        // Fallback to candidate's branchName if available
+        setBranchName(candidate.branchName || '')
+      }
+    }
+
+    fetchBranchDetails()
+  }, [candidate?.branchId, candidate?.branchName, db])
+
   // Reset/initialize state when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -158,34 +198,42 @@ export function EmailModal({
     }
   }, [isOpen, initialCategory, initialSubject, initialContent])
 
-  // Load Email templates from Firestore
+  // Load Email templates from Firestore - unified messageTemplates collection
   const loadTemplates = async () => {
     setLoadingTemplates(true)
     try {
-      // First try to load from emailTemplates collection
-      const emailTemplatesRef = collection(db, 'emailTemplates')
-      let q = query(emailTemplatesRef, where('active', '==', true), orderBy('name'))
+      // Load from unified messageTemplates collection
+      let templatesRef = collection(db, 'messageTemplates')
+      let q = query(templatesRef, where('active', '==', true), orderBy('name'))
       let snapshot = await getDocs(q)
       
+      // Fallback to whatsappTemplates if messageTemplates is empty
       if (snapshot.empty) {
-        // Fallback: use whatsappTemplates if no dedicated email templates exist
-        const whatsappRef = collection(db, 'whatsappTemplates')
-        q = query(whatsappRef, where('active', '==', true), orderBy('name'))
+        templatesRef = collection(db, 'whatsappTemplates')
+        q = query(templatesRef, where('active', '==', true), orderBy('name'))
         snapshot = await getDocs(q)
       }
       
       const loadedTemplates: EmailTemplate[] = []
-      snapshot.forEach(doc => {
-        const data = doc.data()
-        loadedTemplates.push({
-          id: doc.id,
-          name: data.name,
-          category: data.category,
-          subject: data.subject || `${data.category?.charAt(0).toUpperCase()}${data.category?.slice(1)} - Allied Pharmacies`,
-          content: data.content,
-          placeholders: data.placeholders || [],
-          active: data.active
-        } as EmailTemplate)
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data()
+        // Filter: only show templates that support email (channel = 'email' or 'both')
+        const channel = data.channel || 'both'
+        if (channel === 'email' || channel === 'both') {
+          loadedTemplates.push({
+            id: docSnap.id,
+            name: data.name,
+            category: data.category,
+            channel: channel,
+            subject: data.subject || `${data.category?.charAt(0).toUpperCase()}${data.category?.slice(1)} - Allied Pharmacies`,
+            // Support both new schema (plainContent) and old schema (content)
+            plainContent: data.plainContent || data.content || '',
+            htmlContent: data.htmlContent,
+            placeholders: data.placeholders || [],
+            active: data.active,
+            isSystemTemplate: data.isSystemTemplate || false
+          })
+        }
       })
       
       setTemplates(loadedTemplates)
@@ -213,8 +261,9 @@ export function EmailModal({
     return combinePlaceholderData(candidateData, {
       interviewBookingLink: bookingUrl || generatedBookingLink || '[Booking link will be generated]',
       companyName: candidate.entity || 'Allied Pharmacies',
-      branchName: candidate.branchId || '',
-      branchAddress: ''
+      // Use fetched branch name, not branchId
+      branchName: branchName || candidate.branchName || '',
+      branchAddress: branchAddress || ''
     })
   }
 
@@ -253,7 +302,8 @@ export function EmailModal({
         type,
         jobTitle: candidate.jobTitle,
         branchId: candidate.branchId,
-        branchName: candidate.branchName,
+        // Use fetched branch name
+        branchName: branchName || candidate.branchName,
         expiryDays: expiry,
         maxUses: 1,
       })
@@ -284,7 +334,7 @@ export function EmailModal({
     setSelectedTemplate(template)
     setIsEditingEmail(false)
     
-    const usesBookingLink = template.content.includes('{{interviewBookingLink}}')
+    const usesBookingLink = template.plainContent.includes('{{interviewBookingLink}}')
     
     if (usesBookingLink && !generatedBookingLink) {
       const linkType = template.category === 'trial' ? 'trial' : 'interview'
@@ -293,7 +343,7 @@ export function EmailModal({
     
     const data = getPlaceholderData()
     const subjectResult = replaceTemplatePlaceholders(template.subject, data)
-    const contentResult = replaceTemplatePlaceholders(template.content, data)
+    const contentResult = replaceTemplatePlaceholders(template.plainContent, data)
     setEmailSubject(subjectResult.text)
     setEmailContent(contentResult.text)
   }
@@ -312,7 +362,7 @@ export function EmailModal({
       setSelectedTemplate(template)
       setIsEditingEmail(false)
       const subjectResult = replaceTemplatePlaceholders(template.subject, data)
-      const contentResult = replaceTemplatePlaceholders(template.content, data)
+      const contentResult = replaceTemplatePlaceholders(template.plainContent, data)
       setEmailSubject(subjectResult.text)
       setEmailContent(contentResult.text)
     } else {
@@ -347,14 +397,15 @@ Allied Recruitment Team`)
       setSelectedTemplate(template)
       setIsEditingEmail(false)
       const subjectResult = replaceTemplatePlaceholders(template.subject, data)
-      const contentResult = replaceTemplatePlaceholders(template.content, data)
+      const contentResult = replaceTemplatePlaceholders(template.plainContent, data)
       setEmailSubject(subjectResult.text)
       setEmailContent(contentResult.text)
     } else {
-      setEmailSubject(`Trial Shift Invitation - Allied Pharmacies`)
+      const branchText = branchName ? ` at ${branchName}` : ''
+      setEmailSubject(`Trial Shift Invitation${branchText} - Allied Pharmacies`)
       setEmailContent(`Dear ${data.firstName},
 
-Congratulations! Following your successful interview, we would like to invite you for a trial shift at Allied Pharmacies.
+Congratulations! Following your successful interview, we would like to invite you for a trial shift${branchText}.
 
 Please use this link to book your trial: ${bookingUrl || '[Booking link]'}
 
@@ -560,6 +611,7 @@ Allied Recruitment Team`)
                         {category?.label}
                       </span>
                       <span className="template-option-name">{template.name}</span>
+                      {template.isSystemTemplate && <span className="system-badge">🔒</span>}
                     </button>
                   )
                 })

@@ -1330,50 +1330,46 @@ export function Candidates() {
     }
   }, [showBulkInviteModal, bulkInviteProcessing])
 
-  // Process bulk invites
+  // Process bulk invites - uses Cloud Function for consistent token hashing
   const processBulkInvites = async () => {
     if (selectedCandidates.length === 0) return
 
     const results: typeof bulkInviteResults = []
+    const functions = getFirebaseFunctions()
+
+    // Use the same Cloud Function that EmailModal/WhatsAppModal use
+    const createBookingLinkFn = httpsCallable<{
+      candidateId: string
+      candidateName: string
+      candidateEmail?: string
+      type: 'interview' | 'trial'
+      branchId?: string
+      branchName?: string
+    }, {
+      success: boolean
+      bookingLink?: string
+      token?: string
+      expiresAt?: string
+      error?: string
+    }>(functions, 'createBookingLink')
 
     for (const candidate of selectedCandidates) {
       try {
-        // Generate a secure token
-        const token = crypto.randomUUID ? crypto.randomUUID() : 
-          `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`
-        
-        // Hash the token for storage
-        const tokenHash = await hashString(token)
-        
-        // Calculate expiry (7 days from now)
-        const expiresAt = new Date()
-        expiresAt.setDate(expiresAt.getDate() + 7)
-
-        // Create booking link document
-        const bookingLinkData = {
+        // Call Cloud Function to create booking link (ensures consistent token hashing)
+        const result = await createBookingLinkFn({
           candidateId: candidate.id,
           candidateName: `${candidate.firstName} ${candidate.lastName}`,
-          candidateEmail: candidate.email || null,
-          candidatePhone: candidate.phone || null,
+          candidateEmail: candidate.email || undefined,
           type: bulkInviteType,
-          jobId: candidate.jobId || null,
-          jobTitle: candidate.jobTitle || null,
-          branchId: candidate.branchId || null,
-          branchName: candidate.branchName || candidate.location || null,
-          tokenHash,
-          status: 'active',
-          maxUses: 1,
-          useCount: 0,
-          expiresAt,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-          createdBy: user?.id || '',
+          branchId: candidate.branchId || undefined,
+          branchName: candidate.branchName || candidate.location || undefined,
+        })
+
+        if (!result.data.success || !result.data.bookingLink) {
+          throw new Error(result.data.error || 'Failed to create booking link')
         }
 
-        const docRef = await addDoc(collection(db, 'bookingLinks'), bookingLinkData)
-
-        // Build booking URL - use allied-booking.web.app for the booking page
-        const bookingUrl = `https://allied-booking.web.app/book/${token}`
+        const bookingUrl = result.data.bookingLink
 
         // Update candidate status to invite_sent
         const candidateRef = doc(db, COLLECTIONS.CANDIDATES, candidate.id)
@@ -1388,11 +1384,11 @@ export function Candidates() {
           'status_changed',
           `${bulkInviteType === 'interview' ? 'Interview' : 'Trial'} booking link sent (bulk invite)`,
           { status: candidate.status },
-          { status: 'invite_sent', bookingLinkId: docRef.id }
+          { status: 'invite_sent' }
         )
 
         // Update local candidate state
-        setCandidates(prev => prev.map(c => 
+        setCandidates(prev => prev.map(c =>
           c.id === candidate.id ? { ...c, status: 'invite_sent' as CandidateStatus } : c
         ))
 
@@ -1428,15 +1424,6 @@ export function Candidates() {
     setBulkInviteProcessing(false)
     // Don't clear selection here - let user see results and click WhatsApp buttons
     // Selection will be cleared when modal is closed
-  }
-
-  // Simple string hash function for token
-  const hashString = async (str: string): Promise<string> => {
-    const encoder = new TextEncoder()
-    const data = encoder.encode(str)
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-    const hashArray = Array.from(new Uint8Array(hashBuffer))
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
   }
 
   // Generate WhatsApp message

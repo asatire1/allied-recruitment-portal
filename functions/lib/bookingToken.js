@@ -97,8 +97,8 @@ exports.validateBookingToken = (0, https_1.onCall)({
     }
     // Sanitize token
     const sanitizedToken = token.trim();
-    // Validate token format (nanoid is typically 21 chars)
-    if (sanitizedToken.length < 10 || sanitizedToken.length > 50) {
+    // Validate token format (crypto.randomBytes(32).toString('hex') = 64 chars)
+    if (sanitizedToken.length < 10 || sanitizedToken.length > 64) {
         console.log('validateBookingToken: Token length invalid:', sanitizedToken.length);
         throw new https_1.HttpsError('not-found', 'Invalid or expired booking link');
     }
@@ -161,15 +161,19 @@ exports.validateBookingToken = (0, https_1.onCall)({
         // SUCCESS - RETURN MINIMAL DATA
         // ========================================
         console.log('validateBookingToken: Token valid for', link.candidateName, '- type:', link.type);
+        // Return data nested under 'data' property as expected by booking page
         return {
             valid: true,
-            candidateName: getFirstName(link.candidateName),
-            type: link.type || 'interview',
-            jobTitle: link.jobTitle,
-            branchName: link.branchName,
-            branchAddress: link.branchAddress,
-            duration: getDuration(link.type),
-            expiresAt: expiresAt.toISOString(),
+            data: {
+                candidateName: getFirstName(link.candidateName),
+                candidatePhone: link.candidatePhone || undefined,
+                type: link.type || 'interview',
+                jobTitle: link.jobTitle,
+                branchName: link.branchName,
+                branchAddress: link.branchAddress,
+                duration: link.duration || getDuration(link.type),
+                expiresAt: expiresAt.toISOString(),
+            }
         };
     }
     catch (error) {
