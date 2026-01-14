@@ -172,6 +172,7 @@ export function CandidateDetail() {
       {/* Header */}
       <CandidateHeader
         candidate={candidate}
+        latestInterview={latestInterview}
         onChangeStatus={modals.openStatusModal}
         onEdit={modals.openEditModal}
         onDelete={modals.openDeleteModal}

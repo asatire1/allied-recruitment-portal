@@ -215,25 +215,44 @@ export function useCandidateData({
     }
   }, [db, candidate])
 
-  // Fetch latest interview (for Copilot integration)
+  // Fetch latest interview/trial for this candidate
   const fetchLatestInterview = useCallback(async () => {
     if (!candidateId) return
 
     try {
       const interviewsRef = collection(db, 'interviews')
+      // Simple query without orderBy to avoid index requirement
       const q = query(
         interviewsRef,
-        where('candidateId', '==', candidateId),
-        orderBy('scheduledAt', 'desc')
+        where('candidateId', '==', candidateId)
       )
       const snapshot = await getDocs(q)
-      
+
       if (!snapshot.empty) {
-        const interview = {
-          id: snapshot.docs[0].id,
-          ...snapshot.docs[0].data()
+        // Find the most recent scheduled interview/trial
+        let latest: any = null
+        let latestDate: Date | null = null
+
+        snapshot.docs.forEach(doc => {
+          const data = doc.data()
+          // Check both scheduledDate (new) and scheduledAt (legacy) field names
+          const dateField = data.scheduledDate || data.scheduledAt
+          const scheduledAt = dateField?.toDate?.() || (dateField ? new Date(dateField) : null)
+
+          if (scheduledAt && (!latestDate || scheduledAt > latestDate)) {
+            latestDate = scheduledAt
+            // Normalize the field name to scheduledAt for the component
+            latest = {
+              id: doc.id,
+              ...data,
+              scheduledAt: dateField // Ensure scheduledAt is set
+            }
+          }
+        })
+
+        if (latest) {
+          setLatestInterview(latest)
         }
-        setLatestInterview(interview)
       }
     } catch (err) {
       console.error('Error fetching latest interview:', err)

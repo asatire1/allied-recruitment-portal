@@ -977,7 +977,17 @@ exports.submitBooking = (0, https_1.onCall)({
     // AUTOMATICALLY UPDATE CANDIDATE STATUS
     // =========================================================================
     const newStatus = linkData.type === 'interview' ? 'interview_scheduled' : 'trial_scheduled';
-    await updateCandidateStatus(linkData.candidateId, newStatus, `Candidate booked ${linkData.type} via self-service booking`);
+    // Format the scheduled date for activity log
+    const formattedScheduledDate = scheduledDate.toLocaleDateString('en-GB', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+    }) + ' at ' + scheduledDate.toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+    await updateCandidateStatus(linkData.candidateId, newStatus, `Candidate booked ${linkData.type} for ${formattedScheduledDate}${linkData.branchName ? ` at ${linkData.branchName}` : ''}`);
     // =========================================================================
     // SEND BRANCH NOTIFICATION FOR TRIALS
     // =========================================================================

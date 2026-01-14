@@ -136,6 +136,22 @@
   color: var(--ios-tertiary-label);
 }
 
+.scheduled-info {
+  margin-top: 8px;
+}
+
+.scheduled-datetime {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ios-teal);
+  background: rgba(13, 79, 92, 0.1);
+  padding: 6px 12px;
+  border-radius: var(--ios-radius-full);
+}
+
 .candidate-header-actions {
   display: flex;
   gap: 10px;

@@ -41,12 +41,35 @@ const formatDate = (timestamp: any): string => {
   })
 }
 
+const formatDateTime = (timestamp: any): string => {
+  if (!timestamp) return '-'
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+  return date.toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }) + ' at ' + date.toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 // ============================================================================
 // TYPES
 // ============================================================================
 
+interface ScheduledEvent {
+  id: string
+  type: 'interview' | 'trial'
+  scheduledAt: any
+  branchName?: string
+  duration?: number
+}
+
 interface CandidateHeaderProps {
   candidate: Candidate
+  latestInterview?: ScheduledEvent | null
   onChangeStatus: () => void
   onEdit: () => void
   onDelete: () => void
@@ -56,12 +79,17 @@ interface CandidateHeaderProps {
 // COMPONENT
 // ============================================================================
 
-export function CandidateHeader({ 
-  candidate, 
-  onChangeStatus, 
-  onEdit, 
-  onDelete 
+export function CandidateHeader({
+  candidate,
+  latestInterview,
+  onChangeStatus,
+  onEdit,
+  onDelete
 }: CandidateHeaderProps) {
+  // Check if we should show scheduled event info
+  const showScheduledInfo = latestInterview &&
+    (candidate.status === 'interview_scheduled' || candidate.status === 'trial_scheduled')
+
   return (
     <div className="candidate-header">
       <div className="candidate-avatar">
@@ -79,6 +107,14 @@ export function CandidateHeader({
           )}
           <span className="applied-date">Applied {formatDate(candidate.createdAt)}</span>
         </div>
+        {showScheduledInfo && (
+          <div className="scheduled-info">
+            <span className="scheduled-datetime">
+              📅 {latestInterview.type === 'trial' ? 'Trial' : 'Interview'}: {formatDateTime(latestInterview.scheduledAt)}
+              {latestInterview.branchName && ` at ${latestInterview.branchName}`}
+            </span>
+          </div>
+        )}
       </div>
       <div className="candidate-header-actions">
         <Button 

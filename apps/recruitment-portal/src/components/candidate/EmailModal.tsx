@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { useState, useEffect } from 'react'
-import { collection, query, where, orderBy, getDocs, doc, getDoc } from 'firebase/firestore'
+import { collection, query, where, orderBy, getDocs, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { 
   getFirebaseDb, 
@@ -258,8 +258,12 @@ export function EmailModal({
       entity: candidate.entity || 'Allied Pharmacies'
     })
     
+    const linkValue = bookingUrl || generatedBookingLink || '[Booking link will be generated]'
     return combinePlaceholderData(candidateData, {
-      interviewBookingLink: bookingUrl || generatedBookingLink || '[Booking link will be generated]',
+      // Support all booking link placeholder variants for consistency with bulk emails
+      interviewBookingLink: linkValue,
+      trialBookingLink: linkValue,
+      bookingLink: linkValue,
       companyName: candidate.entity || 'Allied Pharmacies',
       // Use fetched branch name, not branchId
       branchName: branchName || candidate.branchName || '',
@@ -434,41 +438,86 @@ Allied Recruitment Team`)
     }
   }
 
-  // Send email via Microsoft Graph API
+  // Send email via sendCandidateEmail (uses HTML templates like bulk emails)
   const handleSendEmail = async () => {
     if (!candidate?.email || !emailContent || !emailSubject) return
-    
+
     setSendingEmail(true)
-    
+
     try {
       const functions = getFirebaseFunctions()
+      // Use sendCandidateEmail instead of sendEmail to get HTML template support
       const sendEmailFn = httpsCallable<{
         to: string
-        subject: string
-        body: string
         candidateId: string
         candidateName: string
+        subject: string
+        body: string
+        templateId?: string
+        templateName?: string
+        type: 'interview' | 'trial' | 'offer' | 'rejection' | 'reminder' | 'general'
+        bookingUrl?: string
+        jobTitle?: string
+        branchName?: string
       }, {
         success: boolean
-        messageId?: string
+        trackingId?: string
         error?: string
-      }>(functions, 'sendEmail')
-      
+      }>(functions, 'sendCandidateEmail')
+
+      // Determine email type from selected template or category filter
+      const emailType = selectedTemplate?.category || categoryFilter || 'general'
+
       const result = await sendEmailFn({
         to: candidate.email,
+        candidateId: candidate.id,
+        candidateName: `${candidate.firstName} ${candidate.lastName}`,
         subject: emailSubject,
         body: emailContent,
-        candidateId: candidate.id,
-        candidateName: `${candidate.firstName} ${candidate.lastName}`
+        templateId: selectedTemplate?.id,
+        templateName: selectedTemplate?.name,
+        type: emailType as 'interview' | 'trial' | 'offer' | 'rejection' | 'reminder' | 'general',
+        // Pass booking URL so HTML template placeholders are replaced
+        bookingUrl: generatedBookingLink || undefined,
+        jobTitle: candidate.jobTitle,
+        branchName: branchName || candidate.branchName,
       })
-      
+
       if (result.data.success) {
+        // Update candidate status based on email type
+        const db = getFirebaseDb()
+        const candidateRef = doc(db, 'candidates', candidate.id)
+        const previousStatus = candidate.status
+
+        // Determine new status based on email type
+        let newStatus: string | null = null
+        if (emailType === 'interview') {
+          newStatus = 'invite_sent'
+        } else if (emailType === 'trial') {
+          newStatus = 'trial_invited'
+        }
+
+        if (newStatus && previousStatus !== newStatus) {
+          await updateDoc(candidateRef, {
+            status: newStatus,
+            updatedAt: serverTimestamp(),
+          })
+
+          await onLogActivity(
+            candidate.id,
+            'status_changed',
+            `Status changed from ${previousStatus} to ${newStatus} (${emailType} invite sent)`,
+            { status: previousStatus },
+            { status: newStatus }
+          )
+        }
+
         await onLogActivity(
           candidate.id,
           'message_sent',
           `Sent email: "${emailSubject}"${selectedTemplate ? ` using template "${selectedTemplate.name}"` : ''}`
         )
-        
+
         onClose()
         alert('Email sent successfully!')
       } else {
@@ -476,21 +525,21 @@ Allied Recruitment Team`)
       }
     } catch (error: any) {
       console.error('Error sending email:', error)
-      
+
       const fallback = window.confirm(
         `Could not send email via Microsoft Graph.\n\nError: ${error.message}\n\nWould you like to open your email client instead?`
       )
-      
+
       if (fallback) {
         const mailtoUrl = `mailto:${candidate.email}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailContent)}`
         window.location.href = mailtoUrl
-        
+
         await onLogActivity(
           candidate.id,
           'message_sent',
           `Opened email client for: "${emailSubject}"${selectedTemplate ? ` using template "${selectedTemplate.name}"` : ''}`
         )
-        
+
         onClose()
       }
     } finally {

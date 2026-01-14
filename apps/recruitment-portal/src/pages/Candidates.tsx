@@ -1371,10 +1371,11 @@ export function Candidates() {
 
         const bookingUrl = result.data.bookingLink
 
-        // Update candidate status to invite_sent
+        // Update candidate status based on invite type
+        const newStatus = bulkInviteType === 'trial' ? 'trial_invited' : 'invite_sent'
         const candidateRef = doc(db, COLLECTIONS.CANDIDATES, candidate.id)
         await updateDoc(candidateRef, {
-          status: 'invite_sent',
+          status: newStatus,
           updatedAt: serverTimestamp(),
         })
 
@@ -1384,12 +1385,12 @@ export function Candidates() {
           'status_changed',
           `${bulkInviteType === 'interview' ? 'Interview' : 'Trial'} booking link sent (bulk invite)`,
           { status: candidate.status },
-          { status: 'invite_sent' }
+          { status: newStatus }
         )
 
         // Update local candidate state
         setCandidates(prev => prev.map(c =>
-          c.id === candidate.id ? { ...c, status: 'invite_sent' as CandidateStatus } : c
+          c.id === candidate.id ? { ...c, status: newStatus as CandidateStatus } : c
         ))
 
         results.push({
@@ -1532,6 +1533,10 @@ Allied Recruitment Team`
         subject: getEmailSubject(bulkInviteType),
         body: getEmailMessage(result.candidateName, result.bookingUrl, bulkInviteType),
         type: bulkInviteType,
+        // Pass bookingUrl so HTML template placeholders are replaced
+        bookingUrl: result.bookingUrl,
+        branchName: result.branchName,
+        jobTitle: result.jobTitle,
       })
       
       // Update result with email sent status
@@ -1570,6 +1575,10 @@ Allied Recruitment Team`
           subject: getEmailSubject(bulkInviteType),
           body: getEmailMessage(result.candidateName, result.bookingUrl!, bulkInviteType),
           type: bulkInviteType,
+          // Pass bookingUrl so HTML template placeholders are replaced
+          bookingUrl: result.bookingUrl,
+          branchName: result.branchName,
+          jobTitle: result.jobTitle,
         })
         
         // Update with success tick

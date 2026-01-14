@@ -150,14 +150,15 @@ export function UserManagement() {
       // Load branches for assignment
       const branchesQuery = query(
         collection(db, 'branches'),
-        where('active', '==', true),
-        orderBy('name', 'asc')
+        where('active', '==', true)
       )
       const branchesSnap = await getDocs(branchesQuery)
       const branchesData = branchesSnap.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Branch[]
+      // Sort by name in memory to avoid requiring a composite index
+      branchesData.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
       setBranches(branchesData)
       
     } catch (err) {

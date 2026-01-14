@@ -641,12 +641,20 @@ export const sendEmail = onCall<SendEmailRequest, Promise<SendEmailResponse>>(
       const organizerUserId = msOrganizerUserId.value()
       const graphUrl = `https://graph.microsoft.com/v1.0/users/${organizerUserId}/sendMail`
 
-      // Convert plain text body to HTML with line breaks
-      const htmlBody = body
+      // Convert plain text body to HTML with line breaks and clickable links
+      let htmlBody = body
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/\n/g, '<br>')
+
+      // Convert URLs to clickable links (must be done before newline replacement)
+      const urlRegex = /(https?:\/\/[^\s<]+)/g
+      htmlBody = htmlBody.replace(urlRegex, (url) => {
+        return `<a href="${url}" target="_blank" style="color: #0066cc; text-decoration: underline; font-weight: 600;">${url}</a>`
+      })
+
+      // Replace newlines with <br>
+      htmlBody = htmlBody.replace(/\n/g, '<br>')
 
       const emailPayload = {
         message: {
@@ -709,6 +717,110 @@ export const sendEmail = onCall<SendEmailRequest, Promise<SendEmailResponse>>(
       
       const message = error instanceof Error ? error.message : 'Unknown error'
       throw new HttpsError('internal', `Failed to send email: ${message}`)
+    }
+  }
+)
+
+// ============================================================================
+// CREATE USER WITH PASSWORD
+// ============================================================================
+
+export const createUserWithPassword = onCall<{
+  email: string
+  password: string
+  displayName: string
+  phone?: string
+  role: string
+  entities?: string[]
+  branchIds?: string[]
+  emailNotifications?: boolean
+  pushNotifications?: boolean
+}>(
+  {
+    cors: [
+      'https://allied-recruitment.web.app',
+      'https://recruitment-633bd.web.app',
+      'http://localhost:3000',
+      'http://localhost:5173',
+    ],
+    region: 'europe-west2',
+  },
+  async (request) => {
+    // Require authentication
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Must be authenticated to create users')
+    }
+
+    const { email, password, displayName, phone, role, entities, branchIds, emailNotifications, pushNotifications } = request.data
+
+    // Validate required fields
+    if (!email || !password || !displayName || !role) {
+      throw new HttpsError('invalid-argument', 'Missing required fields: email, password, displayName, role')
+    }
+
+    // Validate password length
+    if (password.length < 6) {
+      throw new HttpsError('invalid-argument', 'Password must be at least 6 characters')
+    }
+
+    try {
+      // Check if caller has admin privileges (optional - implement based on your role system)
+      const callerDoc = await admin.firestore().collection('users').doc(request.auth.uid).get()
+      const callerRole = callerDoc.data()?.role
+      if (!['super_admin', 'admin'].includes(callerRole)) {
+        throw new HttpsError('permission-denied', 'Only admins can create users')
+      }
+
+      // Create the user in Firebase Auth
+      const userRecord = await admin.auth().createUser({
+        email: email.toLowerCase(),
+        password,
+        displayName,
+        phoneNumber: phone || undefined,
+      })
+
+      // Create the user document in Firestore
+      await admin.firestore().collection('users').doc(userRecord.uid).set({
+        email: email.toLowerCase(),
+        displayName,
+        phone: phone || null,
+        role,
+        entities: entities || [],
+        branchIds: branchIds || [],
+        emailNotifications: emailNotifications ?? true,
+        pushNotifications: pushNotifications ?? true,
+        status: 'active',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdBy: request.auth.uid,
+      })
+
+      console.log(`User created: ${userRecord.uid} (${email})`)
+
+      return {
+        success: true,
+        uid: userRecord.uid,
+        message: `User ${displayName} created successfully`,
+      }
+    } catch (error: any) {
+      console.error('Error creating user:', error)
+
+      // Handle specific Firebase Auth errors
+      if (error.code === 'auth/email-already-exists') {
+        throw new HttpsError('already-exists', 'A user with this email already exists')
+      }
+      if (error.code === 'auth/invalid-email') {
+        throw new HttpsError('invalid-argument', 'Invalid email address')
+      }
+      if (error.code === 'auth/invalid-password') {
+        throw new HttpsError('invalid-argument', 'Invalid password')
+      }
+
+      if (error instanceof HttpsError) {
+        throw error
+      }
+
+      throw new HttpsError('internal', error.message || 'Failed to create user')
     }
   }
 )

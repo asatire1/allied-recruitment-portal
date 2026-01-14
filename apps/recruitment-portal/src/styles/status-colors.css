@@ -118,6 +118,21 @@
   background-color: #0ea5e9;
 }
 
+/* Trial Invited - Fuchsia/Magenta */
+.status-badge.status-trial_invited,
+.status-badge.status-trial-invited,
+.status-badge[data-status="trial_invited"],
+.status-badge[data-status="trial-invited"] {
+  background-color: #fae8ff;
+  color: #a21caf;
+}
+.status-badge.status-trial_invited::before,
+.status-badge.status-trial-invited::before,
+.status-badge[data-status="trial_invited"]::before,
+.status-badge[data-status="trial-invited"]::before {
+  background-color: #d946ef;
+}
+
 /* Trial Scheduled - Purple */
 .status-badge.status-trial_scheduled,
 .status-badge.status-trial-scheduled,

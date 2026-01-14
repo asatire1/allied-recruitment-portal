@@ -40,7 +40,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendTestEmail = exports.migrateMessageTemplates = exports.validateFeedbackToken = exports.submitTrialFeedback = exports.sendDailyFeedbackRequests = exports.sendTrialBranchNotification = exports.parseIndeedJob = exports.processInterviewsNow = exports.onCandidateWithdrawnOrRejected = exports.onCandidateStatusChange = exports.resolveLapsedInterview = exports.markLapsedInterviews = exports.checkReturningCandidate = exports.reactivateCandidate = exports.restoreCandidate = exports.archiveCandidate = exports.permanentlyDeleteCandidate = exports.onCandidateDeleted = exports.fetchMeetingInsights = exports.checkMeetingStatus = exports.createTeamsMeeting = exports.trackClick = exports.trackOpen = exports.sendBulkCandidateEmails = exports.sendCandidateEmail = exports.createBookingLink = exports.validateBookingToken = exports.submitBooking = exports.getBookingTimeSlots = exports.getBookingAvailability = exports.sendEmail = exports.markBookingLinkUsed = exports.parseCV = void 0;
+exports.sendTestEmail = exports.migrateMessageTemplates = exports.validateFeedbackToken = exports.submitTrialFeedback = exports.sendDailyFeedbackRequests = exports.sendTrialBranchNotification = exports.parseIndeedJob = exports.processInterviewsNow = exports.onCandidateWithdrawnOrRejected = exports.onCandidateStatusChange = exports.resolveLapsedInterview = exports.markLapsedInterviews = exports.checkReturningCandidate = exports.reactivateCandidate = exports.restoreCandidate = exports.archiveCandidate = exports.permanentlyDeleteCandidate = exports.onCandidateDeleted = exports.fetchMeetingInsights = exports.checkMeetingStatus = exports.createTeamsMeeting = exports.trackClick = exports.trackOpen = exports.sendBulkCandidateEmails = exports.sendCandidateEmail = exports.createBookingLink = exports.validateBookingToken = exports.submitBooking = exports.getBookingTimeSlots = exports.getBookingAvailability = exports.createUserWithPassword = exports.sendEmail = exports.markBookingLinkUsed = exports.parseCV = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const options_1 = require("firebase-functions/v2/options");
 const params_1 = require("firebase-functions/params");
@@ -520,12 +520,18 @@ exports.sendEmail = (0, https_1.onCall)({
         // Send email via Microsoft Graph using organizer user ID
         const organizerUserId = msOrganizerUserId.value();
         const graphUrl = `https://graph.microsoft.com/v1.0/users/${organizerUserId}/sendMail`;
-        // Convert plain text body to HTML with line breaks
-        const htmlBody = body
+        // Convert plain text body to HTML with line breaks and clickable links
+        let htmlBody = body
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/\n/g, '<br>');
+            .replace(/>/g, '&gt;');
+        // Convert URLs to clickable links (must be done before newline replacement)
+        const urlRegex = /(https?:\/\/[^\s<]+)/g;
+        htmlBody = htmlBody.replace(urlRegex, (url) => {
+            return `<a href="${url}" target="_blank" style="color: #0066cc; text-decoration: underline; font-weight: 600;">${url}</a>`;
+        });
+        // Replace newlines with <br>
+        htmlBody = htmlBody.replace(/\n/g, '<br>');
         const emailPayload = {
             message: {
                 subject: subject,
@@ -581,6 +587,85 @@ exports.sendEmail = (0, https_1.onCall)({
         }
         const message = error instanceof Error ? error.message : 'Unknown error';
         throw new https_1.HttpsError('internal', `Failed to send email: ${message}`);
+    }
+});
+// ============================================================================
+// CREATE USER WITH PASSWORD
+// ============================================================================
+exports.createUserWithPassword = (0, https_1.onCall)({
+    cors: [
+        'https://allied-recruitment.web.app',
+        'https://recruitment-633bd.web.app',
+        'http://localhost:3000',
+        'http://localhost:5173',
+    ],
+    region: 'europe-west2',
+}, async (request) => {
+    // Require authentication
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'Must be authenticated to create users');
+    }
+    const { email, password, displayName, phone, role, entities, branchIds, emailNotifications, pushNotifications } = request.data;
+    // Validate required fields
+    if (!email || !password || !displayName || !role) {
+        throw new https_1.HttpsError('invalid-argument', 'Missing required fields: email, password, displayName, role');
+    }
+    // Validate password length
+    if (password.length < 6) {
+        throw new https_1.HttpsError('invalid-argument', 'Password must be at least 6 characters');
+    }
+    try {
+        // Check if caller has admin privileges (optional - implement based on your role system)
+        const callerDoc = await admin.firestore().collection('users').doc(request.auth.uid).get();
+        const callerRole = callerDoc.data()?.role;
+        if (!['super_admin', 'admin'].includes(callerRole)) {
+            throw new https_1.HttpsError('permission-denied', 'Only admins can create users');
+        }
+        // Create the user in Firebase Auth
+        const userRecord = await admin.auth().createUser({
+            email: email.toLowerCase(),
+            password,
+            displayName,
+            phoneNumber: phone || undefined,
+        });
+        // Create the user document in Firestore
+        await admin.firestore().collection('users').doc(userRecord.uid).set({
+            email: email.toLowerCase(),
+            displayName,
+            phone: phone || null,
+            role,
+            entities: entities || [],
+            branchIds: branchIds || [],
+            emailNotifications: emailNotifications ?? true,
+            pushNotifications: pushNotifications ?? true,
+            status: 'active',
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdBy: request.auth.uid,
+        });
+        console.log(`User created: ${userRecord.uid} (${email})`);
+        return {
+            success: true,
+            uid: userRecord.uid,
+            message: `User ${displayName} created successfully`,
+        };
+    }
+    catch (error) {
+        console.error('Error creating user:', error);
+        // Handle specific Firebase Auth errors
+        if (error.code === 'auth/email-already-exists') {
+            throw new https_1.HttpsError('already-exists', 'A user with this email already exists');
+        }
+        if (error.code === 'auth/invalid-email') {
+            throw new https_1.HttpsError('invalid-argument', 'Invalid email address');
+        }
+        if (error.code === 'auth/invalid-password') {
+            throw new https_1.HttpsError('invalid-argument', 'Invalid password');
+        }
+        if (error instanceof https_1.HttpsError) {
+            throw error;
+        }
+        throw new https_1.HttpsError('internal', error.message || 'Failed to create user');
     }
 });
 // ============================================================================
