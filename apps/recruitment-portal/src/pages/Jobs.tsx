@@ -76,6 +76,17 @@ const STATUS_COLORS: Record<JobStatus, string> = {
 
 const ITEMS_PER_PAGE = 10
 
+// Sort configuration types
+type JobSortColumn = 'title' | 'branch' | 'type' | 'salary' | 'candidates' | 'status' | 'posted'
+type SortDirection = 'asc' | 'desc'
+
+interface JobSortConfig {
+  column: JobSortColumn
+  direction: SortDirection
+}
+
+const JOBS_SORT_STORAGE_KEY = 'jobsPageSortConfig'
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -269,6 +280,39 @@ export function Jobs() {
   // Pagination
   const [currentPage, setCurrentPage] = useState(1)
 
+  // Sorting - load initial state from localStorage
+  const [sortConfig, setSortConfig] = useState<JobSortConfig>(() => {
+    try {
+      const saved = localStorage.getItem(JOBS_SORT_STORAGE_KEY)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (parsed.column && parsed.direction) {
+          return parsed as JobSortConfig
+        }
+      }
+    } catch (e) {
+      console.error('Error loading saved sort config:', e)
+    }
+    return { column: 'posted', direction: 'desc' }
+  })
+
+  // Save sort config to localStorage when it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(JOBS_SORT_STORAGE_KEY, JSON.stringify(sortConfig))
+    } catch (e) {
+      console.error('Error saving sort config:', e)
+    }
+  }, [sortConfig])
+
+  // Handle column header click for sorting
+  const handleSort = (column: JobSortColumn) => {
+    setSortConfig(prev => ({
+      column,
+      direction: prev.column === column && prev.direction === 'asc' ? 'desc' : 'asc'
+    }))
+  }
+
   // Indeed Import state
   const [indeedUrl, setIndeedUrl] = useState('')
   const [indeedText, setIndeedText] = useState('')
@@ -401,9 +445,9 @@ export function Jobs() {
     fetchCandidateCounts()
   }, [db])
 
-  // Filtered jobs
+  // Filtered and sorted jobs
   const filteredJobs = useMemo(() => {
-    return jobs.filter(job => {
+    const filtered = jobs.filter(job => {
       // Status filter
       if (statusFilter !== 'all' && job.status !== statusFilter) {
         return false
@@ -431,7 +475,7 @@ export function Jobs() {
         const jobType = (job as any).jobTypeName?.toLowerCase() || ''
         const branch = job.branchName?.toLowerCase() || ''
         const empType = job.employmentType?.toLowerCase() || ''
-        
+
         if (!title.includes(search) && !jobType.includes(search) && !branch.includes(search) && !empType.includes(search)) {
           return false
         }
@@ -439,7 +483,44 @@ export function Jobs() {
 
       return true
     })
-  }, [jobs, statusFilter, categoryFilter, branchFilter, employmentTypeFilter, searchTerm])
+
+    // Sort the filtered results
+    const sorted = [...filtered].sort((a, b) => {
+      const direction = sortConfig.direction === 'asc' ? 1 : -1
+
+      switch (sortConfig.column) {
+        case 'title':
+          return direction * (a.title || '').localeCompare(b.title || '')
+        case 'branch':
+          return direction * (a.branchName || '').localeCompare(b.branchName || '')
+        case 'type':
+          return direction * (a.employmentType || '').localeCompare(b.employmentType || '')
+        case 'salary': {
+          const salaryA = a.salaryMin || a.salaryMax || 0
+          const salaryB = b.salaryMin || b.salaryMax || 0
+          return direction * (salaryA - salaryB)
+        }
+        case 'candidates': {
+          const countA = candidateCounts[a.id] || 0
+          const countB = candidateCounts[b.id] || 0
+          return direction * (countA - countB)
+        }
+        case 'status': {
+          const statusOrder: Record<JobStatus, number> = { active: 1, draft: 2, closed: 3 }
+          return direction * ((statusOrder[a.status] || 0) - (statusOrder[b.status] || 0))
+        }
+        case 'posted': {
+          const dateA = a.createdAt?.toDate?.()?.getTime() || 0
+          const dateB = b.createdAt?.toDate?.()?.getTime() || 0
+          return direction * (dateA - dateB)
+        }
+        default:
+          return 0
+      }
+    })
+
+    return sorted
+  }, [jobs, statusFilter, categoryFilter, branchFilter, employmentTypeFilter, searchTerm, sortConfig, candidateCounts])
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredJobs.length / ITEMS_PER_PAGE)
@@ -1190,13 +1271,34 @@ export function Jobs() {
           <>
             <div className="jobs-table">
               <div className="table-header">
-                <div className="col-title">Job Title</div>
-                <div className="col-branch">Branch</div>
-                <div className="col-type">Type</div>
-                <div className="col-salary">Salary</div>
-                <div className="col-candidates">Candidates</div>
-                <div className="col-status">Status</div>
-                <div className="col-date">Posted</div>
+                <div className={`col-title sortable ${sortConfig.column === 'title' ? 'sorted' : ''}`} onClick={() => handleSort('title')}>
+                  Job Title
+                  <span className="sort-icon">{sortConfig.column === 'title' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}</span>
+                </div>
+                <div className={`col-branch sortable ${sortConfig.column === 'branch' ? 'sorted' : ''}`} onClick={() => handleSort('branch')}>
+                  Branch
+                  <span className="sort-icon">{sortConfig.column === 'branch' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}</span>
+                </div>
+                <div className={`col-type sortable ${sortConfig.column === 'type' ? 'sorted' : ''}`} onClick={() => handleSort('type')}>
+                  Type
+                  <span className="sort-icon">{sortConfig.column === 'type' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}</span>
+                </div>
+                <div className={`col-salary sortable ${sortConfig.column === 'salary' ? 'sorted' : ''}`} onClick={() => handleSort('salary')}>
+                  Salary
+                  <span className="sort-icon">{sortConfig.column === 'salary' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}</span>
+                </div>
+                <div className={`col-candidates sortable ${sortConfig.column === 'candidates' ? 'sorted' : ''}`} onClick={() => handleSort('candidates')}>
+                  Candidates
+                  <span className="sort-icon">{sortConfig.column === 'candidates' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}</span>
+                </div>
+                <div className={`col-status sortable ${sortConfig.column === 'status' ? 'sorted' : ''}`} onClick={() => handleSort('status')}>
+                  Status
+                  <span className="sort-icon">{sortConfig.column === 'status' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}</span>
+                </div>
+                <div className={`col-date sortable ${sortConfig.column === 'posted' ? 'sorted' : ''}`} onClick={() => handleSort('posted')}>
+                  Posted
+                  <span className="sort-icon">{sortConfig.column === 'posted' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}</span>
+                </div>
                 <div className="col-actions">Actions</div>
               </div>
               

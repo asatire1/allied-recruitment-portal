@@ -112,6 +112,17 @@ const INITIAL_FORM: AddCandidateForm = {
 
 const ITEMS_PER_PAGE = 10
 
+// Sort configuration types
+type CandidateSortColumn = 'name' | 'contact' | 'job' | 'status' | 'applied'
+type SortDirection = 'asc' | 'desc'
+
+interface CandidateSortConfig {
+  column: CandidateSortColumn
+  direction: SortDirection
+}
+
+const CANDIDATES_SORT_STORAGE_KEY = 'candidatesPageSortConfig'
+
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
@@ -253,6 +264,9 @@ export function Candidates() {
   const [locations, setLocations] = useState<Array<{ id: string; name: string; isActive: boolean }>>([])
   const [loadingLocations, setLoadingLocations] = useState(true)
 
+  // Scheduled interviews/trials map (candidateId -> next scheduled event)
+  const [scheduledEvents, setScheduledEvents] = useState<Map<string, { type: 'interview' | 'trial'; date: Date }>>(new Map())
+
   // Duplicate detection
   const [duplicateMatches, setDuplicateMatches] = useState<DuplicateCheckResult[]>([])
   const [duplicateRecommendedAction, setDuplicateRecommendedAction] = useState<'block' | 'warn' | 'allow'>('allow')
@@ -266,6 +280,22 @@ export function Candidates() {
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1)
+
+  // Sorting - load initial state from localStorage
+  const [sortConfig, setSortConfig] = useState<CandidateSortConfig>(() => {
+    try {
+      const saved = localStorage.getItem(CANDIDATES_SORT_STORAGE_KEY)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (parsed.column && parsed.direction) {
+          return parsed as CandidateSortConfig
+        }
+      }
+    } catch (e) {
+      console.error('Error loading saved sort config:', e)
+    }
+    return { column: 'applied', direction: 'desc' }
+  })
 
   // Bulk invite
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(new Set())
@@ -321,7 +351,24 @@ export function Candidates() {
       console.error('Error saving job filter:', e)
     }
   }, [jobFilter])
-  
+
+  // Save sort config to localStorage when it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(CANDIDATES_SORT_STORAGE_KEY, JSON.stringify(sortConfig))
+    } catch (e) {
+      console.error('Error saving sort config:', e)
+    }
+  }, [sortConfig])
+
+  // Handle column header click for sorting
+  const handleSort = (column: CandidateSortColumn) => {
+    setSortConfig(prev => ({
+      column,
+      direction: prev.column === column && prev.direction === 'asc' ? 'desc' : 'asc'
+    }))
+  }
+
   const storage = getFirebaseStorage()
   const functions = getFirebaseFunctions()
 
@@ -471,6 +518,74 @@ export function Candidates() {
     fetchBranches()
   }, [db])
 
+  // Fetch scheduled interviews/trials for all candidates
+  useEffect(() => {
+    async function fetchScheduledEvents() {
+      try {
+        const interviewsRef = collection(db, COLLECTIONS.INTERVIEWS)
+        const snapshot = await getDocs(interviewsRef)
+        
+        const eventsMap = new Map<string, { type: 'interview' | 'trial'; date: Date }>()
+        const now = new Date()
+        
+        snapshot.docs.forEach(doc => {
+          const data = doc.data()
+          const candidateId = data.candidateId
+          const status = data.status
+          
+          // Only include scheduled (not completed/cancelled) events
+          if (!candidateId || status === 'completed' || status === 'cancelled' || status === 'no_show') return
+          
+          // Get the date
+          let eventDate: Date | null = null
+          if (data.scheduledDate?.toDate) {
+            eventDate = data.scheduledDate.toDate()
+          } else if (data.date?.toDate) {
+            eventDate = data.date.toDate()
+          } else if (data.startTime?.toDate) {
+            eventDate = data.startTime.toDate()
+          }
+          
+          if (!eventDate) return
+          
+          // Determine type
+          const eventType: 'interview' | 'trial' = data.type === 'trial' ? 'trial' : 'interview'
+          
+          // Keep the nearest future event (or most recent past if no future)
+          const existing = eventsMap.get(candidateId)
+          if (!existing) {
+            eventsMap.set(candidateId, { type: eventType, date: eventDate })
+          } else {
+            // Prefer future events over past events
+            const existingIsFuture = existing.date >= now
+            const newIsFuture = eventDate >= now
+            
+            if (newIsFuture && !existingIsFuture) {
+              // New is future, existing is past - use new
+              eventsMap.set(candidateId, { type: eventType, date: eventDate })
+            } else if (newIsFuture && existingIsFuture) {
+              // Both future - use nearest
+              if (eventDate < existing.date) {
+                eventsMap.set(candidateId, { type: eventType, date: eventDate })
+              }
+            } else if (!newIsFuture && !existingIsFuture) {
+              // Both past - use most recent
+              if (eventDate > existing.date) {
+                eventsMap.set(candidateId, { type: eventType, date: eventDate })
+              }
+            }
+          }
+        })
+        
+        setScheduledEvents(eventsMap)
+      } catch (err) {
+        console.error('Error fetching scheduled events:', err)
+      }
+    }
+
+    fetchScheduledEvents()
+  }, [db])
+
   // Status priority for sorting (lower number = higher priority)
   // Status priority for sorting: new at top, then invite_sent, interview_scheduled, then rest
   const STATUS_PRIORITY: Record<string, number> = {
@@ -490,7 +605,7 @@ export function Candidates() {
     'rejected': 13,
   }
 
-  // Filtered candidates - UPDATED: excludes rejected by default, sorted by status priority
+  // Filtered and sorted candidates
   const filteredCandidates = useMemo(() => {
     const filtered = candidates.filter(candidate => {
       // Status filter with special handling for 'all' (excludes rejected) and 'all_including_rejected'
@@ -517,10 +632,10 @@ export function Candidates() {
           // Also check if the job title matches (for backwards compatibility)
           const selectedJob = activeJobs.find(j => j.id === filterId)
           const matchesJobTitle = selectedJob && candidate.jobTitle === selectedJob.title
-          
+
           return matchesJobId || matchesAssignedJobId || matchesJobTitle
         })
-        
+
         if (!matchesAnyJob) {
           return false
         }
@@ -533,9 +648,9 @@ export function Candidates() {
         const email = candidate.email?.toLowerCase() || ''
         const phone = candidate.phone?.toLowerCase() || ''
         const jobTitle = candidate.jobTitle?.toLowerCase() || ''
-        
-        if (!fullName.includes(search) && 
-            !email.includes(search) && 
+
+        if (!fullName.includes(search) &&
+            !email.includes(search) &&
             !phone.includes(search) &&
             !jobTitle.includes(search)) {
           return false
@@ -545,13 +660,44 @@ export function Candidates() {
       return true
     })
 
-    // Sort by date only (newest first) - regardless of status
-    return filtered.sort((a, b) => {
-      const dateA = a.createdAt?.toDate?.()?.getTime() || 0
-      const dateB = b.createdAt?.toDate?.()?.getTime() || 0
-      return dateB - dateA
+    // Sort the filtered results based on sortConfig
+    const sorted = [...filtered].sort((a, b) => {
+      const direction = sortConfig.direction === 'asc' ? 1 : -1
+
+      switch (sortConfig.column) {
+        case 'name': {
+          const nameA = `${a.firstName || ''} ${a.lastName || ''}`.trim().toLowerCase()
+          const nameB = `${b.firstName || ''} ${b.lastName || ''}`.trim().toLowerCase()
+          return direction * nameA.localeCompare(nameB)
+        }
+        case 'contact': {
+          // Sort by email primarily
+          const emailA = (a.email || '').toLowerCase()
+          const emailB = (b.email || '').toLowerCase()
+          return direction * emailA.localeCompare(emailB)
+        }
+        case 'job': {
+          const jobA = (a.jobTitle || '').toLowerCase()
+          const jobB = (b.jobTitle || '').toLowerCase()
+          return direction * jobA.localeCompare(jobB)
+        }
+        case 'status': {
+          const priorityA = STATUS_PRIORITY[a.status] || 99
+          const priorityB = STATUS_PRIORITY[b.status] || 99
+          return direction * (priorityA - priorityB)
+        }
+        case 'applied': {
+          const dateA = a.createdAt?.toDate?.()?.getTime() || 0
+          const dateB = b.createdAt?.toDate?.()?.getTime() || 0
+          return direction * (dateA - dateB)
+        }
+        default:
+          return 0
+      }
     })
-  }, [candidates, statusFilter, searchTerm, jobFilter, activeJobs])
+
+    return sorted
+  }, [candidates, statusFilter, searchTerm, jobFilter, activeJobs, sortConfig])
 
   // Count of rejected candidates (for showing in filter)
   const rejectedCount = useMemo(() => {
@@ -2585,11 +2731,26 @@ Allied Recruitment Team`
                         title="Select all on this page"
                       />
                     </th>
-                    <th>Name</th>
-                    <th>Contact</th>
-                    <th>Job</th>
-                    <th>Status</th>
-                    <th>Applied</th>
+                    <th className={`sortable ${sortConfig.column === 'name' ? 'sorted' : ''}`} onClick={() => handleSort('name')}>
+                      Name
+                      <span className="sort-icon">{sortConfig.column === 'name' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}</span>
+                    </th>
+                    <th className={`sortable ${sortConfig.column === 'contact' ? 'sorted' : ''}`} onClick={() => handleSort('contact')}>
+                      Contact
+                      <span className="sort-icon">{sortConfig.column === 'contact' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}</span>
+                    </th>
+                    <th className={`sortable ${sortConfig.column === 'job' ? 'sorted' : ''}`} onClick={() => handleSort('job')}>
+                      Job
+                      <span className="sort-icon">{sortConfig.column === 'job' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}</span>
+                    </th>
+                    <th className={`sortable ${sortConfig.column === 'status' ? 'sorted' : ''}`} onClick={() => handleSort('status')}>
+                      Status
+                      <span className="sort-icon">{sortConfig.column === 'status' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}</span>
+                    </th>
+                    <th className={`sortable ${sortConfig.column === 'applied' ? 'sorted' : ''}`} onClick={() => handleSort('applied')}>
+                      Applied
+                      <span className="sort-icon">{sortConfig.column === 'applied' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}</span>
+                    </th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -2630,9 +2791,29 @@ Allied Recruitment Team`
                         </div>
                       </td>
                       <td>
-                        <span className={`status-badge ${getStatusClass(candidate.status)}`}>
-                          {getStatusLabel(candidate.status)}
-                        </span>
+                        {scheduledEvents.has(candidate.id) ? (
+                          <span className={`status-badge ${scheduledEvents.get(candidate.id)!.type === 'trial' ? 'status-trial_scheduled' : 'status-interview_scheduled'}`}>
+                            <span className="scheduled-badge-content">
+                              <span className="scheduled-badge-type">
+                                {scheduledEvents.get(candidate.id)!.type === 'trial' ? 'Trial' : 'Interview'}
+                              </span>
+                              <span className="scheduled-badge-date">
+                                {scheduledEvents.get(candidate.id)!.date.toLocaleDateString('en-GB', { 
+                                  day: 'numeric', 
+                                  month: 'short' 
+                                })}, {scheduledEvents.get(candidate.id)!.date.toLocaleTimeString('en-GB', { 
+                                  hour: '2-digit', 
+                                  minute: '2-digit',
+                                  hour12: false
+                                })}
+                              </span>
+                            </span>
+                          </span>
+                        ) : (
+                          <span className={`status-badge ${getStatusClass(candidate.status)}`}>
+                            {getStatusLabel(candidate.status)}
+                          </span>
+                        )}
                       </td>
                       <td className="date-cell">
                         {formatDate(candidate.createdAt)}

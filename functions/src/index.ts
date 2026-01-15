@@ -880,3 +880,10 @@ export {
   validatePasswordReset,
   completePasswordReset
 } from './userInviteFunctions'
+
+// Expired booking link cleanup
+export {
+  cleanupExpiredBookingLinks,
+  checkCandidateBookingExpiry,
+  triggerExpiredBookingCleanup
+} from './expiredBookingCleanup'

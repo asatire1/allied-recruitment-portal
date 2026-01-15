@@ -231,6 +231,36 @@
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 
+/* Sortable column headers */
+.candidates-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s ease;
+}
+
+.candidates-table th.sortable:hover {
+  color: #374151;
+}
+
+.candidates-table th.sortable.sorted {
+  color: #007aff;
+}
+
+.candidates-table th .sort-icon {
+  font-size: 10px;
+  margin-left: 4px;
+  opacity: 0.5;
+  transition: opacity 0.15s ease;
+}
+
+.candidates-table th.sortable:hover .sort-icon {
+  opacity: 0.8;
+}
+
+.candidates-table th.sortable.sorted .sort-icon {
+  opacity: 1;
+}
+
 .candidates-table td {
   padding: 16px 20px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.04);
@@ -1140,4 +1170,21 @@
   text-align: center;
   color: var(--ios-secondary-label);
   font-size: 14px;
+}
+
+/* Scheduled Event Cell (Interview/Trial with date) */
+.scheduled-badge-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
+.scheduled-badge-type {
+  font-weight: 600;
+}
+
+.scheduled-badge-date {
+  font-size: 11px;
+  opacity: 0.9;
 }

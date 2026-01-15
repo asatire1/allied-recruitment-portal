@@ -7,7 +7,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { collection, query, where, orderBy, getDocs, doc, updateDoc, Timestamp, serverTimestamp } from 'firebase/firestore'
+import { collection, query, where, orderBy, getDocs, doc, updateDoc, addDoc, Timestamp, serverTimestamp } from 'firebase/firestore'
 import { 
   getFirebaseDb,
   INTERVIEW_STATUS_LABELS,
@@ -405,6 +405,30 @@ export function Calendar() {
         status: 'no_show',
         updatedAt: serverTimestamp(),
       })
+
+      // Also update candidate status to withdrawn
+      if (selectedInterview.candidateId) {
+        const candidateRef = doc(db, 'candidates', selectedInterview.candidateId)
+        await updateDoc(candidateRef, {
+          status: 'withdrawn',
+          withdrawalReason: `No show to ${selectedInterview.type || 'interview'}`,
+          withdrawnAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        })
+
+        // Log activity
+        await addDoc(collection(db, 'activityLog'), {
+          entityType: 'candidate',
+          entityId: selectedInterview.candidateId,
+          action: 'status_changed',
+          description: `Withdrawn: No show to ${selectedInterview.type || 'interview'}`,
+          previousValue: { status: 'interview_scheduled' },
+          newValue: { status: 'withdrawn' },
+          userId: user?.id || '',
+          userName: user?.name || user?.email || 'Unknown',
+          createdAt: serverTimestamp(),
+        })
+      }
 
       // Update local state
       setInterviews(prev => prev.map(i => 

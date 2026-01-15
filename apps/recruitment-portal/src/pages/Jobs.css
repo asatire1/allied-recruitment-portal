@@ -177,6 +177,38 @@
   align-items: center;
 }
 
+/* Sortable column headers */
+.table-header .sortable {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+  transition: color 0.15s ease;
+}
+
+.table-header .sortable:hover {
+  color: #374151;
+}
+
+.table-header .sortable.sorted {
+  color: #007aff;
+}
+
+.table-header .sort-icon {
+  font-size: 10px;
+  opacity: 0.5;
+  transition: opacity 0.15s ease;
+}
+
+.table-header .sortable:hover .sort-icon {
+  opacity: 0.8;
+}
+
+.table-header .sortable.sorted .sort-icon {
+  opacity: 1;
+}
+
 .table-row {
   display: grid;
   grid-template-columns: minmax(200px, 2fr) minmax(150px, 1.5fr) 100px 120px 90px 90px 100px 140px;

@@ -6,7 +6,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { collection, query, orderBy, getDocs, doc, updateDoc, Timestamp, serverTimestamp, limit, where } from 'firebase/firestore'
+import { collection, query, orderBy, getDocs, doc, updateDoc, addDoc, Timestamp, serverTimestamp, limit, where } from 'firebase/firestore'
 import { 
   getFirebaseDb,
   INTERVIEW_STATUS_LABELS,
@@ -360,6 +360,30 @@ export function Interviews() {
       setInterviews(prev => prev.map(i => 
         i.id === interview.id ? { ...i, status: 'no_show' as InterviewStatus } : i
       ))
+
+      // Also update candidate status to withdrawn
+      if (interview.candidateId) {
+        const candidateRef = doc(db, 'candidates', interview.candidateId)
+        await updateDoc(candidateRef, {
+          status: 'withdrawn',
+          withdrawalReason: `No show to ${interview.type || 'interview'}`,
+          withdrawnAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        })
+
+        // Log activity
+        await addDoc(collection(db, 'activityLog'), {
+          entityType: 'candidate',
+          entityId: interview.candidateId,
+          action: 'status_changed',
+          description: `Withdrawn: No show to ${interview.type || 'interview'}`,
+          previousValue: { status: 'interview_scheduled' },
+          newValue: { status: 'withdrawn' },
+          userId: user?.id || '',
+          userName: user?.name || user?.email || 'Unknown',
+          createdAt: serverTimestamp(),
+        })
+      }
     } catch (err) {
       console.error('Error updating interview:', err)
     }

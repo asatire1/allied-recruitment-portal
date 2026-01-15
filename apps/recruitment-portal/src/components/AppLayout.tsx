@@ -1,7 +1,13 @@
+// ============================================================================
+// Allied Recruitment Portal - App Layout with Mobile Support
+// Location: apps/recruitment-portal/src/components/AppLayout.tsx
+// ============================================================================
+
 import { useState, useEffect, ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
+import { MobileLayout, useIsMobile } from './mobile'
 
 // ============================================================================
 // TYPES
@@ -27,13 +33,14 @@ const pageTitles: Record<string, string> = {
   '/settings': 'Settings',
   '/settings/users': 'Users',
   '/settings/branches': 'Branches',
+  '/feedback/pending': 'Pending Feedback',
 }
 
 // ============================================================================
-// APP LAYOUT COMPONENT
+// DESKTOP LAYOUT COMPONENT
 // ============================================================================
 
-export function AppLayout({ children, title }: AppLayoutProps) {
+function DesktopLayout({ children, title }: AppLayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const location = useLocation()
 
@@ -88,6 +95,30 @@ export function AppLayout({ children, title }: AppLayoutProps) {
         </main>
       </div>
     </div>
+  )
+}
+
+// ============================================================================
+// APP LAYOUT COMPONENT (with responsive switching)
+// ============================================================================
+
+export function AppLayout({ children, title }: AppLayoutProps) {
+  const isMobile = useIsMobile()
+
+  // Render mobile layout for small screens
+  if (isMobile) {
+    return (
+      <MobileLayout>
+        {children}
+      </MobileLayout>
+    )
+  }
+
+  // Render desktop layout for larger screens
+  return (
+    <DesktopLayout title={title}>
+      {children}
+    </DesktopLayout>
   )
 }
 
