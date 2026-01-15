@@ -67,6 +67,12 @@ const Icons = {
       <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
     </svg>
   ),
+  decisions: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  ),
   settings: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="3" />
@@ -134,6 +140,12 @@ const navigationConfig: NavSection[] = [
         label: 'Pending Feedback',
         path: '/feedback/pending',
         icon: Icons.feedback,
+        roles: ['super_admin', 'recruiter'],
+      },
+      {
+        label: 'Ready for Decision',
+        path: '/decisions',
+        icon: Icons.decisions,
         roles: ['super_admin', 'recruiter'],
       },
     ],

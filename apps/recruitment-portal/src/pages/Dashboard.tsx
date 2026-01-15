@@ -80,6 +80,19 @@ interface UpcomingInterview {
   notes?: string
 }
 
+// New type for awaiting decision candidates
+interface AwaitingDecisionCandidate {
+  id: string
+  name: string
+  status: CandidateStatus
+  jobTitle?: string
+  branchName?: string
+  recommendation?: 'hire' | 'maybe' | 'do_not_hire'
+  rating?: number
+  completedDate?: Date
+  interviewType: 'interview' | 'trial'
+}
+
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
@@ -145,6 +158,20 @@ const getActivityStyle = (action: ActivityAction): { icon: string; color: string
   return styles[action] || { icon: '📌', color: '#8e8e93' }
 }
 
+// Get recommendation display info
+const getRecommendationStyle = (recommendation: string | undefined) => {
+  switch (recommendation) {
+    case 'hire':
+      return { label: 'Hire', color: '#059669', bgColor: 'rgba(5, 150, 105, 0.1)', icon: '✓' }
+    case 'maybe':
+      return { label: 'Maybe', color: '#d97706', bgColor: 'rgba(217, 119, 6, 0.1)', icon: '?' }
+    case 'do_not_hire':
+      return { label: 'Do Not Hire', color: '#dc2626', bgColor: 'rgba(220, 38, 38, 0.1)', icon: '✗' }
+    default:
+      return { label: 'Pending', color: '#6b7280', bgColor: 'rgba(107, 114, 128, 0.1)', icon: '…' }
+  }
+}
+
 // ============================================================================
 // COMPONENT
 // ============================================================================
@@ -158,6 +185,7 @@ export function Dashboard() {
   const [activeJobsList, setActiveJobsList] = useState<JobOverview[]>([])
   const [recentCandidates, setRecentCandidates] = useState<RecentCandidate[]>([])
   const [upcomingInterviews, setUpcomingInterviews] = useState<UpcomingInterview[]>([])
+  const [awaitingDecision, setAwaitingDecision] = useState<AwaitingDecisionCandidate[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -283,15 +311,17 @@ export function Dashboard() {
     const interviewsUnsub = onSnapshot(interviewsRef, (snapshot) => {
       const { now, sevenDaysFromNow } = getDateRanges()
       
-      let interviews = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }) as Interview)
+      const allInterviews = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Interview)
+      
+      // Scheduled interviews for stats and upcoming widget
+      let scheduledInterviews = allInterviews
         .filter(i => i.scheduledDate && i.scheduledDate.toDate() >= now && i.status === 'scheduled')
         .sort((a, b) => a.scheduledDate.toDate().getTime() - b.scheduledDate.toDate().getTime())
 
-      const interviewsScheduled = interviews.length
+      const interviewsScheduled = scheduledInterviews.length
 
       // Filter for next 7 days
-      const upcomingInNext7Days = interviews.filter(i => {
+      const upcomingInNext7Days = scheduledInterviews.filter(i => {
         const scheduledDate = i.scheduledDate?.toDate?.()
         return scheduledDate && scheduledDate <= sevenDaysFromNow
       })
@@ -312,6 +342,56 @@ export function Dashboard() {
             notes: i.notes,
           }))
       )
+
+      // ========== AWAITING DECISION - Get completed interviews with feedback ==========
+      const completedInterviews = allInterviews.filter(i => 
+        i.status === 'completed' && 
+        i.feedback?.submittedAt &&
+        (i.feedback?.recommendation === 'hire' || i.feedback?.recommendation === 'maybe')
+      )
+
+      // Group by candidateId to get the latest interview per candidate
+      const candidateInterviewMap = new Map<string, Interview>()
+      for (const interview of completedInterviews) {
+        const existing = candidateInterviewMap.get(interview.candidateId)
+        if (!existing) {
+          candidateInterviewMap.set(interview.candidateId, interview)
+        } else {
+          // Keep the more recent one
+          const existingDate = existing.scheduledDate?.toDate?.() || new Date(0)
+          const newDate = interview.scheduledDate?.toDate?.() || new Date(0)
+          if (newDate > existingDate) {
+            candidateInterviewMap.set(interview.candidateId, interview)
+          }
+        }
+      }
+
+      // Now we need to cross-reference with candidates to get only those still in interview_complete or trial_complete status
+      // We'll do this in a separate listener or combine the data
+      // For now, store the interview data and we'll filter in the candidates listener
+      const awaitingData: AwaitingDecisionCandidate[] = Array.from(candidateInterviewMap.values())
+        .map(i => ({
+          id: i.candidateId,
+          name: i.candidateName,
+          status: (i.type === 'interview' ? 'interview_complete' : 'trial_complete') as CandidateStatus,
+          jobTitle: i.jobTitle,
+          branchName: i.branchName,
+          recommendation: i.feedback?.recommendation as 'hire' | 'maybe' | 'do_not_hire' | undefined,
+          rating: i.feedback?.rating,
+          completedDate: i.scheduledDate?.toDate?.(),
+          interviewType: i.type,
+        }))
+        .sort((a, b) => {
+          // Sort by recommendation (hire first, then maybe), then by date
+          const recOrder = { hire: 0, maybe: 1, do_not_hire: 2 }
+          const aOrder = recOrder[a.recommendation || 'maybe'] ?? 1
+          const bOrder = recOrder[b.recommendation || 'maybe'] ?? 1
+          if (aOrder !== bOrder) return aOrder - bOrder
+          return (b.completedDate?.getTime() || 0) - (a.completedDate?.getTime() || 0)
+        })
+        .slice(0, 10)
+
+      setAwaitingDecision(awaitingData)
 
       setStats(prev => prev ? { ...prev, interviewsScheduled } : null)
       setLastUpdated(new Date())
@@ -558,31 +638,82 @@ export function Dashboard() {
 
       {/* Content Grid */}
       <div className="dashboard-content">
-        {/* Recent Candidates */}
-        <Card className="dashboard-card">
+        {/* ========== AWAITING DECISION WIDGET - NEW ========== */}
+        <Card className="dashboard-card awaiting-decision-widget">
           <div className="card-header">
-            <h2>Recent Candidates</h2>
-            <a href="/candidates" className="view-all">View all →</a>
+            <div className="header-title-group">
+              <h2>⏳ Awaiting Decision</h2>
+              {awaitingDecision.length > 0 && (
+                <span className="awaiting-count">{awaitingDecision.length} candidates</span>
+              )}
+            </div>
+            <a href="/candidates?status=interview_complete,trial_complete" className="view-all">View all →</a>
           </div>
           <div className="card-content">
-            {recentCandidates.length === 0 ? (
-              <p className="empty-message">No candidates yet</p>
+            {awaitingDecision.length === 0 ? (
+              <div className="empty-awaiting">
+                <div className="empty-icon">✅</div>
+                <p>No candidates awaiting decision</p>
+                <span className="empty-subtext">All feedback has been actioned</span>
+              </div>
             ) : (
-              <ul className="candidate-list">
-                {recentCandidates.map(candidate => (
-                  <li key={candidate.id} className="candidate-item">
-                    <div className="candidate-info">
-                      <span className="candidate-name">{candidate.name}</span>
-                      <span className="candidate-job">{candidate.jobTitle || 'No job assigned'}</span>
-                    </div>
-                    <div className="candidate-meta">
-                      <Badge variant={getStatusColor(candidate.status) as any}>
-                        {candidate.status.replace(/_/g, ' ')}
-                      </Badge>
-                      <span className="candidate-date">{formatRelativeDate(candidate.createdAt)}</span>
-                    </div>
-                  </li>
-                ))}
+              <ul className="awaiting-list">
+                {awaitingDecision.map(candidate => {
+                  const recStyle = getRecommendationStyle(candidate.recommendation)
+                  return (
+                    <li 
+                      key={candidate.id} 
+                      className="awaiting-item"
+                      onClick={() => navigate(`/candidates/${candidate.id}`)}
+                    >
+                      <div className="awaiting-recommendation-badge" style={{ backgroundColor: recStyle.bgColor }}>
+                        <span className="recommendation-icon" style={{ color: recStyle.color }}>{recStyle.icon}</span>
+                        <span className="recommendation-label" style={{ color: recStyle.color }}>{recStyle.label}</span>
+                      </div>
+                      
+                      <div className="awaiting-details">
+                        <span className="awaiting-name">{candidate.name}</span>
+                        <span className="awaiting-meta">
+                          {candidate.interviewType === 'trial' ? '🏪 Trial' : '💼 Interview'} 
+                          {candidate.jobTitle && ` • ${candidate.jobTitle}`}
+                        </span>
+                        {candidate.branchName && (
+                          <span className="awaiting-branch">📍 {candidate.branchName}</span>
+                        )}
+                      </div>
+
+                      <div className="awaiting-rating">
+                        {candidate.rating && (
+                          <div className="rating-stars">
+                            {'★'.repeat(candidate.rating)}{'☆'.repeat(5 - candidate.rating)}
+                          </div>
+                        )}
+                        {candidate.completedDate && (
+                          <span className="awaiting-date">{formatRelativeDate(candidate.completedDate)}</span>
+                        )}
+                      </div>
+
+                      <div className="awaiting-actions" onClick={(e) => e.stopPropagation()}>
+                        {candidate.status === 'interview_complete' && candidate.recommendation === 'hire' && (
+                          <button 
+                            className="action-btn schedule-trial"
+                            title="Schedule Trial"
+                            onClick={() => navigate(`/candidates/${candidate.id}`)}
+                          >
+                            🏪
+                          </button>
+                        )}
+                        <button 
+                          className="action-btn view-profile"
+                          title="View Profile"
+                          onClick={() => navigate(`/candidates/${candidate.id}`)}
+                        >
+                          👤
+                        </button>
+                      </div>
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>

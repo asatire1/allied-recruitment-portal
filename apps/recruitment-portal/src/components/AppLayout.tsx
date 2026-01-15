@@ -1,5 +1,5 @@
 // ============================================================================
-// Allied Recruitment Portal - App Layout with Mobile Support
+// Allied Recruitment Portal - App Layout
 // Location: apps/recruitment-portal/src/components/AppLayout.tsx
 // ============================================================================
 
@@ -7,7 +7,6 @@ import { useState, useEffect, ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
-import { MobileLayout, useIsMobile } from './mobile'
 
 // ============================================================================
 // TYPES
@@ -15,7 +14,7 @@ import { MobileLayout, useIsMobile } from './mobile'
 
 interface AppLayoutProps {
   children: ReactNode
-  /** Page title shown in header on mobile */
+  /** Page title shown in header */
   title?: string
 }
 
@@ -37,10 +36,10 @@ const pageTitles: Record<string, string> = {
 }
 
 // ============================================================================
-// DESKTOP LAYOUT COMPONENT
+// APP LAYOUT COMPONENT
 // ============================================================================
 
-function DesktopLayout({ children, title }: AppLayoutProps) {
+export function AppLayout({ children, title }: AppLayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const location = useLocation()
 
@@ -95,30 +94,6 @@ function DesktopLayout({ children, title }: AppLayoutProps) {
         </main>
       </div>
     </div>
-  )
-}
-
-// ============================================================================
-// APP LAYOUT COMPONENT (with responsive switching)
-// ============================================================================
-
-export function AppLayout({ children, title }: AppLayoutProps) {
-  const isMobile = useIsMobile()
-
-  // Render mobile layout for small screens
-  if (isMobile) {
-    return (
-      <MobileLayout>
-        {children}
-      </MobileLayout>
-    )
-  }
-
-  // Render desktop layout for larger screens
-  return (
-    <DesktopLayout title={title}>
-      {children}
-    </DesktopLayout>
   )
 }
 

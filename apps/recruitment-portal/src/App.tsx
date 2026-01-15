@@ -50,6 +50,9 @@ const UserManagement = lazy(() => import('./pages/UserManagement'))
 const PendingFeedback = lazy(() => import('./pages/PendingFeedback'))
 const CandidateComparison = lazy(() => import('./pages/CandidateComparison'))
 
+// Ready for Decision page - lazy loaded
+const ReadyForDecision = lazy(() => import('./pages/ReadyForDecision'))
+
 // ============================================================================
 // LOADING SCREEN
 // ============================================================================
@@ -240,6 +243,19 @@ function AppRoutes() {
             <AppLayout>
               <Suspense fallback={<PageLoader />}>
                 <PendingFeedback />
+              </Suspense>
+            </AppLayout>
+          </RecruiterRoute>
+        } 
+      />
+
+      <Route 
+        path="/decisions" 
+        element={
+          <RecruiterRoute>
+            <AppLayout>
+              <Suspense fallback={<PageLoader />}>
+                <ReadyForDecision />
               </Suspense>
             </AppLayout>
           </RecruiterRoute>
