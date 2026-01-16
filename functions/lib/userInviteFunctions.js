@@ -37,7 +37,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.completePasswordReset = exports.validatePasswordReset = exports.requestPasswordReset = exports.completeUserRegistration = exports.validateUserInvite = exports.createUserInvite = void 0;
+exports.adminSendPasswordReset = exports.completePasswordReset = exports.validatePasswordReset = exports.requestPasswordReset = exports.completeUserRegistration = exports.validateUserInvite = exports.resendUserInvite = exports.createUserInvite = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const admin = __importStar(require("firebase-admin"));
 const crypto = __importStar(require("crypto"));
@@ -255,6 +255,115 @@ exports.createUserInvite = (0, https_1.onCall)({
     catch (error) {
         console.error('Error creating user invite:', error);
         throw new https_1.HttpsError('internal', error.message || 'Failed to create invitation');
+    }
+});
+exports.resendUserInvite = (0, https_1.onCall)({
+    cors: [
+        'https://allied-recruitment.web.app',
+        'https://recruitment-633bd.web.app',
+        'http://localhost:3000',
+        'http://localhost:5173',
+    ],
+    region: 'europe-west2',
+    secrets: [teamsMeeting_1.msClientId, teamsMeeting_1.msClientSecret, teamsMeeting_1.msTenantId, teamsMeeting_1.msOrganizerUserId],
+}, async (request) => {
+    // Require authentication
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'Must be authenticated to resend invites');
+    }
+    const { email } = request.data;
+    if (!email) {
+        throw new https_1.HttpsError('invalid-argument', 'Email is required');
+    }
+    // Check if caller has admin privileges
+    const callerDoc = await db.collection('users').doc(request.auth.uid).get();
+    const callerRole = callerDoc.data()?.role;
+    if (!['super_admin', 'admin'].includes(callerRole)) {
+        throw new https_1.HttpsError('permission-denied', 'Only admins can resend invites');
+    }
+    try {
+        // Find existing active invite for this email
+        const existingInvites = await db.collection('userInvites')
+            .where('email', '==', email.toLowerCase())
+            .where('status', '==', 'active')
+            .limit(1)
+            .get();
+        if (existingInvites.empty) {
+            throw new https_1.HttpsError('not-found', 'No active invitation found for this email');
+        }
+        const inviteDoc = existingInvites.docs[0];
+        const inviteData = inviteDoc.data();
+        // Generate new token
+        const token = generateToken();
+        const tokenHash = hashToken(token);
+        // Calculate new expiry (7 days)
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 7);
+        // Update invite with new token and expiry
+        await inviteDoc.ref.update({
+            tokenHash,
+            expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            resentBy: request.auth.uid,
+            resentAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        // Build registration link
+        const registrationLink = `https://allied-recruitment.web.app/register/${token}`;
+        // Get access token for MS Graph
+        const accessToken = await (0, teamsMeeting_1.getAccessToken)(teamsMeeting_1.msClientId.value(), teamsMeeting_1.msClientSecret.value(), teamsMeeting_1.msTenantId.value());
+        // Build email HTML
+        const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background-color: #f8f9fa; padding: 30px; border-radius: 10px;">
+    <h1 style="color: #0d4f5c; margin-bottom: 20px;">Invitation Reminder</h1>
+
+    <p>This is a reminder that you've been invited to join the <strong>Allied Recruitment Portal</strong> as a <strong>${formatRole(inviteData.role)}</strong>.</p>
+
+    <p>Click the button below to complete your registration:</p>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${registrationLink}"
+         style="background-color: #0d4f5c; color: white !important; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+        Complete Registration
+      </a>
+    </div>
+
+    <p style="color: #666; font-size: 14px;">Or copy and paste this link into your browser:</p>
+    <p style="word-break: break-all; color: #0066cc; font-size: 14px;">
+      <a href="${registrationLink}" style="color: #0066cc !important;">${registrationLink}</a>
+    </p>
+
+    <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
+
+    <p style="color: #888; font-size: 12px;">
+      This invitation expires in 7 days. If you didn't expect this invitation, you can safely ignore this email.
+    </p>
+  </div>
+</body>
+</html>
+      `.trim();
+        // Send email
+        const emailResult = await sendEmailViaGraph(accessToken, teamsMeeting_1.msOrganizerUserId.value(), email, email, "Reminder: You're invited to Allied Recruitment Portal", htmlBody);
+        if (!emailResult.success) {
+            throw new Error(emailResult.error || 'Failed to send invitation email');
+        }
+        console.log(`User invite resent to: ${email}`);
+        return {
+            success: true,
+            message: `Invitation resent to ${email}`,
+        };
+    }
+    catch (error) {
+        console.error('Error resending user invite:', error);
+        if (error instanceof https_1.HttpsError)
+            throw error;
+        throw new https_1.HttpsError('internal', error.message || 'Failed to resend invitation');
     }
 });
 // ============================================================================
@@ -618,6 +727,130 @@ exports.completePasswordReset = (0, https_1.onCall)({
         if (error instanceof https_1.HttpsError)
             throw error;
         throw new https_1.HttpsError('internal', 'Failed to reset password');
+    }
+});
+exports.adminSendPasswordReset = (0, https_1.onCall)({
+    cors: [
+        'https://allied-recruitment.web.app',
+        'https://recruitment-633bd.web.app',
+        'http://localhost:3000',
+        'http://localhost:5173',
+    ],
+    region: 'europe-west2',
+    secrets: [teamsMeeting_1.msClientId, teamsMeeting_1.msClientSecret, teamsMeeting_1.msTenantId, teamsMeeting_1.msOrganizerUserId],
+}, async (request) => {
+    // Require authentication
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'Must be authenticated');
+    }
+    const { email } = request.data;
+    if (!email) {
+        throw new https_1.HttpsError('invalid-argument', 'Email is required');
+    }
+    // Check if caller has admin privileges
+    const callerDoc = await db.collection('users').doc(request.auth.uid).get();
+    const callerRole = callerDoc.data()?.role;
+    if (!['super_admin', 'admin'].includes(callerRole)) {
+        throw new https_1.HttpsError('permission-denied', 'Only admins can send password resets');
+    }
+    try {
+        // Find user
+        const usersSnapshot = await db.collection('users')
+            .where('email', '==', email.toLowerCase())
+            .limit(1)
+            .get();
+        if (usersSnapshot.empty) {
+            throw new https_1.HttpsError('not-found', 'User not found');
+        }
+        const userDoc = usersSnapshot.docs[0];
+        const userData = userDoc.data();
+        // Delete any existing reset tokens for this user
+        const existingTokens = await db.collection('passwordResets')
+            .where('email', '==', email.toLowerCase())
+            .where('status', '==', 'active')
+            .get();
+        const batch = db.batch();
+        existingTokens.docs.forEach(doc => {
+            batch.update(doc.ref, { status: 'expired' });
+        });
+        await batch.commit();
+        // Generate token
+        const token = generateToken();
+        const tokenHash = hashToken(token);
+        // Calculate expiry (24 hours)
+        const expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + 24);
+        // Create reset document
+        await db.collection('passwordResets').add({
+            tokenHash,
+            email: email.toLowerCase(),
+            userId: userDoc.id,
+            status: 'active',
+            expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            triggeredBy: request.auth.uid,
+            isAdminTriggered: true,
+        });
+        // Build reset link
+        const resetLink = `https://allied-recruitment.web.app/reset-password/${token}`;
+        // Get access token for MS Graph
+        const accessToken = await (0, teamsMeeting_1.getAccessToken)(teamsMeeting_1.msClientId.value(), teamsMeeting_1.msClientSecret.value(), teamsMeeting_1.msTenantId.value());
+        // Build email HTML
+        const firstName = userData.firstName || userData.displayName?.split(' ')[0] || 'there';
+        const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background-color: #f8f9fa; padding: 30px; border-radius: 10px;">
+    <h1 style="color: #0d4f5c; margin-bottom: 20px;">Reset Your Password</h1>
+
+    <p>Hi ${firstName},</p>
+
+    <p>An administrator has requested a password reset for your Allied Recruitment Portal account.</p>
+
+    <p>Click the button below to set a new password:</p>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${resetLink}"
+         style="background-color: #0d4f5c; color: white !important; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+        Reset Password
+      </a>
+    </div>
+
+    <p style="color: #666; font-size: 14px;">Or copy and paste this link into your browser:</p>
+    <p style="word-break: break-all; color: #0066cc; font-size: 14px;">
+      <a href="${resetLink}" style="color: #0066cc !important;">${resetLink}</a>
+    </p>
+
+    <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
+
+    <p style="color: #888; font-size: 12px;">
+      This link expires in 24 hours. If you didn't expect this, please contact your administrator.
+    </p>
+  </div>
+</body>
+</html>
+      `.trim();
+        // Send email
+        const emailResult = await sendEmailViaGraph(accessToken, teamsMeeting_1.msOrganizerUserId.value(), email, userData.displayName || email, 'Reset your Allied Recruitment Portal password', htmlBody);
+        if (!emailResult.success) {
+            throw new Error(emailResult.error || 'Failed to send password reset email');
+        }
+        console.log(`Admin-triggered password reset email sent to: ${email}`);
+        return {
+            success: true,
+            message: `Password reset email sent to ${email}`
+        };
+    }
+    catch (error) {
+        console.error('Error sending admin password reset:', error);
+        if (error instanceof https_1.HttpsError)
+            throw error;
+        throw new https_1.HttpsError('internal', error.message || 'Failed to send password reset email');
     }
 });
 //# sourceMappingURL=userInviteFunctions.js.map

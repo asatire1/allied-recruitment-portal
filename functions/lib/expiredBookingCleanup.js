@@ -121,7 +121,6 @@ exports.cleanupExpiredBookingLinks = (0, scheduler_1.onSchedule)({
             }
         }
         console.log('Expired booking link cleanup complete:', results);
-        return results;
     }
     catch (err) {
         console.error('Error in cleanup function:', err);

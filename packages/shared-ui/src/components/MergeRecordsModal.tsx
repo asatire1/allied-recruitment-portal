@@ -396,13 +396,21 @@ export function MergeRecordsModal({
   useEffect(() => {
     if (isOpen) {
       const initial: Record<string, FieldSelection> = {}
+      const isReapplication = primaryCandidate?.status === 'rejected' || primaryCandidate?.status === 'withdrawn'
+
       MERGEABLE_FIELDS.forEach(({ key }) => {
-        initial[key] = 'primary'
+        // For reapplications, default job-related fields to secondary (new application)
+        // so the candidate gets assigned to the new job, not the old rejected one
+        if (isReapplication && (key === 'jobTitle' || key === 'branchName')) {
+          initial[key] = 'secondary'
+        } else {
+          initial[key] = 'primary'
+        }
       })
       setSelections(initial as Record<MergeableField, FieldSelection>)
       setShowConfirmation(false)
     }
-  }, [isOpen, primaryCandidate?.id, secondaryCandidate?.id])
+  }, [isOpen, primaryCandidate?.id, primaryCandidate?.status, secondaryCandidate?.id])
 
   const selectField = (field: MergeableField, source: FieldSelection) => {
     setSelections(prev => ({ ...prev, [field]: source }))
@@ -554,9 +562,37 @@ export function MergeRecordsModal({
     onMerge(mergedData, deleteSecondary, combinedFieldsData)
   }
 
+  const isReapplication = primaryCandidate?.status === 'rejected' || primaryCandidate?.status === 'withdrawn'
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Merge Candidate Records" size="xl">
       <div style={styles.container}>
+        {/* Reapplication Notice */}
+        {isReapplication && (
+          <div style={{
+            background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
+            border: '1px solid #3b82f6',
+            borderRadius: '8px',
+            padding: '12px 16px',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '10px',
+          }}>
+            <span style={{ fontSize: '18px' }}>🔄</span>
+            <div>
+              <div style={{ fontWeight: 600, color: '#1e40af', marginBottom: '4px' }}>
+                Reapplication Detected
+              </div>
+              <div style={{ fontSize: '13px', color: '#1e3a8a' }}>
+                This candidate was previously <strong>{primaryCandidate.status}</strong> and is now applying for a new position.
+                The job fields have been pre-selected to use the new application.
+                Status will be reset to "new" after merge.
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Summary Cards */}
         <div style={styles.summarySection}>
           <div style={{ ...styles.summaryCard, ...styles.summaryCardPrimary }}>

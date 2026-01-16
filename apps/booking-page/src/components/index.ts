@@ -36,3 +36,6 @@ export {
 
 // Job Application
 export { JobApplication } from './JobApplication'
+
+// Message Reply
+export { MessageReply } from './MessageReply'

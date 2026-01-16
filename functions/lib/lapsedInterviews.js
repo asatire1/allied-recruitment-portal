@@ -139,7 +139,14 @@ async function processPassedInterviews() {
                     const statusOrder = ['new', 'screening', 'interview_scheduled', 'interview_complete', 'trial_scheduled', 'trial_complete', 'approved'];
                     const currentIndex = statusOrder.indexOf(currentStatus);
                     const newIndex = statusOrder.indexOf(newStatus);
-                    if (newIndex > currentIndex || currentStatus === 'interview_scheduled' || currentStatus === 'trial_scheduled') {
+                    // Only update if the new status moves forward in the workflow
+                    // Special case: interview_scheduled -> interview_complete is allowed
+                    // Special case: trial_scheduled -> trial_complete is allowed
+                    // But trial_scheduled -> interview_complete is NOT allowed (would be going backwards)
+                    const isForwardProgress = newIndex > currentIndex;
+                    const isInterviewCompletion = currentStatus === 'interview_scheduled' && newStatus === 'interview_complete';
+                    const isTrialCompletion = currentStatus === 'trial_scheduled' && newStatus === 'trial_complete';
+                    if (isForwardProgress || isInterviewCompletion || isTrialCompletion) {
                         await candidateRef.update({
                             status: newStatus,
                             statusUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),

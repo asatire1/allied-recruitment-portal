@@ -27,6 +27,8 @@ import './Calendar.css'
 // Types
 // ============================================================================
 
+type ViewMode = 'day' | 'week' | 'month'
+
 interface CalendarDay {
   date: Date
   isCurrentMonth: boolean
@@ -39,10 +41,12 @@ interface CalendarDay {
 // ============================================================================
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const WEEKDAYS_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'
 ]
+const HOUR_SLOTS = Array.from({ length: 16 }, (_, i) => i + 6) // 6am to 9pm
 
 // ============================================================================
 // Component
@@ -55,11 +59,20 @@ export function Calendar() {
   const db = getFirebaseDb()
 
   // State
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const viewParam = searchParams.get('view')
+    if (viewParam === 'day' || viewParam === 'week' || viewParam === 'month') {
+      return viewParam
+    }
+    return 'month'
+  })
   const [currentDate, setCurrentDate] = useState(() => {
     const yearParam = searchParams.get('year')
     const monthParam = searchParams.get('month')
+    const dayParam = searchParams.get('day')
     if (yearParam && monthParam) {
-      return new Date(parseInt(yearParam), parseInt(monthParam) - 1, 1)
+      const day = dayParam ? parseInt(dayParam) : 1
+      return new Date(parseInt(yearParam), parseInt(monthParam) - 1, day)
     }
     return new Date()
   })
@@ -80,27 +93,45 @@ export function Calendar() {
   const [actionLoading, setActionLoading] = useState(false)
   const [actionError, setActionError] = useState('')
 
-  // Get the start and end of the current month view (including padding days)
+  // Get the start and end dates based on view mode
   const { startDate, endDate } = useMemo(() => {
     const year = currentDate.getFullYear()
     const month = currentDate.getMonth()
-    
+    const day = currentDate.getDate()
+
+    if (viewMode === 'day') {
+      const start = new Date(year, month, day, 0, 0, 0, 0)
+      const end = new Date(year, month, day, 23, 59, 59, 999)
+      return { startDate: start, endDate: end }
+    }
+
+    if (viewMode === 'week') {
+      const start = new Date(year, month, day)
+      start.setDate(start.getDate() - start.getDay()) // Go to Sunday
+      start.setHours(0, 0, 0, 0)
+      const end = new Date(start)
+      end.setDate(end.getDate() + 6) // Go to Saturday
+      end.setHours(23, 59, 59, 999)
+      return { startDate: start, endDate: end }
+    }
+
+    // Month view
     // First day of the month
     const firstDay = new Date(year, month, 1)
     // Last day of the month
     const lastDay = new Date(year, month + 1, 0)
-    
+
     // Start from the Sunday before the first day
     const start = new Date(firstDay)
     start.setDate(start.getDate() - start.getDay())
-    
+
     // End on the Saturday after the last day
     const end = new Date(lastDay)
     end.setDate(end.getDate() + (6 - end.getDay()))
     end.setHours(23, 59, 59, 999)
-    
+
     return { startDate: start, endDate: end }
-  }, [currentDate])
+  }, [currentDate, viewMode])
 
   // Fetch interviews for the current view
   useEffect(() => {
@@ -133,13 +164,18 @@ export function Calendar() {
     fetchInterviews()
   }, [db, startDate, endDate])
 
-  // Update URL when month changes
+  // Update URL when date or view changes
   useEffect(() => {
-    setSearchParams({
+    const params: Record<string, string> = {
+      view: viewMode,
       year: String(currentDate.getFullYear()),
       month: String(currentDate.getMonth() + 1),
-    })
-  }, [currentDate, setSearchParams])
+    }
+    if (viewMode !== 'month') {
+      params.day = String(currentDate.getDate())
+    }
+    setSearchParams(params)
+  }, [currentDate, viewMode, setSearchParams])
 
   // Generate calendar days
   const calendarDays = useMemo(() => {
@@ -213,18 +249,101 @@ export function Calendar() {
   }, [selectedDate, interviews, filterType, filterStatus])
 
   // Navigation handlers
-  const goToPreviousMonth = () => {
-    setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+  const goToPrevious = () => {
+    setCurrentDate(prev => {
+      if (viewMode === 'day') {
+        const newDate = new Date(prev)
+        newDate.setDate(newDate.getDate() - 1)
+        return newDate
+      }
+      if (viewMode === 'week') {
+        const newDate = new Date(prev)
+        newDate.setDate(newDate.getDate() - 7)
+        return newDate
+      }
+      return new Date(prev.getFullYear(), prev.getMonth() - 1, 1)
+    })
   }
 
-  const goToNextMonth = () => {
-    setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+  const goToNext = () => {
+    setCurrentDate(prev => {
+      if (viewMode === 'day') {
+        const newDate = new Date(prev)
+        newDate.setDate(newDate.getDate() + 1)
+        return newDate
+      }
+      if (viewMode === 'week') {
+        const newDate = new Date(prev)
+        newDate.setDate(newDate.getDate() + 7)
+        return newDate
+      }
+      return new Date(prev.getFullYear(), prev.getMonth() + 1, 1)
+    })
   }
 
   const goToToday = () => {
     const today = new Date()
-    setCurrentDate(new Date(today.getFullYear(), today.getMonth(), 1))
+    setCurrentDate(today)
     setSelectedDate(today)
+  }
+
+  // Get week days for week view
+  const weekDays = useMemo(() => {
+    if (viewMode !== 'week') return []
+    const days: Date[] = []
+    const start = new Date(startDate)
+    for (let i = 0; i < 7; i++) {
+      days.push(new Date(start))
+      start.setDate(start.getDate() + 1)
+    }
+    return days
+  }, [viewMode, startDate])
+
+  // Get interviews for a specific day (for day/week views)
+  const getInterviewsForDay = (date: Date) => {
+    const dayStart = new Date(date)
+    dayStart.setHours(0, 0, 0, 0)
+    const dayEnd = new Date(date)
+    dayEnd.setHours(23, 59, 59, 999)
+
+    let filtered = interviews.filter(interview => {
+      const interviewDate = interview.scheduledDate.toDate()
+      return interviewDate >= dayStart && interviewDate <= dayEnd
+    })
+
+    if (filterType !== 'all') {
+      filtered = filtered.filter(i => i.type === filterType)
+    }
+    if (filterStatus !== 'all') {
+      filtered = filtered.filter(i => i.status === filterStatus)
+    }
+
+    return filtered.sort((a, b) =>
+      a.scheduledDate.toDate().getTime() - b.scheduledDate.toDate().getTime()
+    )
+  }
+
+  // Get current view title
+  const getViewTitle = () => {
+    if (viewMode === 'day') {
+      return currentDate.toLocaleDateString('en-GB', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      })
+    }
+    if (viewMode === 'week') {
+      const weekEnd = new Date(startDate)
+      weekEnd.setDate(weekEnd.getDate() + 6)
+      const startMonth = MONTHS[startDate.getMonth()]
+      const endMonth = MONTHS[weekEnd.getMonth()]
+      if (startMonth === endMonth) {
+        return `${startDate.getDate()} - ${weekEnd.getDate()} ${startMonth} ${startDate.getFullYear()}`
+      }
+      return `${startDate.getDate()} ${startMonth} - ${weekEnd.getDate()} ${endMonth} ${startDate.getFullYear()}`
+    }
+    return `${MONTHS[currentDate.getMonth()]} ${currentDate.getFullYear()}`
   }
 
   // Handle day click
@@ -509,23 +628,44 @@ export function Calendar() {
           {/* Navigation & Filters */}
           <div className="calendar-nav">
             <div className="nav-controls">
-              <button className="nav-btn" onClick={goToPreviousMonth}>
-                ← Prev
+              <button className="nav-btn" onClick={goToPrevious}>
+                ←
               </button>
               <h2 className="current-month">
-                {MONTHS[currentDate.getMonth()]} {currentDate.getFullYear()}
+                {getViewTitle()}
               </h2>
-              <button className="nav-btn" onClick={goToNextMonth}>
-                Next →
+              <button className="nav-btn" onClick={goToNext}>
+                →
               </button>
               <button className="today-btn" onClick={goToToday}>
                 Today
               </button>
             </div>
-            
+
+            <div className="view-controls">
+              <button
+                className={`view-btn ${viewMode === 'day' ? 'active' : ''}`}
+                onClick={() => setViewMode('day')}
+              >
+                Day
+              </button>
+              <button
+                className={`view-btn ${viewMode === 'week' ? 'active' : ''}`}
+                onClick={() => setViewMode('week')}
+              >
+                Week
+              </button>
+              <button
+                className={`view-btn ${viewMode === 'month' ? 'active' : ''}`}
+                onClick={() => setViewMode('month')}
+              >
+                Month
+              </button>
+            </div>
+
             <div className="filter-controls">
-              <select 
-                value={filterType} 
+              <select
+                value={filterType}
                 onChange={(e) => setFilterType(e.target.value as InterviewType | 'all')}
                 className="filter-select"
               >
@@ -533,9 +673,9 @@ export function Calendar() {
                 <option value="interview">Interviews</option>
                 <option value="trial">Trials</option>
               </select>
-              
-              <select 
-                value={filterStatus} 
+
+              <select
+                value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value as InterviewStatus | 'all')}
                 className="filter-select"
               >
@@ -553,7 +693,96 @@ export function Calendar() {
               <Spinner size="lg" />
               <p>Loading calendar...</p>
             </div>
+          ) : viewMode === 'day' ? (
+            /* Day View */
+            <div className="day-view">
+              <div className="time-grid">
+                {HOUR_SLOTS.map(hour => {
+                  const dayInterviews = getInterviewsForDay(currentDate)
+                  const hourInterviews = dayInterviews.filter(i => {
+                    const h = i.scheduledDate.toDate().getHours()
+                    return h === hour
+                  })
+                  return (
+                    <div key={hour} className="time-slot">
+                      <div className="time-label">
+                        {hour === 0 ? '12 AM' : hour < 12 ? `${hour} AM` : hour === 12 ? '12 PM' : `${hour - 12} PM`}
+                      </div>
+                      <div className="time-content">
+                        {hourInterviews.map(interview => (
+                          <div
+                            key={interview.id}
+                            className={`time-event ${interview.type} status-${interview.status}`}
+                            onClick={() => handleOpenDetail(interview)}
+                          >
+                            <span className="time-event-time">{formatTime(interview.scheduledDate)}</span>
+                            <span className="time-event-name">{interview.candidateName}</span>
+                            <span className="time-event-type">
+                              {interview.type === 'interview' ? '📋' : '🏪'} {INTERVIEW_TYPE_LABELS[interview.type]}
+                            </span>
+                            {interview.branchName && (
+                              <span className="time-event-location">📍 {interview.branchName}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : viewMode === 'week' ? (
+            /* Week View */
+            <div className="week-view">
+              {/* Week Day Headers */}
+              <div className="week-header">
+                <div className="week-time-gutter"></div>
+                {weekDays.map((day, index) => {
+                  const isToday = day.toDateString() === new Date().toDateString()
+                  return (
+                    <div key={index} className={`week-day-header ${isToday ? 'today' : ''}`}>
+                      <span className="week-day-name">{WEEKDAYS[day.getDay()]}</span>
+                      <span className={`week-day-number ${isToday ? 'today' : ''}`}>{day.getDate()}</span>
+                    </div>
+                  )
+                })}
+              </div>
+              {/* Time Grid */}
+              <div className="week-time-grid">
+                {HOUR_SLOTS.map(hour => (
+                  <div key={hour} className="week-time-row">
+                    <div className="week-time-label">
+                      {hour === 0 ? '12 AM' : hour < 12 ? `${hour} AM` : hour === 12 ? '12 PM' : `${hour - 12} PM`}
+                    </div>
+                    {weekDays.map((day, dayIndex) => {
+                      const dayInterviews = getInterviewsForDay(day)
+                      const hourInterviews = dayInterviews.filter(i => {
+                        const h = i.scheduledDate.toDate().getHours()
+                        return h === hour
+                      })
+                      const isToday = day.toDateString() === new Date().toDateString()
+                      return (
+                        <div key={dayIndex} className={`week-cell ${isToday ? 'today' : ''}`}>
+                          {hourInterviews.map(interview => (
+                            <div
+                              key={interview.id}
+                              className={`week-event ${interview.type} status-${interview.status}`}
+                              onClick={() => handleOpenDetail(interview)}
+                              title={`${interview.candidateName} - ${INTERVIEW_TYPE_LABELS[interview.type]}`}
+                            >
+                              <span className="week-event-time">{formatTime(interview.scheduledDate)}</span>
+                              <span className="week-event-name">{interview.candidateName}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
           ) : (
+            /* Month View */
             <>
               {/* Weekday Headers */}
               <div className="calendar-weekdays">
@@ -571,16 +800,16 @@ export function Calendar() {
                     onClick={() => handleDayClick(day)}
                   >
                     <span className="day-number">{day.date.getDate()}</span>
-                    
+
                     {day.interviews.length > 0 && (
                       <div className="day-events">
                         {day.interviews.slice(0, 3).map(interview => {
                           const typeLabel = INTERVIEW_TYPE_LABELS[interview.type]
                           const statusLabel = INTERVIEW_STATUS_LABELS[interview.status]
                           const tooltip = `${formatTime(interview.scheduledDate)} - ${interview.candidateName}\n${typeLabel} • ${statusLabel}${interview.branchName ? `\n📍 ${interview.branchName}` : ''}`
-                          
+
                           return (
-                            <div 
+                            <div
                               key={interview.id}
                               className={`event-dot ${interview.type} status-${interview.status}`}
                               title={tooltip}

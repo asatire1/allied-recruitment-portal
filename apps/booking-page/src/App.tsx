@@ -21,6 +21,7 @@ import {
   BookingConfirmation,
   BookingSuccess,
   JobApplication,
+  MessageReply,
   // P3 Components
   CalendarSkeleton,
   TimeSlotsSkeleton,
@@ -255,10 +256,16 @@ function App() {
   // ========================================
   
   const renderContent = () => {
+    // Check if we're on the /reply route for message replies
+    const isReplyRoute = window.location.pathname.startsWith('/reply/')
+    if (isReplyRoute) {
+      return <MessageReply />
+    }
+
     // Check if we're on the /apply route for job applications
     const isApplyRoute = window.location.pathname === '/apply' ||
                          window.location.pathname.startsWith('/apply/')
-    
+
     if (isApplyRoute) {
       return <JobApplication />
     }

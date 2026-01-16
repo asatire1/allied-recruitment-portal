@@ -1231,6 +1231,377 @@ button[data-variant="danger"] {
   font-size: 14px;
 }
 
+.no-feedbacks-yet .hint {
+  font-size: 13px;
+  color: var(--ios-tertiary-label);
+  margin-top: 8px;
+}
+
+/* Interview Info Header */
+.interview-info-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--ios-bg-secondary);
+  border-radius: var(--ios-radius-md);
+  margin-bottom: 16px;
+}
+
+.interview-type-badge {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ios-label);
+}
+
+.interview-branch {
+  font-size: 13px;
+  color: var(--ios-secondary-label);
+}
+
+.interview-status {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: var(--ios-radius-full);
+  text-transform: capitalize;
+}
+
+.interview-status.status-completed { background: rgba(52, 199, 89, 0.15); color: var(--ios-green); }
+.interview-status.status-scheduled { background: rgba(255, 149, 0, 0.15); color: var(--ios-orange); }
+.interview-status.status-cancelled { background: rgba(142, 142, 147, 0.15); color: var(--ios-secondary-label); }
+.interview-status.status-no_show { background: rgba(255, 59, 48, 0.15); color: var(--ios-red); }
+.interview-status.status-lapsed { background: rgba(255, 149, 0, 0.15); color: var(--ios-orange); }
+
+/* Recommendation Section */
+.recommendation-section {
+  margin-top: 8px;
+}
+
+.section-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ios-secondary-label);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+
+.recommendation-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.rec-option-btn {
+  flex: 1;
+  padding: 14px 16px;
+  border: 2px solid var(--ios-separator);
+  border-radius: var(--ios-radius-md);
+  background: var(--ios-bg-primary);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ios-label);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.rec-option-btn:hover {
+  border-color: var(--rec-color, var(--ios-teal));
+  background: color-mix(in srgb, var(--rec-color, var(--ios-teal)) 10%, white);
+}
+
+.rec-option-btn.selected {
+  border-color: var(--rec-color, var(--ios-teal));
+  background: color-mix(in srgb, var(--rec-color, var(--ios-teal)) 15%, white);
+  color: var(--rec-color, var(--ios-teal));
+}
+
+/* Existing Feedback Display */
+.existing-feedback-info {
+  padding: 16px;
+  background: var(--ios-bg-secondary);
+  border-radius: var(--ios-radius-md);
+}
+
+.feedback-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.rec-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--ios-radius-full);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.rec-badge.rec-hire { background: rgba(52, 199, 89, 0.15); color: var(--ios-green); }
+.rec-badge.rec-maybe { background: rgba(255, 149, 0, 0.15); color: var(--ios-orange); }
+.rec-badge.rec-do_not_hire { background: rgba(255, 59, 48, 0.15); color: var(--ios-red); }
+
+.rating-display {
+  font-size: 14px;
+  color: var(--ios-secondary-label);
+}
+
+.feedback-detail {
+  font-size: 14px;
+  color: var(--ios-label);
+  padding: 8px 0;
+  border-top: 1px solid var(--ios-separator);
+}
+
+.feedback-detail:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.feedback-detail strong {
+  color: var(--ios-secondary-label);
+  font-weight: 500;
+  margin-right: 4px;
+}
+
+/* Feedback Text Fields */
+.feedback-text-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.feedback-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ios-secondary-label);
+  margin-bottom: 6px;
+}
+
+.feedback-field textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--ios-separator);
+  border-radius: var(--ios-radius-md);
+  font-size: 15px;
+  color: var(--ios-label);
+  background: var(--ios-bg-primary);
+  resize: vertical;
+  font-family: inherit;
+}
+
+.feedback-field textarea:focus {
+  outline: none;
+  border-color: var(--ios-teal);
+  box-shadow: 0 0 0 3px rgba(13, 79, 92, 0.15);
+}
+
+/* Feedback Loading & States */
+.feedback-loading {
+  text-align: center;
+  padding: 32px;
+  color: var(--ios-secondary-label);
+  font-size: 14px;
+}
+
+.no-feedback-allowed {
+  text-align: center;
+  padding: 24px;
+  color: var(--ios-tertiary-label);
+  font-size: 14px;
+  background: var(--ios-bg-secondary);
+  border-radius: var(--ios-radius-md);
+}
+
+.no-feedback-allowed p {
+  margin: 0;
+}
+
+/* Tab Type Icon */
+.feedback-tab .tab-type {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.feedback-tab.has-feedback {
+  background: rgba(52, 199, 89, 0.08);
+  border-color: rgba(52, 199, 89, 0.3);
+}
+
+.feedback-tab.has-feedback.active {
+  background: rgba(52, 199, 89, 0.15);
+  border-color: var(--ios-green);
+}
+
+/* Legacy Feedback Section */
+.legacy-feedback-section {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: rgba(255, 149, 0, 0.08);
+  border: 1px solid rgba(255, 149, 0, 0.2);
+  border-radius: var(--ios-radius-md);
+}
+
+.legacy-feedback-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ios-orange);
+  margin-bottom: 12px;
+}
+
+.legacy-icon {
+  font-size: 16px;
+}
+
+.legacy-feedback-item {
+  padding: 12px;
+  background: var(--ios-bg-primary);
+  border-radius: var(--ios-radius-sm);
+  margin-top: 8px;
+}
+
+.legacy-feedback-item:first-of-type {
+  margin-top: 0;
+}
+
+.legacy-feedback-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.legacy-author {
+  font-weight: 600;
+  color: var(--ios-label);
+}
+
+.legacy-date {
+  color: var(--ios-secondary-label);
+}
+
+.legacy-rating {
+  color: var(--ios-orange);
+  font-weight: 500;
+}
+
+.legacy-notes {
+  font-size: 14px;
+  color: var(--ios-label);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Feedback Form Fields */
+.feedback-form-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.feedback-form-fields .feedback-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.feedback-form-fields .feedback-field > label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ios-label);
+}
+
+/* Recommendation Buttons */
+.feedback-form-fields .recommendation-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.feedback-form-fields .recommendation-btn {
+  flex: 1;
+  padding: 14px 16px;
+  border: 2px solid var(--ios-separator);
+  border-radius: 10px;
+  background: white;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ios-secondary-label);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.feedback-form-fields .recommendation-btn:hover {
+  border-color: var(--btn-color, var(--ios-teal));
+}
+
+.feedback-form-fields .recommendation-btn.active {
+  color: var(--btn-color);
+  border-color: var(--btn-color);
+}
+
+/* Rating Slider */
+.feedback-form-fields .rating-slider {
+  padding: 8px 0;
+}
+
+.feedback-form-fields .rating-slider input[type="range"] {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--ios-bg-tertiary);
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.feedback-form-fields .rating-slider input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--ios-teal);
+  cursor: pointer;
+  border: 3px solid white;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+.feedback-form-fields .rating-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--ios-tertiary-label);
+}
+
+/* Feedback Textarea */
+.feedback-form-fields textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--ios-separator);
+  border-radius: var(--ios-radius-md);
+  font-size: 15px;
+  color: var(--ios-label);
+  background: var(--ios-bg-primary);
+  resize: vertical;
+  font-family: inherit;
+}
+
+.feedback-form-fields textarea:focus {
+  outline: none;
+  border-color: var(--ios-teal);
+  box-shadow: 0 0 0 3px rgba(13, 79, 92, 0.15);
+}
+
 /* Mobile scroll hint */
 @media (max-width: 768px) {
   .feedback-tabs {
@@ -1554,4 +1925,186 @@ button[data-variant="danger"] {
   border-radius: var(--ios-radius-sm);
   font-size: 14px;
   background: var(--ios-bg-primary);
+}
+
+/* ============================================================================
+   CANDIDATE MESSAGING - Chat UI
+   ============================================================================ */
+
+.messaging-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.messaging-card h3 {
+  margin-bottom: 12px;
+}
+
+.messages-container {
+  flex: 1;
+  min-height: 200px;
+  max-height: 300px;
+  overflow-y: auto;
+  background: var(--ios-bg-secondary);
+  border-radius: var(--ios-radius-md);
+  margin-bottom: 12px;
+}
+
+.messages-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: var(--ios-secondary-label);
+}
+
+.messages-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  text-align: center;
+  color: var(--ios-tertiary-label);
+}
+
+.messages-empty .empty-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+  opacity: 0.5;
+}
+
+.messages-empty p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.messages-empty .empty-hint {
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.messages-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.message {
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  position: relative;
+}
+
+.message.outbound {
+  align-self: flex-end;
+  background: var(--ios-teal);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+.message.inbound {
+  align-self: flex-start;
+  background: var(--ios-bg-primary);
+  color: var(--ios-label);
+  border: 1px solid var(--ios-separator);
+  border-bottom-left-radius: 4px;
+}
+
+.message-content {
+  font-size: 14px;
+  line-height: 1.4;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.message-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.message-time {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.message.outbound .message-time {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.message.inbound .message-time {
+  color: var(--ios-tertiary-label);
+}
+
+.message-status {
+  font-size: 11px;
+}
+
+.message.outbound .message-status {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.message-input-container {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.message-input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--ios-separator);
+  border-radius: var(--ios-radius-md);
+  font-size: 14px;
+  font-family: inherit;
+  resize: none;
+  line-height: 1.4;
+  background: var(--ios-bg-primary);
+  color: var(--ios-label);
+}
+
+.message-input:focus {
+  outline: none;
+  border-color: var(--ios-teal);
+  box-shadow: 0 0 0 3px rgba(13, 79, 92, 0.15);
+}
+
+.message-input:disabled {
+  background: var(--ios-bg-secondary);
+  color: var(--ios-tertiary-label);
+  cursor: not-allowed;
+}
+
+.message-input::placeholder {
+  color: var(--ios-tertiary-label);
+}
+
+.send-button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--ios-teal);
+  color: white;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.send-button:hover:not(:disabled) {
+  background: #0a3f4a;
+  transform: scale(1.05);
+}
+
+.send-button:disabled {
+  background: var(--ios-separator-opaque);
+  cursor: not-allowed;
 }

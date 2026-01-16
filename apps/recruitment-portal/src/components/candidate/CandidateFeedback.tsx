@@ -1,27 +1,18 @@
 // ============================================================================
-// Candidate Feedback Component
-// Extracted from CandidateDetail.tsx for better maintainability
+// Candidate Feedback Component (Interview-Based)
+// Shows feedback per interview/trial, stored in interviews collection
 // Location: apps/recruitment-portal/src/components/candidate/CandidateFeedback.tsx
 // ============================================================================
 
 import { useState, useEffect } from 'react'
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { getFirebaseDb, COLLECTIONS } from '@allied/shared-lib'
-import type { Candidate, ActivityAction } from '@allied/shared-lib'
+import type { Candidate, Interview, FeedbackRecommendation, ActivityAction } from '@allied/shared-lib'
 import { Card, Button, Textarea } from '@allied/shared-ui'
 
 // ============================================================================
 // TYPES
 // ============================================================================
-
-interface FeedbackEntry {
-  id: string
-  ratings: Record<string, number>
-  notes: string
-  submittedAt: any
-  submittedBy: string
-  submittedByName: string
-}
 
 interface CandidateFeedbackProps {
   candidate: Candidate
@@ -42,20 +33,18 @@ interface CandidateFeedbackProps {
 // CONSTANTS
 // ============================================================================
 
-const FEEDBACK_CRITERIA = [
-  { key: 'communication', label: 'Communication Skills', icon: '💬' },
-  { key: 'experience', label: 'Relevant Experience', icon: '📋' },
-  { key: 'attitude', label: 'Attitude & Enthusiasm', icon: '✨' },
-  { key: 'availability', label: 'Availability & Flexibility', icon: '📅' },
-  { key: 'overall', label: 'Overall Impression', icon: '⭐' },
+const RECOMMENDATION_OPTIONS: { value: FeedbackRecommendation; label: string; color: string }[] = [
+  { value: 'hire', label: 'Hire', color: '#059669' },
+  { value: 'maybe', label: 'Maybe', color: '#d97706' },
+  { value: 'do_not_hire', label: 'Do Not Hire', color: '#dc2626' },
 ]
 
 // ============================================================================
 // COMPONENT
 // ============================================================================
 
-export function CandidateFeedback({ 
-  candidate, 
+export function CandidateFeedback({
+  candidate,
   expanded,
   onToggleExpand,
   userId,
@@ -65,99 +54,116 @@ export function CandidateFeedback({
   children
 }: CandidateFeedbackProps) {
   const db = getFirebaseDb()
-  
+
   // State
-  const [feedbackRatings, setFeedbackRatings] = useState<Record<string, number>>({
-    communication: 0,
-    experience: 0,
-    attitude: 0,
-    availability: 0,
-    overall: 0,
-  })
-  const [feedbackNotes, setFeedbackNotes] = useState('')
+  const [interviews, setInterviews] = useState<Interview[]>([])
+  const [loadingInterviews, setLoadingInterviews] = useState(true)
+  const [selectedInterviewId, setSelectedInterviewId] = useState<string | null>(null)
   const [savingFeedback, setSavingFeedback] = useState(false)
   const [feedbackSaved, setFeedbackSaved] = useState(false)
-  const [allFeedbacks, setAllFeedbacks] = useState<FeedbackEntry[]>([])
-  const [selectedFeedbackIndex, setSelectedFeedbackIndex] = useState<number | 'new'>('new')
 
-  // Load existing feedbacks
+  // Feedback form state (matches PendingFeedback form)
+  const [rating, setRating] = useState(3)
+  const [recommendation, setRecommendation] = useState<FeedbackRecommendation>('maybe')
+  const [strengths, setStrengths] = useState('')
+  const [weaknesses, setWeaknesses] = useState('')
+  const [comments, setComments] = useState('')
+
+  // Load interviews for this candidate
   useEffect(() => {
-    if (candidate.feedbacks && candidate.feedbacks.length > 0) {
-      setAllFeedbacks(candidate.feedbacks)
-    } else if (candidate.feedback) {
-      // Legacy single feedback
-      setAllFeedbacks([{
-        id: 'legacy',
-        ratings: candidate.feedback.ratings || {},
-        notes: candidate.feedback.notes || '',
-        submittedAt: candidate.feedback.submittedAt,
-        submittedBy: candidate.feedback.submittedBy || '',
-        submittedByName: candidate.feedback.submittedByName || 'Unknown',
-      }])
-    } else {
-      setAllFeedbacks([])
-    }
-  }, [candidate.feedbacks, candidate.feedback])
+    if (!candidate?.id) return
 
-  // Handle selecting a feedback tab
-  const handleSelectFeedback = (index: number | 'new') => {
-    setSelectedFeedbackIndex(index)
-    
-    if (index === 'new') {
-      // Reset form for new entry
-      setFeedbackRatings({
-        communication: 0,
-        experience: 0,
-        attitude: 0,
-        availability: 0,
-        overall: 0,
+    const interviewsRef = collection(db, COLLECTIONS.INTERVIEWS)
+    // Simple query without orderBy to avoid index requirement
+    const q = query(
+      interviewsRef,
+      where('candidateId', '==', candidate.id)
+    )
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Interview[]
+
+      // Sort client-side by scheduledAt descending
+      data.sort((a, b) => {
+        const dateA = a.scheduledAt?.toDate?.() || new Date(0)
+        const dateB = b.scheduledAt?.toDate?.() || new Date(0)
+        return dateB.getTime() - dateA.getTime()
       })
-      setFeedbackNotes('')
-      setFeedbackSaved(false)
-    } else {
-      // Load existing feedback data
-      const fb = allFeedbacks[index]
-      if (fb) {
-        setFeedbackRatings(fb.ratings || {
-          communication: 0,
-          experience: 0,
-          attitude: 0,
-          availability: 0,
-          overall: 0,
-        })
-        setFeedbackNotes(fb.notes || '')
+
+      setInterviews(data)
+      setLoadingInterviews(false)
+
+      // Auto-select most recent interview that can have feedback
+      if (data.length > 0 && !selectedInterviewId) {
+        const feedbackEligible = data.filter(i =>
+          ['completed', 'lapsed', 'no_show', 'scheduled'].includes(i.status)
+        )
+        if (feedbackEligible.length > 0) {
+          setSelectedInterviewId(feedbackEligible[0].id)
+        } else {
+          // If no eligible interviews, just select the first one
+          setSelectedInterviewId(data[0].id)
+        }
       }
+    }, (error) => {
+      console.error('Error fetching interviews:', error)
+      setLoadingInterviews(false)
+    })
+
+    return () => unsubscribe()
+  }, [db, candidate?.id])
+
+  // Load feedback when interview is selected
+  useEffect(() => {
+    if (!selectedInterviewId) return
+
+    const interview = interviews.find(i => i.id === selectedInterviewId)
+    if (interview?.feedback) {
+      // Load existing feedback into form
+      setRating(interview.feedback.rating || 3)
+      setRecommendation(interview.feedback.recommendation || 'maybe')
+      setStrengths(interview.feedback.strengths || '')
+      setWeaknesses(interview.feedback.weaknesses || '')
+      setComments(interview.feedback.comments || '')
+    } else {
+      // Reset form for new feedback
+      resetForm()
     }
+  }, [selectedInterviewId, interviews])
+
+  const resetForm = () => {
+    setRating(3)
+    setRecommendation('maybe')
+    setStrengths('')
+    setWeaknesses('')
+    setComments('')
   }
 
-  // Save feedback
+  // Save feedback to interview document
   const handleSaveFeedback = async () => {
-    if (!candidate) return
+    if (!selectedInterviewId || !recommendation) return
+
+    const interview = interviews.find(i => i.id === selectedInterviewId)
+    if (!interview) return
 
     setSavingFeedback(true)
     try {
-      const newFeedback: FeedbackEntry = {
-        id: `feedback_${Date.now()}`,
-        ratings: feedbackRatings,
-        notes: feedbackNotes,
-        submittedAt: new Date().toISOString(),
+      const feedbackData = {
+        rating,
+        recommendation,
+        strengths: strengths.trim() || null,
+        weaknesses: weaknesses.trim() || null,
+        comments: comments.trim() || null,
+        submittedAt: serverTimestamp(),
         submittedBy: userId,
-        submittedByName: userName,
       }
 
-      const existingFeedbacks = candidate.feedbacks || []
-      const updatedFeedbacks = [...existingFeedbacks, newFeedback]
-
-      await updateDoc(doc(db, COLLECTIONS.CANDIDATES, candidate.id), {
-        feedbacks: updatedFeedbacks,
-        // Keep legacy feedback field for backwards compatibility
-        feedback: {
-          ratings: feedbackRatings,
-          notes: feedbackNotes,
-          submittedAt: newFeedback.submittedAt,
-          submittedBy: userId,
-          submittedByName: userName,
-        },
+      await updateDoc(doc(db, COLLECTIONS.INTERVIEWS, selectedInterviewId), {
+        feedback: feedbackData,
+        status: 'completed', // Ensure status is completed when feedback is submitted
         updatedAt: serverTimestamp(),
       })
 
@@ -165,26 +171,11 @@ export function CandidateFeedback({
       await onLogActivity(
         candidate.id,
         'feedback_submitted',
-        `Submitted interview feedback (Overall: ${feedbackRatings.overall}/5)`
+        `Submitted ${interview.type} feedback: ${recommendation} (Rating: ${rating}/5)`
       )
 
-      // Update local state
-      setAllFeedbacks(updatedFeedbacks)
-      onCandidateUpdated({ feedbacks: updatedFeedbacks })
-      
       setFeedbackSaved(true)
-      setTimeout(() => {
-        setFeedbackSaved(false)
-        // Reset form
-        setFeedbackRatings({
-          communication: 0,
-          experience: 0,
-          attitude: 0,
-          availability: 0,
-          overall: 0,
-        })
-        setFeedbackNotes('')
-      }, 2000)
+      setTimeout(() => setFeedbackSaved(false), 2000)
     } catch (err) {
       console.error('Error saving feedback:', err)
       alert('Failed to save feedback. Please try again.')
@@ -193,18 +184,45 @@ export function CandidateFeedback({
     }
   }
 
+  const formatDate = (timestamp: any) => {
+    if (!timestamp) return '-'
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+    return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+  }
+
+  const selectedInterview = interviews.find(i => i.id === selectedInterviewId)
+  const hasFeedback = selectedInterview?.feedback?.submittedAt
+
+  // Check if scheduled time has passed (allow feedback from scheduled time onwards)
+  const scheduledTime = selectedInterview?.scheduledAt?.toDate?.() || selectedInterview?.scheduledDate?.toDate?.()
+  const hasTimePasssed = scheduledTime ? scheduledTime <= new Date() : false
+
+  const canSubmitFeedback = selectedInterview &&
+    ['completed', 'lapsed', 'no_show', 'scheduled'].includes(selectedInterview.status) &&
+    hasTimePasssed
+
+  // Count interviews with feedback
+  const feedbackCount = interviews.filter(i => i.feedback?.submittedAt).length
+
+  // Legacy feedback from candidate document (old system)
+  const legacyFeedbacks = candidate.feedbacks || (candidate.feedback ? [candidate.feedback] : [])
+  const hasLegacyFeedback = legacyFeedbacks.length > 0
+
+  // Total feedback count (interviews + legacy)
+  const totalFeedbackCount = feedbackCount + legacyFeedbacks.length
+
   return (
     <Card className="detail-card feedback-card">
-      <button 
+      <button
         className={`section-toggle ${expanded ? 'expanded' : ''}`}
         onClick={onToggleExpand}
       >
         <div className="toggle-left">
           <span className="toggle-icon">📝</span>
           <span className="toggle-title">Interview Feedback</span>
-          {allFeedbacks.length > 0 && (
+          {totalFeedbackCount > 0 && (
             <span className="has-content-badge">
-              {allFeedbacks.length} feedback{allFeedbacks.length !== 1 ? 's' : ''}
+              {totalFeedbackCount} feedback{totalFeedbackCount !== 1 ? 's' : ''}
             </span>
           )}
         </div>
@@ -215,117 +233,222 @@ export function CandidateFeedback({
 
       {expanded && (
         <div className="feedback-expanded-content">
-          {/* Feedback Tabs */}
-          {allFeedbacks.length > 0 && (
-            <div className="feedback-tabs">
-              {allFeedbacks.map((fb, index) => {
-                const fbDate = fb.submittedAt ? new Date(fb.submittedAt) : new Date()
-                return (
-                  <button
-                    key={fb.id}
-                    className={`feedback-tab ${selectedFeedbackIndex === index ? 'active' : ''}`}
-                    onClick={() => handleSelectFeedback(index)}
-                  >
-                    <span className="tab-name">{fb.submittedByName?.split(' ')[0] || 'Unknown'}</span>
-                    <span className="tab-date">
-                      {fbDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                    </span>
-                    <span className="tab-rating">⭐ {fb.ratings?.overall || '-'}</span>
-                  </button>
-                )
-              })}
-              <button
-                className={`feedback-tab add-new ${selectedFeedbackIndex === 'new' ? 'active' : ''}`}
-                onClick={() => handleSelectFeedback('new')}
-              >
-                <span className="tab-icon">+</span>
-                <span className="tab-name">Add New</span>
-              </button>
-            </div>
-          )}
-
-          <div className="feedback-form">
-            {/* Viewing existing feedback indicator */}
-            {selectedFeedbackIndex !== 'new' && allFeedbacks[selectedFeedbackIndex as number] && (
-              <div className="viewing-feedback-info">
-                📋 Viewing feedback from {allFeedbacks[selectedFeedbackIndex as number].submittedByName}
-                {allFeedbacks[selectedFeedbackIndex as number].submittedAt && (
-                  <> on {new Date(allFeedbacks[selectedFeedbackIndex as number].submittedAt).toLocaleDateString('en-GB', { 
-                    day: 'numeric', 
-                    month: 'long', 
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}</>
-                )}
+          {/* Legacy Feedback Section (from old system) */}
+          {hasLegacyFeedback && (
+            <div className="legacy-feedback-section">
+              <div className="legacy-feedback-header">
+                <span className="legacy-icon">📋</span>
+                <span>Previous Feedback (Legacy)</span>
               </div>
-            )}
-
-            {/* Star Ratings */}
-            <div className="feedback-criteria-list">
-              {FEEDBACK_CRITERIA.map(({ key, label, icon }) => (
-                <div key={key} className="feedback-criterion">
-                  <div className="criterion-label">
-                    <span className="criterion-icon">{icon}</span>
-                    <span>{label}</span>
+              {legacyFeedbacks.map((fb: any, index: number) => (
+                <div key={fb.id || index} className="legacy-feedback-item">
+                  <div className="legacy-feedback-meta">
+                    <span className="legacy-author">{fb.submittedByName || 'Unknown'}</span>
+                    {fb.submittedAt && (
+                      <span className="legacy-date">
+                        {new Date(fb.submittedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </span>
+                    )}
+                    {fb.ratings?.overall && (
+                      <span className="legacy-rating">⭐ {fb.ratings.overall}/5</span>
+                    )}
                   </div>
-                  <div className="star-rating">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        key={star}
-                        type="button"
-                        className={`star-btn ${feedbackRatings[key] >= star ? 'active' : ''}`}
-                        onClick={() => selectedFeedbackIndex === 'new' && setFeedbackRatings(prev => ({ ...prev, [key]: star }))}
-                        disabled={selectedFeedbackIndex !== 'new'}
-                      >
-                        ★
-                      </button>
-                    ))}
-                    <span className="rating-value">
-                      {feedbackRatings[key] > 0 ? feedbackRatings[key] : '-'}/5
-                    </span>
-                  </div>
+                  {fb.notes && <p className="legacy-notes">{fb.notes}</p>}
                 </div>
               ))}
             </div>
+          )}
 
-            {/* Notes Section */}
-            <div className="feedback-notes-section">
-              <label className="notes-label">Additional Notes</label>
-              <Textarea
-                value={feedbackNotes}
-                onChange={(e) => setFeedbackNotes(e.target.value)}
-                placeholder={selectedFeedbackIndex === 'new' ? "Add any additional observations, strengths, concerns..." : "No notes added"}
-                rows={4}
-                disabled={selectedFeedbackIndex !== 'new'}
-                className="feedback-notes-input"
-              />
+          {loadingInterviews ? (
+            <div className="feedback-loading">Loading interviews...</div>
+          ) : interviews.length === 0 ? (
+            <div className="no-feedbacks-yet">
+              <p>No interviews or trials scheduled yet.</p>
+              <p className="hint">Schedule an interview to leave feedback linked to a specific interview/trial.</p>
             </div>
-
-            {/* Save Button - only show for new feedback */}
-            {selectedFeedbackIndex === 'new' && (
-              <div className="feedback-actions">
-                <Button
-                  variant="primary"
-                  onClick={handleSaveFeedback}
-                  disabled={savingFeedback || feedbackRatings.overall === 0}
-                >
-                  {savingFeedback ? 'Saving...' : feedbackSaved ? '✓ Saved!' : 'Save Feedback'}
-                </Button>
-                {feedbackRatings.overall === 0 && (
-                  <span className="feedback-hint">Please rate "Overall Impression" to save</span>
-                )}
+          ) : (
+            <>
+              {/* Interview Tabs */}
+              <div className="feedback-tabs">
+                {interviews.map((interview) => {
+                  const hasInterviewFeedback = !!interview.feedback?.submittedAt
+                  return (
+                    <button
+                      key={interview.id}
+                      className={`feedback-tab ${selectedInterviewId === interview.id ? 'active' : ''} ${hasInterviewFeedback ? 'has-feedback' : ''}`}
+                      onClick={() => setSelectedInterviewId(interview.id)}
+                    >
+                      <span className="tab-type">
+                        {interview.type === 'trial' ? '👔' : '📅'}
+                      </span>
+                      <span className="tab-date">
+                        {formatDate(interview.scheduledAt)}
+                      </span>
+                      {hasInterviewFeedback && (
+                        <span className="tab-rating">
+                          ⭐ {interview.feedback?.rating || '-'}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
-            )}
 
-            {/* No feedbacks yet message */}
-            {allFeedbacks.length === 0 && selectedFeedbackIndex === 'new' && (
-              <div className="no-feedbacks-yet">
-                <p>No feedback has been submitted yet. Be the first to add feedback!</p>
-              </div>
-            )}
-          </div>
-          
+              {selectedInterview && (
+                <div className="feedback-form">
+                  {/* Interview Info Header */}
+                  <div className="interview-info-header">
+                    <span className="interview-type-badge">
+                      {selectedInterview.type === 'trial' ? '👔 Trial' : '📅 Interview'}
+                    </span>
+                    <span className="interview-branch">{selectedInterview.branchName || 'No branch'}</span>
+                    <span className={`interview-status status-${selectedInterview.status}`}>
+                      {selectedInterview.status}
+                    </span>
+                  </div>
+
+                  {/* Existing Feedback Display */}
+                  {hasFeedback && (
+                    <div className="existing-feedback-info">
+                      <div className="feedback-summary">
+                        <span className={`rec-badge rec-${selectedInterview.feedback?.recommendation}`}>
+                          {selectedInterview.feedback?.recommendation === 'hire' ? '✓ Hire' :
+                           selectedInterview.feedback?.recommendation === 'maybe' ? '? Maybe' : '✗ Do Not Hire'}
+                        </span>
+                        <span className="rating-display">
+                          Rating: {selectedInterview.feedback?.rating}/5
+                        </span>
+                      </div>
+                      {selectedInterview.feedback?.strengths && (
+                        <div className="feedback-detail">
+                          <strong>Strengths:</strong> {selectedInterview.feedback.strengths}
+                        </div>
+                      )}
+                      {selectedInterview.feedback?.weaknesses && (
+                        <div className="feedback-detail">
+                          <strong>Areas to Improve:</strong> {selectedInterview.feedback.weaknesses}
+                        </div>
+                      )}
+                      {selectedInterview.feedback?.comments && (
+                        <div className="feedback-detail">
+                          <strong>Comments:</strong> {selectedInterview.feedback.comments}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Feedback Form (only if no existing feedback) */}
+                  {!hasFeedback && canSubmitFeedback && (
+                    <div className="feedback-form-fields">
+                      {/* Recommendation */}
+                      <div className="feedback-field">
+                        <label>Recommendation *</label>
+                        <div className="recommendation-buttons">
+                          {RECOMMENDATION_OPTIONS.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              className={`recommendation-btn ${recommendation === option.value ? 'active' : ''}`}
+                              style={{
+                                '--btn-color': option.color,
+                                borderColor: recommendation === option.value ? option.color : undefined,
+                                backgroundColor: recommendation === option.value ? `${option.color}15` : undefined,
+                              } as React.CSSProperties}
+                              onClick={() => setRecommendation(option.value)}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Rating Slider */}
+                      <div className="feedback-field">
+                        <label>Overall Rating: {rating}/5</label>
+                        <div className="rating-slider">
+                          <input
+                            type="range"
+                            min="1"
+                            max="5"
+                            value={rating}
+                            onChange={(e) => setRating(parseInt(e.target.value))}
+                          />
+                          <div className="rating-labels">
+                            <span>Poor</span>
+                            <span>Below Avg</span>
+                            <span>Average</span>
+                            <span>Good</span>
+                            <span>Excellent</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Strengths */}
+                      <div className="feedback-field">
+                        <label>Strengths</label>
+                        <Textarea
+                          value={strengths}
+                          onChange={(e) => setStrengths(e.target.value)}
+                          placeholder="What were the candidate's key strengths?"
+                          rows={3}
+                        />
+                      </div>
+
+                      {/* Weaknesses */}
+                      <div className="feedback-field">
+                        <label>Areas for Improvement</label>
+                        <Textarea
+                          value={weaknesses}
+                          onChange={(e) => setWeaknesses(e.target.value)}
+                          placeholder="Any concerns or areas for development?"
+                          rows={3}
+                        />
+                      </div>
+
+                      {/* Comments */}
+                      <div className="feedback-field">
+                        <label>Additional Comments</label>
+                        <Textarea
+                          value={comments}
+                          onChange={(e) => setComments(e.target.value)}
+                          placeholder="Any other notes or observations..."
+                          rows={3}
+                        />
+                      </div>
+
+                      {/* Save Button */}
+                      <div className="feedback-actions">
+                        <Button
+                          variant="primary"
+                          onClick={handleSaveFeedback}
+                          disabled={savingFeedback}
+                        >
+                          {savingFeedback ? 'Submitting...' : feedbackSaved ? '✓ Saved!' : 'Submit Feedback'}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* No feedback allowed message */}
+                  {!hasFeedback && !canSubmitFeedback && (
+                    <div className="no-feedback-allowed">
+                      {!hasTimePasssed && scheduledTime ? (
+                        <p>Feedback can be submitted from {scheduledTime.toLocaleString('en-GB', {
+                          day: 'numeric',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })} onwards.</p>
+                      ) : (
+                        <p>Feedback can be submitted after the {selectedInterview.type} is completed.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
           {/* Additional content (e.g., Meeting Summary) */}
           {children}
         </div>

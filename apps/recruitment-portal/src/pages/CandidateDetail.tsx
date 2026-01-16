@@ -36,7 +36,7 @@ import {
   MeetingSummarySection,
   ActivityTimeline,
   ApplicationHistory,
-  QuickActionsCard,
+  CandidateMessaging,
 } from '../components/candidate'
 
 import './CandidateDetail.css'
@@ -240,12 +240,11 @@ export function CandidateDetail() {
 
         {/* Right Column - Sidebar */}
         <div className="candidate-sidebar">
-          {/* Quick Actions */}
-          <QuickActionsCard
-            onChangeStatus={modals.openStatusModal}
-            onScheduleInterview={() => {/* TODO */}}
-            onScheduleTrial={() => {/* TODO */}}
-            onSendWhatsApp={modals.openWhatsAppModal}
+          {/* Messaging */}
+          <CandidateMessaging
+            candidateId={candidate.id}
+            candidateName={candidate.name}
+            candidateEmail={candidate.email}
           />
 
           {/* Skills */}

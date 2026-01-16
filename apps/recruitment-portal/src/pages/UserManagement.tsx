@@ -275,8 +275,8 @@ export function UserManagement() {
         role: formData.role,
         entities: formData.entities,
         branchIds: formData.branchIds,
-        emailNotifications: formData.emailNotifications,
-        pushNotifications: formData.pushNotifications,
+        emailNotifications: formData.emailNotifications ?? true,
+        pushNotifications: formData.pushNotifications ?? true,
         updatedAt: serverTimestamp(),
       })
       
@@ -377,6 +377,48 @@ export function UserManagement() {
     }
   }
 
+  const handleResendInvite = async (user: User) => {
+    try {
+      setSaving(true)
+      setError(null)
+
+      const functions = getFirebaseFunctions()
+      const resendFn = httpsCallable<{ email: string }, { success: boolean; message: string }>(
+        functions,
+        'resendUserInvite'
+      )
+
+      const result = await resendFn({ email: user.email })
+      setSuccess(result.data.message || `Invitation resent to ${user.email}`)
+    } catch (err: any) {
+      console.error('Error resending invite:', err)
+      setError(err.message || 'Failed to resend invitation')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSendPasswordReset = async (user: User) => {
+    try {
+      setSaving(true)
+      setError(null)
+
+      const functions = getFirebaseFunctions()
+      const resetFn = httpsCallable<{ email: string }, { success: boolean; message: string }>(
+        functions,
+        'adminSendPasswordReset'
+      )
+
+      const result = await resetFn({ email: user.email })
+      setSuccess(result.data.message || `Password reset email sent to ${user.email}`)
+    } catch (err: any) {
+      console.error('Error sending password reset:', err)
+      setError(err.message || 'Failed to send password reset email')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   // ============================================================================
   // MODAL HANDLERS
   // ============================================================================
@@ -387,12 +429,13 @@ export function UserManagement() {
       email: user.email,
       displayName: user.displayName,
       phone: user.phone || '',
+      password: '',
       role: user.role,
       entities: user.entities || [],
       branchIds: user.branchIds || [],
       active: user.active,
-      emailNotifications: user.emailNotifications,
-      pushNotifications: user.pushNotifications,
+      emailNotifications: user.emailNotifications ?? true,
+      pushNotifications: user.pushNotifications ?? true,
     })
     setShowEditModal(true)
   }
@@ -607,32 +650,54 @@ export function UserManagement() {
                     </td>
                     <td>
                       <div className="action-buttons">
-                        <button 
-                          className="btn-icon" 
+                        {/* Resend invite button for pending users */}
+                        {user.id.startsWith('pending_') && (
+                          <button
+                            className="btn-icon"
+                            title="Resend Invitation"
+                            onClick={() => handleResendInvite(user)}
+                            disabled={saving}
+                          >
+                            📧
+                          </button>
+                        )}
+                        {/* Password reset button for registered users */}
+                        {!user.id.startsWith('pending_') && (
+                          <button
+                            className="btn-icon"
+                            title="Send Password Reset"
+                            onClick={() => handleSendPasswordReset(user)}
+                            disabled={saving}
+                          >
+                            🔑
+                          </button>
+                        )}
+                        <button
+                          className="btn-icon"
                           title="Edit"
                           onClick={() => openEditModal(user)}
                         >
                           ✏️
                         </button>
                         {user.role === 'branch_manager' && (
-                          <button 
-                            className="btn-icon" 
+                          <button
+                            className="btn-icon"
                             title="Assign Branches"
                             onClick={() => openAssignModal(user)}
                           >
                             🏢
                           </button>
                         )}
-                        <button 
-                          className="btn-icon" 
+                        <button
+                          className="btn-icon"
                           title={user.active ? 'Deactivate' : 'Activate'}
                           onClick={() => handleToggleActive(user)}
                           disabled={isCurrentUser}
                         >
                           {user.active ? '🔴' : '🟢'}
                         </button>
-                        <button 
-                          className="btn-icon btn-danger" 
+                        <button
+                          className="btn-icon btn-danger"
                           title="Delete"
                           onClick={() => openDeleteModal(user)}
                           disabled={isCurrentUser}

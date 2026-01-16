@@ -258,6 +258,12 @@ export function Candidates() {
   const [activeJobs, setActiveJobs] = useState<Array<{ id: string; title: string; branchId: string; branchName: string }>>([])
   const [selectedJobId, setSelectedJobId] = useState<string>('')
 
+  // Searchable job dropdowns for forms
+  const [addJobDropdownOpen, setAddJobDropdownOpen] = useState(false)
+  const [addJobSearchTerm, setAddJobSearchTerm] = useState('')
+  const [bulkJobDropdownOpen, setBulkJobDropdownOpen] = useState(false)
+  const [bulkJobSearchTerm, setBulkJobSearchTerm] = useState('')
+
   const [loadingJobTitles, setLoadingJobTitles] = useState(true)
 
   // Locations from settings
@@ -608,10 +614,10 @@ export function Candidates() {
   // Filtered and sorted candidates
   const filteredCandidates = useMemo(() => {
     const filtered = candidates.filter(candidate => {
-      // Status filter with special handling for 'all' (excludes rejected) and 'all_including_rejected'
+      // Status filter with special handling for 'all' (excludes rejected/withdrawn) and 'all_including_rejected'
       if (statusFilter === 'all') {
-        // 'all' now means "all active" - excludes rejected candidates
-        if (candidate.status === 'rejected') {
+        // 'all' now means "all active" - excludes rejected and withdrawn candidates
+        if (candidate.status === 'rejected' || candidate.status === 'withdrawn') {
           return false
         }
       } else if (statusFilter === 'all_including_rejected') {
@@ -699,10 +705,16 @@ export function Candidates() {
     return sorted
   }, [candidates, statusFilter, searchTerm, jobFilter, activeJobs, sortConfig])
 
-  // Count of rejected candidates (for showing in filter)
+  // Count of rejected and withdrawn candidates (for showing in filter)
   const rejectedCount = useMemo(() => {
     return candidates.filter(c => c.status === 'rejected').length
   }, [candidates])
+
+  const withdrawnCount = useMemo(() => {
+    return candidates.filter(c => c.status === 'withdrawn').length
+  }, [candidates])
+
+  const hiddenCount = rejectedCount + withdrawnCount
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredCandidates.length / ITEMS_PER_PAGE)
@@ -1375,6 +1387,13 @@ export function Candidates() {
       updateData.duplicateReviewedAt = serverTimestamp()
       updateData.duplicateReviewedBy = user?.id || ''
 
+      // If merging with a withdrawn/rejected candidate, reset status to 'new'
+      // This handles the case where someone re-applies after being withdrawn/rejected
+      if (mergeTargetCandidate.status === 'withdrawn' || mergeTargetCandidate.status === 'rejected') {
+        updateData.status = 'new'
+        updateData.reappliedAt = serverTimestamp()
+      }
+
       // Remove undefined values before saving to Firestore
       const cleanedUpdateData = removeUndefined(updateData)
 
@@ -1383,10 +1402,11 @@ export function Candidates() {
       await updateDoc(existingRef, cleanedUpdateData)
 
       // Log the merge activity
+      const wasReactivated = mergeTargetCandidate.status === 'withdrawn' || mergeTargetCandidate.status === 'rejected'
       await logActivity(
         mergeTargetCandidate.id,
         'updated',
-        `Candidate record merged. ${Object.keys(cleanedUpdateData).length} fields updated.${deleteSecondary ? ' Source record deleted.' : ''}`,
+        `Candidate record merged. ${Object.keys(cleanedUpdateData).length} fields updated.${wasReactivated ? ` Status reset from "${mergeTargetCandidate.status}" to "new" (re-application).` : ''}${deleteSecondary ? ' Source record deleted.' : ''}`,
         undefined,
         { 
           mergedFields: Object.keys(mergedData),
@@ -2426,16 +2446,37 @@ Allied Recruitment Team`
         updateData.postcode = parsed.postcode
       }
 
+      // If merging with a withdrawn/rejected candidate, reset status to 'new'
+      // This handles the case where someone re-applies after being withdrawn/rejected
+      const isReapplication = existingCandidate.status === 'withdrawn' || existingCandidate.status === 'rejected'
+      if (isReapplication) {
+        updateData.status = 'new'
+        updateData.reappliedAt = serverTimestamp()
+      }
+
+      // Update job info to the new job they're applying for (from bulk form)
+      if (bulkJobTitle) {
+        const selectedJob = activeJobs.find(j => j.id === bulkJobTitle)
+        if (selectedJob) {
+          updateData.jobId = bulkJobTitle
+          updateData.jobTitle = selectedJob.title
+          updateData.branchId = selectedJob.branchId
+          updateData.branchName = selectedJob.branchName
+          updateData.location = selectedJob.branchName
+        }
+      }
+
       const existingRef = doc(db, COLLECTIONS.CANDIDATES, existingCandidate.id)
       await updateDoc(existingRef, removeUndefined(updateData))
 
       // Log activity
+      const previousStatus = existingCandidate.status
       await logActivity(
         existingCandidate.id,
         'updated',
-        `Record merged with bulk uploaded CV (${item.fileName})`,
+        `Record merged with bulk uploaded CV (${item.fileName})${isReapplication ? `. Status reset from "${previousStatus}" to "new" (re-application).` : ''}`,
         undefined,
-        { mergedFrom: item.fileName, hasCv: !!item.cvUrl }
+        { mergedFrom: item.fileName, hasCv: !!item.cvUrl, isReapplication }
       )
 
       // Update progress
@@ -2488,8 +2529,8 @@ Allied Recruitment Team`
           <h1>Candidates</h1>
           <span className="candidate-count">
             {filteredCandidates.length} candidates
-            {statusFilter === 'all' && rejectedCount > 0 && (
-              <span className="rejected-note"> ({rejectedCount} rejected hidden)</span>
+            {statusFilter === 'all' && hiddenCount > 0 && (
+              <span className="rejected-note"> ({hiddenCount} hidden)</span>
             )}
           </span>
         </div>
@@ -3142,18 +3183,94 @@ Allied Recruitment Team`
 
           <div className="form-group">
             <label htmlFor="jobPosting">Job Posting *</label>
-            <Select
-              id="jobPosting"
-              value={selectedJobId}
-              onChange={(e) => handleJobSelect(e.target.value)}
-              options={[
-                { value: '', label: 'Select job posting...' },
-                ...activeJobs.map(job => ({ 
-                  value: job.id, 
-                  label: job.title + (job.branchName ? ' - ' + job.branchName : '')
-                }))
-              ]}
-            />
+            <div className="searchable-select-wrapper">
+              <button
+                type="button"
+                className={`searchable-select-trigger ${addJobDropdownOpen ? 'open' : ''}`}
+                onClick={() => setAddJobDropdownOpen(!addJobDropdownOpen)}
+              >
+                <span className="select-value">
+                  {selectedJobId
+                    ? (() => {
+                        const job = activeJobs.find(j => j.id === selectedJobId)
+                        return job ? `${job.title}${job.branchName ? ' - ' + job.branchName : ''}` : 'Select job posting...'
+                      })()
+                    : 'Select job posting...'}
+                </span>
+                <span className={`dropdown-arrow ${addJobDropdownOpen ? 'open' : ''}`}>▼</span>
+              </button>
+              {addJobDropdownOpen && (
+                <>
+                  <div
+                    className="searchable-select-backdrop"
+                    onClick={() => {
+                      setAddJobDropdownOpen(false)
+                      setAddJobSearchTerm('')
+                    }}
+                  />
+                  <div className="searchable-select-dropdown">
+                    <div className="searchable-select-search">
+                      <input
+                        type="text"
+                        placeholder="Search jobs..."
+                        value={addJobSearchTerm}
+                        onChange={(e) => setAddJobSearchTerm(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        autoFocus
+                      />
+                      {addJobSearchTerm && (
+                        <button
+                          type="button"
+                          className="clear-search-btn"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setAddJobSearchTerm('')
+                          }}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                    <div className="searchable-select-options">
+                      {activeJobs.length === 0 ? (
+                        <div className="searchable-select-empty">No jobs available</div>
+                      ) : (
+                        activeJobs
+                          .filter(job => {
+                            if (!addJobSearchTerm) return true
+                            const search = addJobSearchTerm.toLowerCase()
+                            return job.title.toLowerCase().includes(search) ||
+                                   job.branchName?.toLowerCase().includes(search)
+                          })
+                          .map(job => (
+                            <button
+                              key={job.id}
+                              type="button"
+                              className={`searchable-select-option ${selectedJobId === job.id ? 'selected' : ''}`}
+                              onClick={() => {
+                                handleJobSelect(job.id)
+                                setAddJobDropdownOpen(false)
+                                setAddJobSearchTerm('')
+                              }}
+                            >
+                              {job.title}{job.branchName ? ` - ${job.branchName}` : ''}
+                            </button>
+                          ))
+                      )}
+                      {activeJobs.length > 0 && addJobSearchTerm &&
+                        activeJobs.filter(job => {
+                          const search = addJobSearchTerm.toLowerCase()
+                          return job.title.toLowerCase().includes(search) ||
+                                 job.branchName?.toLowerCase().includes(search)
+                        }).length === 0 && (
+                          <div className="searchable-select-empty">No jobs match "{addJobSearchTerm}"</div>
+                        )
+                      }
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
             {formErrors.jobTitle && (
               <span className="field-error">{formErrors.jobTitle}</span>
             )}
@@ -3427,15 +3544,94 @@ Allied Recruitment Team`
                 <div className="form-row">
                   <div className="form-group">
                     <label htmlFor="bulk-job">Job *</label>
-                    <Select
-                      id="bulk-job"
-                      value={bulkJobTitle}
-                      onChange={(e) => setBulkJobTitle(e.target.value)}
-                      options={[
-                        { value: '', label: 'Select job...' },
-                        ...activeJobs.map(job => ({ value: job.id, label: `${job.title} - ${job.branchName}` }))
-                      ]}
-                    />
+                    <div className="searchable-select-wrapper">
+                      <button
+                        type="button"
+                        className={`searchable-select-trigger ${bulkJobDropdownOpen ? 'open' : ''}`}
+                        onClick={() => setBulkJobDropdownOpen(!bulkJobDropdownOpen)}
+                      >
+                        <span className="select-value">
+                          {bulkJobTitle
+                            ? (() => {
+                                const job = activeJobs.find(j => j.id === bulkJobTitle)
+                                return job ? `${job.title} - ${job.branchName}` : 'Select job...'
+                              })()
+                            : 'Select job...'}
+                        </span>
+                        <span className={`dropdown-arrow ${bulkJobDropdownOpen ? 'open' : ''}`}>▼</span>
+                      </button>
+                      {bulkJobDropdownOpen && (
+                        <>
+                          <div
+                            className="searchable-select-backdrop"
+                            onClick={() => {
+                              setBulkJobDropdownOpen(false)
+                              setBulkJobSearchTerm('')
+                            }}
+                          />
+                          <div className="searchable-select-dropdown">
+                            <div className="searchable-select-search">
+                              <input
+                                type="text"
+                                placeholder="Search jobs..."
+                                value={bulkJobSearchTerm}
+                                onChange={(e) => setBulkJobSearchTerm(e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                                autoFocus
+                              />
+                              {bulkJobSearchTerm && (
+                                <button
+                                  type="button"
+                                  className="clear-search-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setBulkJobSearchTerm('')
+                                  }}
+                                >
+                                  ×
+                                </button>
+                              )}
+                            </div>
+                            <div className="searchable-select-options">
+                              {activeJobs.length === 0 ? (
+                                <div className="searchable-select-empty">No jobs available</div>
+                              ) : (
+                                activeJobs
+                                  .filter(job => {
+                                    if (!bulkJobSearchTerm) return true
+                                    const search = bulkJobSearchTerm.toLowerCase()
+                                    return job.title.toLowerCase().includes(search) ||
+                                           job.branchName?.toLowerCase().includes(search)
+                                  })
+                                  .map(job => (
+                                    <button
+                                      key={job.id}
+                                      type="button"
+                                      className={`searchable-select-option ${bulkJobTitle === job.id ? 'selected' : ''}`}
+                                      onClick={() => {
+                                        setBulkJobTitle(job.id)
+                                        setBulkJobDropdownOpen(false)
+                                        setBulkJobSearchTerm('')
+                                      }}
+                                    >
+                                      {job.title} - {job.branchName}
+                                    </button>
+                                  ))
+                              )}
+                              {activeJobs.length > 0 && bulkJobSearchTerm &&
+                                activeJobs.filter(job => {
+                                  const search = bulkJobSearchTerm.toLowerCase()
+                                  return job.title.toLowerCase().includes(search) ||
+                                         job.branchName?.toLowerCase().includes(search)
+                                }).length === 0 && (
+                                  <div className="searchable-select-empty">No jobs match "{bulkJobSearchTerm}"</div>
+                                )
+                              }
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
                     {activeJobs.length === 0 && (
                       <p className="field-hint">
                         No active jobs found. <a href="/jobs" target="_blank">Create a job first</a>

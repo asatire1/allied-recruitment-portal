@@ -874,11 +874,13 @@ export { sendTestEmail } from './sendTestEmail'
 // User invite and password reset functions
 export {
   createUserInvite,
+  resendUserInvite,
   validateUserInvite,
   completeUserRegistration,
   requestPasswordReset,
   validatePasswordReset,
-  completePasswordReset
+  completePasswordReset,
+  adminSendPasswordReset
 } from './userInviteFunctions'
 
 // Expired booking link cleanup
@@ -887,3 +889,6 @@ export {
   checkCandidateBookingExpiry,
   triggerExpiredBookingCleanup
 } from './expiredBookingCleanup'
+
+// Candidate messaging
+export { sendCandidateMessage, validateMessageReplyToken, submitMessageReply } from './candidateMessaging'

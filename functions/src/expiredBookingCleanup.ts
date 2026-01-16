@@ -102,7 +102,6 @@ export const cleanupExpiredBookingLinks = onSchedule(
       }
 
       console.log('Expired booking link cleanup complete:', results)
-      return results
 
     } catch (err) {
       console.error('Error in cleanup function:', err)

@@ -117,15 +117,38 @@ export default function PendingFeedback() {
       const items: PendingItem[] = []
       const interviewerMap = new Map<string, string>()
 
+      // Get unique candidate IDs to fetch their status
+      const candidateIds = [...new Set(allInterviews.map(i => i.candidateId).filter(Boolean))]
+      const candidateStatusMap = new Map<string, string>()
+
+      // Fetch candidate statuses in batches
+      for (let i = 0; i < candidateIds.length; i += 30) {
+        const batch = candidateIds.slice(i, i + 30)
+        const candidatesQuery = query(
+          collection(db, 'candidates'),
+          where('__name__', 'in', batch)
+        )
+        const candidatesSnap = await getDocs(candidatesQuery)
+        candidatesSnap.docs.forEach(d => {
+          candidateStatusMap.set(d.id, d.data().status || '')
+        })
+      }
+
       for (const interview of allInterviews) {
         const scheduledDate = (interview as any).scheduledDate?.toDate?.() || new Date(0)
-        
+
+        // Skip if candidate is withdrawn or rejected - no feedback needed
+        const candidateStatus = candidateStatusMap.get(interview.candidateId)
+        if (candidateStatus === 'withdrawn' || candidateStatus === 'rejected') {
+          continue
+        }
+
         // Only include if interview date has passed and no feedback submitted
         if (scheduledDate < now && !interview.feedback?.submittedAt) {
           // 2-day grace period before considered overdue
           const daysOverdue = Math.floor((now.getTime() - scheduledDate.getTime()) / (1000 * 60 * 60 * 24)) - 2
-          items.push({ 
-            interview, 
+          items.push({
+            interview,
             daysOverdue: Math.max(0, daysOverdue),
             interviewDate: scheduledDate
           })

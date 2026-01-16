@@ -594,7 +594,34 @@ service cloud.firestore {
       allow create: if isRecruiterOrAdmin();
       allow update, delete: if false; // Email logs are immutable
     }
-    
+
+    // ============================================================
+    // CANDIDATE MESSAGES COLLECTION
+    // ============================================================
+    match /candidateMessages/{messageId} {
+      // Recruiters and admins can read all messages
+      allow read: if isRecruiterOrAdmin();
+
+      // Only Cloud Functions can create messages
+      allow create: if false;
+
+      // Messages are immutable
+      allow update, delete: if false;
+    }
+
+    // ============================================================
+    // MESSAGE REPLY TOKENS COLLECTION
+    // ============================================================
+    match /messageReplyTokens/{tokenId} {
+      // Public can read tokens (needed for reply page)
+      allow read: if true;
+
+      // Only Cloud Functions can create/update tokens
+      allow create: if false;
+      allow update: if true; // Allow marking as used
+      allow delete: if false;
+    }
+
     // ============================================================
     // DENY ALL OTHER COLLECTIONS
     // ============================================================

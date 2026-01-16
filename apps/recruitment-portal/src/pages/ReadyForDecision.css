@@ -1,619 +1,607 @@
 /* ============================================================================
-   Ready for Decision Page Styles
+   Ready for Decision Page - Compact Table Layout
    ============================================================================ */
 
-.ready-for-decision-page {
+.rfd-page {
   padding: 24px;
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
 }
 
-.ready-for-decision-page .loading-state {
+.rfd-loading {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 400px;
-  gap: 16px;
+  min-height: 300px;
+  gap: 12px;
   color: #8e8e93;
 }
 
-/* ============================================================================
-   Header
-   ============================================================================ */
-
-.ready-for-decision-page .page-header {
-  margin-bottom: 24px;
+/* Header */
+.rfd-header {
+  margin-bottom: 20px;
 }
 
-.ready-for-decision-page .header-content h1 {
-  font-size: 28px;
+.rfd-header h1 {
+  font-size: 24px;
   font-weight: 700;
   color: #1c1c1e;
-  margin: 0 0 8px 0;
+  margin: 0 0 4px 0;
 }
 
-.ready-for-decision-page .header-subtitle {
-  font-size: 15px;
+.rfd-header p {
+  font-size: 14px;
   color: #8e8e93;
   margin: 0;
 }
 
-/* ============================================================================
-   Stats Row
-   ============================================================================ */
-
-.stats-row {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 16px;
-  margin-bottom: 24px;
+/* Status Tabs */
+.rfd-status-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding: 4px;
+  background: #f2f2f7;
+  border-radius: 12px;
+  width: fit-content;
 }
 
-.stats-row .stat-card {
-  padding: 20px !important;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border: 2px solid transparent;
-  position: relative;
-}
-
-.stats-row .stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-}
-
-.stats-row .stat-card.active {
-  border-color: #007AFF;
-  background: rgba(0, 122, 255, 0.04);
-}
-
-.stats-row .stat-card .stat-icon {
-  font-size: 20px;
-  margin-bottom: 4px;
-}
-
-.stats-row .stat-card .stat-value {
-  font-size: 32px;
-  font-weight: 700;
-  color: #1c1c1e;
-  line-height: 1.2;
-}
-
-.stats-row .stat-card .stat-label {
-  font-size: 12px;
-  color: #8e8e93;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  margin-top: 4px;
-}
-
-/* Stat card colors */
-.stats-row .stat-card.hire {
-  border-left: 4px solid #059669;
-}
-.stats-row .stat-card.hire.active {
-  border-color: #059669;
-  background: rgba(5, 150, 105, 0.06);
-}
-.stats-row .stat-card.hire .stat-icon {
-  color: #059669;
-}
-
-.stats-row .stat-card.maybe {
-  border-left: 4px solid #d97706;
-}
-.stats-row .stat-card.maybe.active {
-  border-color: #d97706;
-  background: rgba(217, 119, 6, 0.06);
-}
-.stats-row .stat-card.maybe .stat-icon {
-  color: #d97706;
-}
-
-.stats-row .stat-card.interview {
-  border-left: 4px solid #6366f1;
-}
-.stats-row .stat-card.interview.active {
-  border-color: #6366f1;
-  background: rgba(99, 102, 241, 0.06);
-}
-
-.stats-row .stat-card.trial {
-  border-left: 4px solid #f59e0b;
-}
-.stats-row .stat-card.trial.active {
-  border-color: #f59e0b;
-  background: rgba(245, 158, 11, 0.06);
-}
-
-/* ============================================================================
-   Filters
-   ============================================================================ */
-
-.filters-card {
-  padding: 16px !important;
-  margin-bottom: 24px;
-}
-
-.filters-row {
+.rfd-status-tab {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.filters-row .search-input {
-  flex: 1;
-  min-width: 250px;
-}
-
-.filters-row .filter-select {
-  padding: 10px 14px;
-  border: 1px solid #e5e7eb;
+  gap: 8px;
+  padding: 10px 20px;
+  background: transparent;
+  border: none;
   border-radius: 10px;
-  font-size: 14px;
-  color: #1c1c1e;
-  background: white;
   cursor: pointer;
-  min-width: 160px;
+  transition: all 0.2s ease;
+  font-size: 14px;
+  font-weight: 500;
+  color: #8e8e93;
 }
 
-.filters-row .filter-select:focus {
-  outline: none;
-  border-color: #007AFF;
-  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+.rfd-status-tab:hover {
+  background: rgba(255, 255, 255, 0.5);
+  color: #1c1c1e;
 }
 
-/* ============================================================================
-   Empty State
-   ============================================================================ */
-
-.empty-state-card {
-  padding: 60px 24px !important;
+.rfd-status-tab.active {
+  background: white;
+  color: #1c1c1e;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
-.empty-state {
+.rfd-status-tab .tab-icon {
+  font-size: 16px;
+}
+
+.rfd-status-tab .tab-label {
+  font-weight: 600;
+}
+
+.rfd-status-tab .tab-count {
+  background: #e5e7eb;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 24px;
   text-align: center;
 }
 
-.empty-state .empty-icon {
-  font-size: 48px;
+.rfd-status-tab.active .tab-count {
+  background: #007AFF;
+  color: white;
+}
+
+.rfd-status-tab.hired.active .tab-count {
+  background: #059669;
+}
+
+.rfd-status-tab.rejected.active .tab-count {
+  background: #dc2626;
+}
+
+/* Stats Bar */
+.rfd-stats-bar {
+  display: flex;
+  gap: 12px;
   margin-bottom: 16px;
 }
 
-.empty-state h3 {
-  font-size: 20px;
-  font-weight: 600;
-  color: #1c1c1e;
-  margin: 0 0 8px 0;
-}
-
-.empty-state p {
-  font-size: 15px;
-  color: #8e8e93;
-  margin: 0 0 20px 0;
-  max-width: 400px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-/* ============================================================================
-   Candidates List
-   ============================================================================ */
-
-.candidates-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.candidate-card {
-  padding: 0 !important;
-  overflow: hidden;
-  transition: all 0.2s ease;
-}
-
-.candidate-card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-}
-
-.candidate-card.expanded {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-}
-
-/* Main Row */
-.candidate-main {
+.rfd-stat {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px 20px;
+  gap: 8px;
+  padding: 10px 16px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: all 0.15s ease;
 }
 
-.candidate-main:hover {
+.rfd-stat:hover {
+  border-color: #007AFF;
   background: rgba(0, 122, 255, 0.02);
 }
 
-/* Recommendation Badge */
-.recommendation-badge {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-width: 70px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  flex-shrink: 0;
-  gap: 4px;
+.rfd-stat.active {
+  border-color: #007AFF;
+  background: rgba(0, 122, 255, 0.06);
 }
 
-.recommendation-badge .rec-icon {
-  font-size: 18px;
+.rfd-stat.hire {
+  border-left: 3px solid #059669;
+}
+
+.rfd-stat.maybe {
+  border-left: 3px solid #d97706;
+}
+
+.rfd-stat-value {
+  font-size: 20px;
   font-weight: 700;
-  line-height: 1;
-}
-
-.recommendation-badge .rec-label {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-
-/* Candidate Info */
-.candidate-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.candidate-name {
-  font-size: 16px;
-  font-weight: 600;
   color: #1c1c1e;
-  margin-bottom: 4px;
 }
 
-.candidate-meta {
+.rfd-stat-label {
+  font-size: 12px;
+  color: #8e8e93;
+  font-weight: 500;
+}
+
+/* Filters */
+.rfd-filters {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  gap: 10px;
+  margin-bottom: 16px;
   flex-wrap: wrap;
 }
 
-.candidate-meta .type-badge {
-  font-size: 12px;
-  font-weight: 500;
-  color: #636366;
-}
-
-.candidate-meta .job-title {
-  font-size: 13px;
-  color: #636366;
-}
-
-.candidate-meta .branch {
-  font-size: 12px;
-  color: #8e8e93;
-}
-
-/* Rating Section */
-.rating-section {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.rating-stars {
+.rfd-search {
+  flex: 1;
+  min-width: 200px;
+  padding: 10px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
   font-size: 14px;
-  color: #f59e0b;
-  letter-spacing: 2px;
+  outline: none;
+  transition: border-color 0.15s;
 }
 
-.rating-date {
-  font-size: 11px;
-  color: #aeaeb2;
+.rfd-search:focus {
+  border-color: #007AFF;
 }
 
-/* Expand Toggle */
-.expand-toggle {
-  flex-shrink: 0;
-  padding: 8px;
-}
-
-.expand-icon {
-  font-size: 12px;
-  color: #8e8e93;
-  transition: transform 0.2s ease;
-  display: inline-block;
-}
-
-.expand-icon.expanded {
-  transform: rotate(180deg);
-}
-
-/* ============================================================================
-   Expanded Section
-   ============================================================================ */
-
-.candidate-expanded {
-  padding: 0 20px 20px 20px;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
-  background: #f9fafb;
-}
-
-.feedback-details {
-  padding: 16px 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 16px;
-}
-
-.feedback-section {
+.rfd-select {
+  padding: 10px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
   background: white;
-  padding: 14px;
-  border-radius: 10px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  min-width: 140px;
 }
 
-.feedback-section h4 {
-  font-size: 13px;
+.rfd-select:focus {
+  outline: none;
+  border-color: #007AFF;
+}
+
+.rfd-clear-btn {
+  padding: 10px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: white;
+  font-size: 14px;
+  color: #636366;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.rfd-clear-btn:hover {
+  background: #f5f5f7;
+  border-color: #d1d5db;
+}
+
+/* Empty State */
+.rfd-empty {
+  text-align: center;
+  padding: 60px 24px !important;
+}
+
+.rfd-empty-icon {
+  font-size: 40px;
+  margin-bottom: 12px;
+}
+
+.rfd-empty h3 {
+  font-size: 18px;
   font-weight: 600;
   color: #1c1c1e;
   margin: 0 0 8px 0;
 }
 
-.feedback-section p {
-  font-size: 14px;
-  color: #636366;
-  margin: 0;
-  line-height: 1.5;
-}
-
-.no-feedback {
+.rfd-empty p {
   font-size: 14px;
   color: #8e8e93;
-  font-style: italic;
-  padding: 16px 0;
+  margin: 0;
+}
+
+/* Table */
+.rfd-table-container {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+}
+
+.rfd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.rfd-table thead {
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.rfd-table th {
+  padding: 12px 14px;
+  text-align: left;
+  font-weight: 600;
+  color: #636366;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.rfd-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease;
+}
+
+.rfd-table th.sortable:hover {
+  background: #f3f4f6;
+  color: #1c1c1e;
+}
+
+.rfd-table th.sortable.sorted {
+  color: #007AFF;
+  background: rgba(0, 122, 255, 0.05);
+}
+
+.rfd-table tbody tr {
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+
+.rfd-table tbody tr:hover {
+  background: rgba(0, 122, 255, 0.02);
+}
+
+.rfd-table tbody tr.expanded {
+  background: rgba(0, 122, 255, 0.04);
+}
+
+.rfd-table td {
+  padding: 12px 14px;
+  color: #1c1c1e;
+  vertical-align: middle;
+}
+
+.rfd-candidate-name {
+  font-weight: 600;
+}
+
+.rfd-branch-cell,
+.rfd-job-cell {
+  color: #636366;
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rfd-date-cell {
+  color: #8e8e93;
+  font-size: 13px;
+}
+
+/* Type Badge */
+.rfd-type-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.rfd-type-badge.interview {
+  background: rgba(99, 102, 241, 0.1);
+  color: #6366f1;
+}
+
+.rfd-type-badge.trial {
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+}
+
+/* Rating Stars */
+.rfd-stars {
+  color: #f59e0b;
+  font-size: 13px;
+  letter-spacing: 1px;
+}
+
+/* Recommendation Badge */
+.rfd-rec-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rfd-rec-badge.hire {
+  background: rgba(5, 150, 105, 0.1);
+  color: #059669;
+}
+
+.rfd-rec-badge.maybe {
+  background: rgba(217, 119, 6, 0.1);
+  color: #d97706;
 }
 
 /* Action Buttons */
-.action-buttons {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
+.rfd-actions-cell {
+  white-space: nowrap;
 }
 
-.action-buttons .action-trial {
-  color: #f59e0b;
-  border-color: #f59e0b;
+.rfd-action-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+  font-size: 14px;
+  margin-left: 4px;
+  transition: all 0.15s;
 }
 
-.action-buttons .action-trial:hover {
+.rfd-action-btn:first-child {
+  margin-left: 0;
+}
+
+.rfd-action-btn:hover {
+  transform: translateY(-1px);
+}
+
+.rfd-action-btn.trial {
+  color: #d97706;
+  border-color: #fcd34d;
+}
+
+.rfd-action-btn.trial:hover {
   background: rgba(245, 158, 11, 0.1);
 }
 
-.action-buttons .action-reject {
+.rfd-action-btn.reject {
   color: #dc2626;
-  border-color: #dc2626;
+  border-color: #fca5a5;
 }
 
-.action-buttons .action-reject:hover {
+.rfd-action-btn.reject:hover {
   background: rgba(220, 38, 38, 0.1);
 }
 
-.action-buttons .action-approve {
-  background: linear-gradient(135deg, #059669 0%, #047857 100%);
-  border-color: #059669;
+.rfd-action-btn.approve {
+  color: #059669;
+  border-color: #6ee7b7;
 }
 
-.action-buttons .action-approve:hover {
-  background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+.rfd-action-btn.approve:hover {
+  background: rgba(5, 150, 105, 0.1);
 }
 
-/* ============================================================================
-   Action Modal
-   ============================================================================ */
-
-.action-modal-content {
-  padding: 8px 0;
+/* Expanded Row */
+.rfd-expanded-row {
+  background: #f9fafb !important;
 }
 
-.modal-candidate-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 16px;
-  background: #f9fafb;
-  border-radius: 10px;
-  margin-bottom: 16px;
+.rfd-expanded-row:hover {
+  background: #f9fafb !important;
 }
 
-.modal-candidate-info strong {
-  font-size: 16px;
-  color: #1c1c1e;
+.rfd-expanded-row td {
+  padding: 0 !important;
 }
 
-.modal-candidate-info span {
-  font-size: 14px;
-  color: #8e8e93;
+.rfd-feedback-panel {
+  padding: 16px 20px;
+  border-top: 1px solid #e5e7eb;
 }
 
-.modal-message {
-  padding: 0 0 16px 0;
-}
-
-.modal-message p {
-  font-size: 14px;
+.rfd-feedback-item {
+  font-size: 13px;
   color: #636366;
-  margin: 0 0 12px 0;
+  margin-bottom: 8px;
   line-height: 1.5;
 }
 
-.modal-message .modal-hint {
-  font-size: 13px;
+.rfd-feedback-item:last-of-type {
+  margin-bottom: 12px;
+}
+
+.rfd-feedback-item strong {
+  color: #1c1c1e;
+}
+
+.rfd-feedback-item.muted {
   color: #8e8e93;
   font-style: italic;
 }
 
-.email-checkbox {
+.rfd-view-profile-btn {
+  padding: 8px 14px;
+  background: white;
+  border: 1px solid #007AFF;
+  color: #007AFF;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.rfd-view-profile-btn:hover {
+  background: #007AFF;
+  color: white;
+}
+
+/* Modal */
+.rfd-modal {
+  padding: 8px 0;
+}
+
+.rfd-modal-candidate {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  background: rgba(220, 38, 38, 0.06);
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  background: #f9fafb;
   border-radius: 8px;
-  cursor: pointer;
+  margin-bottom: 16px;
 }
 
-.email-checkbox input {
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-}
-
-.email-checkbox span {
-  font-size: 14px;
+.rfd-modal-candidate strong {
+  font-size: 15px;
   color: #1c1c1e;
 }
 
-.modal-actions {
+.rfd-modal-candidate span {
+  font-size: 13px;
+  color: #8e8e93;
+}
+
+.rfd-modal p {
+  font-size: 14px;
+  color: #636366;
+  margin: 0 0 16px 0;
+}
+
+.rfd-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(220, 38, 38, 0.05);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.rfd-checkbox input {
+  width: 16px;
+  height: 16px;
+}
+
+.rfd-modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
   padding-top: 16px;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  border-top: 1px solid #e5e7eb;
 }
 
-.modal-actions .confirm-btn.approve {
-  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+.rfd-confirm-btn.approve {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+  border-color: #059669 !important;
 }
 
-.modal-actions .confirm-btn.reject {
-  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+.rfd-confirm-btn.reject {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+  border-color: #dc2626 !important;
 }
 
-.modal-actions .confirm-btn.trial {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+.rfd-confirm-btn.trial {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+  border-color: #f59e0b !important;
 }
 
-/* ============================================================================
-   Responsive
-   ============================================================================ */
-
+/* Responsive */
 @media (max-width: 1024px) {
-  .stats-row {
-    grid-template-columns: repeat(3, 1fr);
+  .rfd-table th:nth-child(3),
+  .rfd-table td:nth-child(3) {
+    display: none;
   }
 }
 
 @media (max-width: 768px) {
-  .ready-for-decision-page {
+  .rfd-page {
     padding: 16px;
   }
 
-  .stats-row {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
+  .rfd-stats-bar {
+    flex-wrap: wrap;
   }
 
-  .stats-row .stat-card {
-    padding: 16px !important;
+  .rfd-stat {
+    flex: 1;
+    min-width: calc(33% - 8px);
+    justify-content: center;
   }
 
-  .stats-row .stat-card .stat-value {
-    font-size: 24px;
-  }
-
-  .filters-row {
+  .rfd-filters {
     flex-direction: column;
-    align-items: stretch;
   }
 
-  .filters-row .search-input {
-    min-width: 100%;
-  }
-
-  .filters-row .filter-select {
+  .rfd-search,
+  .rfd-select {
     width: 100%;
   }
 
-  .candidate-main {
-    flex-wrap: wrap;
-    gap: 12px;
-    padding: 14px 16px;
+  .rfd-table th:nth-child(4),
+  .rfd-table td:nth-child(4),
+  .rfd-table th:nth-child(7),
+  .rfd-table td:nth-child(7) {
+    display: none;
   }
 
-  .recommendation-badge {
-    min-width: 60px;
-    padding: 8px 10px;
+  .rfd-table th,
+  .rfd-table td {
+    padding: 10px 8px;
   }
 
-  .candidate-info {
-    flex: 1 1 calc(100% - 100px);
-  }
-
-  .rating-section {
-    order: 3;
-    flex-direction: row;
-    align-items: center;
-    gap: 12px;
-    width: 100%;
-    padding-top: 8px;
-    border-top: 1px dashed #e5e7eb;
-  }
-
-  .expand-toggle {
-    order: 2;
-    margin-left: auto;
-  }
-
-  .feedback-details {
-    grid-template-columns: 1fr;
-  }
-
-  .action-buttons {
-    flex-wrap: wrap;
-    justify-content: stretch;
-  }
-
-  .action-buttons button {
-    flex: 1 1 calc(50% - 5px);
+  .rfd-action-btn {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
   }
 }
 
 @media (max-width: 480px) {
-  .stats-row {
-    grid-template-columns: 1fr 1fr;
+  .rfd-table th:nth-child(5),
+  .rfd-table td:nth-child(5) {
+    display: none;
   }
 
-  .stats-row .stat-card:first-child {
-    grid-column: 1 / -1;
+  .rfd-candidate-name {
+    font-size: 13px;
   }
 
-  .candidate-name {
-    font-size: 15px;
-  }
-
-  .candidate-meta {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-  }
-
-  .action-buttons {
-    flex-direction: column;
-  }
-
-  .action-buttons button {
-    width: 100%;
+  .rfd-type-badge,
+  .rfd-rec-badge {
+    font-size: 10px;
+    padding: 3px 6px;
   }
 }

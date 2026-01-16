@@ -1050,3 +1050,398 @@
   background: #2563eb;
   border-color: #2563eb;
 }
+
+/* ============================================================================
+   View Controls
+   ============================================================================ */
+
+.view-controls {
+  display: flex;
+  background: #f3f4f6;
+  border-radius: 8px;
+  padding: 4px;
+  gap: 2px;
+}
+
+.view-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.view-btn:hover {
+  color: #374151;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.view-btn.active {
+  background: white;
+  color: #111827;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* ============================================================================
+   Day View Styles
+   ============================================================================ */
+
+.day-view {
+  padding: 0;
+}
+
+.time-grid {
+  display: flex;
+  flex-direction: column;
+}
+
+.time-slot {
+  display: flex;
+  min-height: 60px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.time-slot:last-child {
+  border-bottom: none;
+}
+
+.time-label {
+  width: 80px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+  text-align: right;
+  background: #f9fafb;
+  border-right: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.time-content {
+  flex: 1;
+  padding: 4px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.time-event {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-left: 4px solid transparent;
+}
+
+.time-event:hover {
+  transform: translateX(4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.time-event.interview {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  border-left-color: #3b82f6;
+}
+
+.time-event.trial {
+  background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+  border-left-color: #8b5cf6;
+}
+
+.time-event.status-completed {
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+  border-left-color: #10b981;
+}
+
+.time-event.status-cancelled {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  border-left-color: #ef4444;
+  opacity: 0.7;
+  text-decoration: line-through;
+}
+
+.time-event.status-no_show {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-left-color: #f59e0b;
+}
+
+.time-event-time {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.time-event-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.time-event-type {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.time-event-location {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+/* ============================================================================
+   Week View Styles
+   ============================================================================ */
+
+.week-view {
+  display: flex;
+  flex-direction: column;
+  overflow-x: auto;
+}
+
+.week-header {
+  display: flex;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.week-time-gutter {
+  width: 60px;
+  flex-shrink: 0;
+  border-right: 1px solid #e5e7eb;
+}
+
+.week-day-header {
+  flex: 1;
+  min-width: 120px;
+  padding: 12px 8px;
+  text-align: center;
+  border-right: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.week-day-header:last-child {
+  border-right: none;
+}
+
+.week-day-header.today {
+  background: #eff6ff;
+}
+
+.week-day-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.week-day-number {
+  font-size: 20px;
+  font-weight: 600;
+  color: #374151;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.week-day-number.today {
+  background: #3b82f6;
+  color: white;
+}
+
+.week-time-grid {
+  display: flex;
+  flex-direction: column;
+}
+
+.week-time-row {
+  display: flex;
+  min-height: 50px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.week-time-row:last-child {
+  border-bottom: none;
+}
+
+.week-time-label {
+  width: 60px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #9ca3af;
+  text-align: right;
+  flex-shrink: 0;
+  border-right: 1px solid #e5e7eb;
+  background: #fafafa;
+}
+
+.week-cell {
+  flex: 1;
+  min-width: 120px;
+  padding: 2px 4px;
+  border-right: 1px solid #f3f4f6;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.week-cell:last-child {
+  border-right: none;
+}
+
+.week-cell.today {
+  background: rgba(239, 246, 255, 0.5);
+}
+
+.week-event {
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  border-left: 3px solid transparent;
+  overflow: hidden;
+}
+
+.week-event:hover {
+  transform: scale(1.02);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 5;
+}
+
+.week-event.interview {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  border-left-color: #3b82f6;
+  color: #1d4ed8;
+}
+
+.week-event.trial {
+  background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+  border-left-color: #8b5cf6;
+  color: #6d28d9;
+}
+
+.week-event.status-completed {
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+  border-left-color: #10b981;
+  color: #059669;
+}
+
+.week-event.status-cancelled {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  border-left-color: #ef4444;
+  color: #dc2626;
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+
+.week-event.status-no_show {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-left-color: #f59e0b;
+  color: #d97706;
+}
+
+.week-event-time {
+  font-weight: 600;
+}
+
+.week-event-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============================================================================
+   Responsive - Day/Week View
+   ============================================================================ */
+
+@media (max-width: 1024px) {
+  .calendar-nav {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .view-controls {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .week-day-header {
+    min-width: 80px;
+  }
+
+  .week-cell {
+    min-width: 80px;
+  }
+}
+
+@media (max-width: 768px) {
+  .view-btn {
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+
+  .time-label {
+    width: 60px;
+    font-size: 11px;
+  }
+
+  .time-event {
+    padding: 8px 10px;
+  }
+
+  .time-event-name {
+    font-size: 14px;
+  }
+
+  .week-time-gutter,
+  .week-time-label {
+    width: 50px;
+    font-size: 10px;
+  }
+
+  .week-day-header {
+    min-width: 60px;
+    padding: 8px 4px;
+  }
+
+  .week-day-name {
+    font-size: 10px;
+  }
+
+  .week-day-number {
+    font-size: 16px;
+    width: 28px;
+    height: 28px;
+  }
+
+  .week-cell {
+    min-width: 60px;
+  }
+
+  .week-event {
+    font-size: 10px;
+    padding: 3px 6px;
+  }
+}

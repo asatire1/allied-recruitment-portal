@@ -40,7 +40,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.triggerExpiredBookingCleanup = exports.checkCandidateBookingExpiry = exports.cleanupExpiredBookingLinks = exports.completePasswordReset = exports.validatePasswordReset = exports.requestPasswordReset = exports.completeUserRegistration = exports.validateUserInvite = exports.createUserInvite = exports.sendTestEmail = exports.migrateMessageTemplates = exports.validateFeedbackToken = exports.submitTrialFeedback = exports.sendDailyFeedbackRequests = exports.sendTrialBranchNotification = exports.parseIndeedJob = exports.processInterviewsNow = exports.onCandidateWithdrawnOrRejected = exports.onCandidateStatusChange = exports.resolveLapsedInterview = exports.markLapsedInterviews = exports.checkReturningCandidate = exports.reactivateCandidate = exports.restoreCandidate = exports.archiveCandidate = exports.permanentlyDeleteCandidate = exports.onCandidateDeleted = exports.fetchMeetingInsights = exports.checkMeetingStatus = exports.createTeamsMeeting = exports.trackClick = exports.trackOpen = exports.sendBulkCandidateEmails = exports.sendCandidateEmail = exports.createBookingLink = exports.validateBookingToken = exports.submitBooking = exports.getBookingTimeSlots = exports.getBookingAvailability = exports.createUserWithPassword = exports.sendEmail = exports.markBookingLinkUsed = exports.parseCV = void 0;
+exports.submitMessageReply = exports.validateMessageReplyToken = exports.sendCandidateMessage = exports.triggerExpiredBookingCleanup = exports.checkCandidateBookingExpiry = exports.cleanupExpiredBookingLinks = exports.adminSendPasswordReset = exports.completePasswordReset = exports.validatePasswordReset = exports.requestPasswordReset = exports.completeUserRegistration = exports.validateUserInvite = exports.resendUserInvite = exports.createUserInvite = exports.sendTestEmail = exports.migrateMessageTemplates = exports.validateFeedbackToken = exports.submitTrialFeedback = exports.sendDailyFeedbackRequests = exports.sendTrialBranchNotification = exports.parseIndeedJob = exports.processInterviewsNow = exports.onCandidateWithdrawnOrRejected = exports.onCandidateStatusChange = exports.resolveLapsedInterview = exports.markLapsedInterviews = exports.checkReturningCandidate = exports.reactivateCandidate = exports.restoreCandidate = exports.archiveCandidate = exports.permanentlyDeleteCandidate = exports.onCandidateDeleted = exports.fetchMeetingInsights = exports.checkMeetingStatus = exports.createTeamsMeeting = exports.trackClick = exports.trackOpen = exports.sendBulkCandidateEmails = exports.sendCandidateEmail = exports.createBookingLink = exports.validateBookingToken = exports.submitBooking = exports.getBookingTimeSlots = exports.getBookingAvailability = exports.createUserWithPassword = exports.sendEmail = exports.markBookingLinkUsed = exports.parseCV = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const options_1 = require("firebase-functions/v2/options");
 const params_1 = require("firebase-functions/params");
@@ -729,14 +729,21 @@ Object.defineProperty(exports, "sendTestEmail", { enumerable: true, get: functio
 // User invite and password reset functions
 var userInviteFunctions_1 = require("./userInviteFunctions");
 Object.defineProperty(exports, "createUserInvite", { enumerable: true, get: function () { return userInviteFunctions_1.createUserInvite; } });
+Object.defineProperty(exports, "resendUserInvite", { enumerable: true, get: function () { return userInviteFunctions_1.resendUserInvite; } });
 Object.defineProperty(exports, "validateUserInvite", { enumerable: true, get: function () { return userInviteFunctions_1.validateUserInvite; } });
 Object.defineProperty(exports, "completeUserRegistration", { enumerable: true, get: function () { return userInviteFunctions_1.completeUserRegistration; } });
 Object.defineProperty(exports, "requestPasswordReset", { enumerable: true, get: function () { return userInviteFunctions_1.requestPasswordReset; } });
 Object.defineProperty(exports, "validatePasswordReset", { enumerable: true, get: function () { return userInviteFunctions_1.validatePasswordReset; } });
 Object.defineProperty(exports, "completePasswordReset", { enumerable: true, get: function () { return userInviteFunctions_1.completePasswordReset; } });
+Object.defineProperty(exports, "adminSendPasswordReset", { enumerable: true, get: function () { return userInviteFunctions_1.adminSendPasswordReset; } });
 // Expired booking link cleanup
 var expiredBookingCleanup_1 = require("./expiredBookingCleanup");
 Object.defineProperty(exports, "cleanupExpiredBookingLinks", { enumerable: true, get: function () { return expiredBookingCleanup_1.cleanupExpiredBookingLinks; } });
 Object.defineProperty(exports, "checkCandidateBookingExpiry", { enumerable: true, get: function () { return expiredBookingCleanup_1.checkCandidateBookingExpiry; } });
 Object.defineProperty(exports, "triggerExpiredBookingCleanup", { enumerable: true, get: function () { return expiredBookingCleanup_1.triggerExpiredBookingCleanup; } });
+// Candidate messaging
+var candidateMessaging_1 = require("./candidateMessaging");
+Object.defineProperty(exports, "sendCandidateMessage", { enumerable: true, get: function () { return candidateMessaging_1.sendCandidateMessage; } });
+Object.defineProperty(exports, "validateMessageReplyToken", { enumerable: true, get: function () { return candidateMessaging_1.validateMessageReplyToken; } });
+Object.defineProperty(exports, "submitMessageReply", { enumerable: true, get: function () { return candidateMessaging_1.submitMessageReply; } });
 //# sourceMappingURL=index.js.map
